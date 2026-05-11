@@ -1194,6 +1194,12 @@ class h5plane:
        xlbl = r'$x$'
        ylbl = r'$y$'
 
+     if(self.grid0.geometry=='2d-cylindrical'):
+       x = coords[0]
+       y = coords[1]
+       xlbl = r'$x$'
+       ylbl = r'$z$'
+
      if(self.grid0.geometry=='3d-spherical'):
       if(self.ix>=0):
        x = coords[0]
@@ -2168,6 +2174,12 @@ class h5grid:
        y = coords[1]
        xlbl = r'$x$'
        ylbl = r'$y$'
+ 
+     if(self.geometry=='2d-cylindrical'):
+       x = coords[0]
+       y = coords[1]
+       xlbl = r'$r$'
+       ylbl = r'$z$'
  
      if(self.geometry=='3d-spherical'):
       if(self.ix>=0):

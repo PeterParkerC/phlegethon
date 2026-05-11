@@ -858,6 +858,13 @@ module source
 #endif
 #endif
 
+#ifdef GEOMETRY_2D_CYLINDRICAL
+    real(kind=rp), allocatable, dimension(:,:,:) :: r,r_x1,r_cor
+#ifdef USE_MHD
+    real(kind=rp), allocatable, dimension(:,:,:) :: cm
+#endif
+#endif
+
 #ifdef GEOMETRY_2D_SPHERICAL
     real(kind=rp), allocatable, dimension(:,:,:) :: &
     r,sin_theta,r_x1,r_x2,sin_theta_x2,sin_theta_cor,r_cor
@@ -1092,7 +1099,9 @@ module source
 
 #ifdef USE_INTERNAL_BOUNDARIES
     integer, allocatable, dimension(:,:,:) :: is_solid
+#ifndef GEOMETRY_2D_CYLINDRICAL
     real(kind=rp), allocatable, dimension(:,:,:) :: r
+#endif
 #endif
 
 #ifdef USE_SHOCK_FLATTENING
@@ -1282,6 +1291,15 @@ contains
     allocate(lgrid%r(lx1-ngc:ux1+ngc,lx2-ngc:ux2+ngc,lx3:ux3))
     allocate(lgrid%r_x1(lx1-ngc:ux1+1+ngc,lx2-ngc:ux2+ngc,lx3:ux3))
     allocate(lgrid%r_x2(lx1-ngc:ux1+ngc,lx2-ngc:ux2+1+ngc,lx3:ux3))
+    allocate(lgrid%r_cor(lx1-ngc:ux1+1+ngc,lx2-ngc:ux2+1+ngc,lx3:ux3))
+#ifdef USE_MHD
+    allocate(lgrid%cm(lx1:ux1,lx2:ux2,lx3:ux3))
+#endif
+#endif
+
+#ifdef GEOMETRY_2D_CYLINDRICAL
+    allocate(lgrid%r(lx1-ngc:ux1+ngc,lx2-ngc:ux2+ngc,lx3:ux3))
+    allocate(lgrid%r_x1(lx1-ngc:ux1+1+ngc,lx2-ngc:ux2+ngc,lx3:ux3))
     allocate(lgrid%r_cor(lx1-ngc:ux1+1+ngc,lx2-ngc:ux2+1+ngc,lx3:ux3))
 #ifdef USE_MHD
     allocate(lgrid%cm(lx1:ux1,lx2:ux2,lx3:ux3))
@@ -1699,12 +1717,14 @@ contains
 
 #ifdef USE_INTERNAL_BOUNDARIES
 
+#ifndef GEOMETRY_2D_CYLINDRICAL
     allocate(lgrid%r(lx1-ngc:ux1+ngc,lx2-ngc:ux2+ngc, &
 #if sdims_make==2
     lx3:ux3))
 #endif
 #if sdims_make==3
     lx3-ngc:ux3+ngc))
+#endif
 #endif
 
 #endif
@@ -1916,6 +1936,15 @@ contains
     deallocate(lgrid%r)
     deallocate(lgrid%r_x1)
     deallocate(lgrid%r_x2)
+    deallocate(lgrid%r_cor)
+#ifdef USE_MHD
+    deallocate(lgrid%cm)
+#endif
+#endif
+
+#ifdef GEOMETRY_2D_CYLINDRICAL
+    deallocate(lgrid%r)
+    deallocate(lgrid%r_x1)
     deallocate(lgrid%r_cor)
 #ifdef USE_MHD
     deallocate(lgrid%cm)
@@ -2136,7 +2165,9 @@ contains
 
 #ifdef USE_INTERNAL_BOUNDARIES
      deallocate(lgrid%is_solid)
+#ifndef GEOMETRY_2D_CYLINDRICAL
      deallocate(lgrid%r)
+#endif
 #endif
 
  end subroutine finalize_simulation
@@ -2822,32 +2853,6 @@ contains
 
     real(kind=rp), allocatable, dimension(:,:,:) :: vol
 
-#ifdef GEOMETRY_2D_POLAR
-    real(kind=rp) :: r,rm,rpl,dr
-    r = rp0
-    rm = rp0
-    rpl = rp0
-    dr = rp0
-#endif
-
-#ifdef GEOMETRY_2D_SPHERICAL
-    real(kind=rp) :: r,sin_theta,rm,rpl,dr
-    r = rp0
-    sin_theta = rp0
-    rm = rp0
-    rpl = rp0
-    dr = rp0
-#endif
-
-#ifdef GEOMETRY_3D_SPHERICAL
-    real(kind=rp) :: r,sin_theta,rm,rpl,dr
-    r = rp0
-    sin_theta = rp0
-    rm = rp0
-    rpl = rp0
-    dr = rp0
-#endif
-
     write(h5%filename, "('./grids/grid_n',I0.5,'.h5')") lgrid%step
 
     call h5pcreate_f(H5P_FILE_ACCESS_F,plist_id,error)
@@ -2968,6 +2973,10 @@ contains
       call hdf5_annotate_string(id,"geometry-type","2d-polar")
 #endif
 
+#ifdef GEOMETRY_2D_CYLINDRICAL
+      call hdf5_annotate_string(id,"geometry-type","2d-cylindrical")
+#endif
+
 #ifdef GEOMETRY_2D_SPHERICAL
       call hdf5_annotate_string(id,"geometry-type","2d-spherical")
 #endif
@@ -2990,7 +2999,7 @@ contains
 #endif
 #endif 
 
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(USE_INTERNAL_BOUNDARIES) || defined(GEOMETRY_CUBED_SPHERE)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(USE_INTERNAL_BOUNDARIES) || defined(GEOMETRY_CUBED_SPHERE) || defined(GEOMETRY_2D_CYLINDRICAL)
       call hdf5_write_array(h5,id,"r",mgrid, &
       mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%r,0)
 #endif
@@ -4844,6 +4853,16 @@ contains
     dr = rp0
 #endif
 
+#ifdef GEOMETRY_2D_CYLINDRICAL
+    real(kind=rp) :: r,rm,rpl,dr,zm,zpl
+    r = rp0
+    rm = rp0
+    rpl = rp0
+    dr = rp0
+    zm = rp0
+    zpl = rp0
+#endif
+
 #ifdef GEOMETRY_2D_SPHERICAL
     real(kind=rp) :: r,sin_theta,rm,rpl,dr
     r = rp0
@@ -4942,6 +4961,15 @@ contains
          rpl = lgrid%r_x1(i+1,j,k)
          dr = rpl-rm
          tmp = r*dr*lgrid%dx2
+#endif
+
+#ifdef GEOMETRY_2D_CYLINDRICAL
+         rm = lgrid%r_x1(i,j,k)
+         rpl = lgrid%r_x1(i+1,j,k)
+         dr = rpl-rm
+         zm = lgrid%coords_x2(2,i,j,k)
+         zpl = lgrid%coords_x2(2,i,j+1,k)
+         tmp = dr*(zpl-zm)
 #endif
 
 #ifdef GEOMETRY_2D_SPHERICAL
@@ -5079,7 +5107,7 @@ contains
 
 #ifdef USE_MHD
 
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_2D_CYLINDRICAL)
     do k=lx3,ux3
      do j=lx2,ux2
       do i=lx1,ux1
@@ -8027,6 +8055,24 @@ contains
 
 #endif
 
+#ifdef GEOMETRY_2D_CYLINDRICAL
+
+       do i=lx1,ux1+1
+ 
+        r = lgrid%r_x1(i,j,k)
+
+        do iv=1,nvars
+         lgrid%fx1(iv,i) = r*lgrid%fx1(iv,i)
+        end do
+
+#ifdef USE_WB
+        lgrid%ru%pn(1)%val(i) = lgrid%ru%pn(1)%val(i) - lgrid%eq_prim_x1(ieq_p,i,j,k) 
+#endif
+
+       end do
+
+#endif
+
 #if defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
 
        do i=lx1,ux1+1
@@ -8073,6 +8119,19 @@ contains
 #endif
 
 #ifdef GEOMETRY_2D_POLAR
+
+        r = lgrid%r(i,j,k)
+        inv_r = rp1/r
+        do iv=1,nvars
+         lgrid%res(iv,i,j,k) = lgrid%res(iv,i,j,k)*inv_r
+        end do
+
+        lgrid%res(i_rhovx1,i,j,k) = lgrid%res(i_rhovx1,i,j,k) + &
+        (lgrid%ru%pn(1)%val(i+1)-lgrid%ru%pn(1)%val(i))*inv_dl
+         
+#endif
+
+#ifdef GEOMETRY_2D_CYLINDRICAL
 
         r = lgrid%r(i,j,k)
         inv_r = rp1/r
@@ -9187,6 +9246,16 @@ contains
 #endif
 #endif
 
+#ifdef GEOMETRY_2D_CYLINDRICAL
+#ifdef USE_WB
+
+       do j=lx2,ux2+1 
+         lgrid%ru%pn(2)%val(j) = lgrid%ru%pn(2)%val(j) - lgrid%eq_prim_x2(ieq_p,i,j,k) 
+       end do
+
+#endif
+#endif
+
 #if defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
  
        do j=lx2,ux2+1
@@ -9223,6 +9292,20 @@ contains
         
         lgrid%res(i_rhovx2,i,j,k) = lgrid%res(i_rhovx2,i,j,k) + &
         (lgrid%ru%pn(2)%val(j+1)-lgrid%ru%pn(2)%val(j))*inv_dl*inv_r
+
+#elif defined(GEOMETRY_2D_CYLINDRICAL)
+
+#ifdef NONUNIFORM_RADIAL_NODES
+        inv_dl = rp1/(lgrid%coords_x2(2,i,j+1,k)-lgrid%coords_x2(2,i,j,k))
+#endif
+
+        do iv=1,nvars
+         lgrid%res(iv,i,j,k) = lgrid%res(iv,i,j,k) + &
+         (lgrid%fx2(iv,j+1)-lgrid%fx2(iv,j))*inv_dl
+        end do       
+        
+        lgrid%res(i_rhovx2,i,j,k) = lgrid%res(i_rhovx2,i,j,k) + &
+        (lgrid%ru%pn(2)%val(j+1)-lgrid%ru%pn(2)%val(j))*inv_dl
 
 #elif defined(GEOMETRY_2D_SPHERICAL)
 
@@ -11201,6 +11284,16 @@ contains
         r = lgrid%r_x1(i,j,k)
         tmp = tmp/r
 
+#elif defined(GEOMETRY_2D_CYLINDRICAL)
+
+#ifdef NONUNIFORM_RADIAL_NODES 
+        tmp = &
+        (lgrid%emfx3_cor(i,j+1,k)-lgrid%emfx3_cor(i,j,k))/(lgrid%nodes(2,i,j+1,k)-lgrid%nodes(2,i,j,k))
+#else
+        tmp = &
+        (lgrid%emfx3_cor(i,j+1,k)-lgrid%emfx3_cor(i,j,k))*lgrid%inv_dx2
+#endif
+
 #elif defined(GEOMETRY_2D_SPHERICAL) 
 
         sin_theta_m = lgrid%sin_theta_cor(i,j,k)
@@ -11272,6 +11365,19 @@ contains
 
         tmp = &
         (lgrid%emfx3_cor(i,j,k)-lgrid%emfx3_cor(i+1,j,k))*inv_dl
+
+#elif defined(GEOMETRY_2D_CYLINDRICAL)
+
+        rmi = lgrid%nodes(1,i,j,k)
+        rpl = lgrid%nodes(1,i+1,j,k) 
+#ifdef NONUNIFORM_RADIAL_NODES
+        inv_dl = rp1/(rpl-rmi)
+#else
+        inv_dl = lgrid%inv_dx1
+#endif
+
+        tmp = &
+        (rmi*lgrid%emfx3_cor(i,j,k)-rpl*lgrid%emfx3_cor(i+1,j,k))*inv_dl/lgrid%coords_x2(1,i,j,k)
 
 #elif defined(GEOMETRY_2D_SPHERICAL)
 
@@ -11389,7 +11495,7 @@ contains
 
 #endif
 
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_2D_CYLINDRICAL)
     do k=lx3,ux3
      do j=lx2,ux2
       do i=lx1,ux1
@@ -11707,6 +11813,19 @@ contains
 
 #endif
 
+#ifdef GEOMETRY_2D_CYLINDRICAL
+
+         r = lgrid%r(i,j,k)
+         tmp = r*om3*om3
+         
+         lgrid%res(i_rhovx1,i,j,k) = lgrid%res(i_rhovx1,i,j,k) & 
+         -rho*tmp
+
+         lgrid%res(i_rhoe,i,j,k) = lgrid%res(i_rhoe,i,j,k) - &
+         rhovx1*tmp
+
+#endif
+
 #ifdef GEOMETRY_3D_SPHERICAL
          
          r = lgrid%r(i,j,k)
@@ -11791,7 +11910,7 @@ contains
       do j=lx2,ux2
        do i=lx1,ux1
 
-#if defined(USE_INTERNAL_BOUNDARIES) || defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_CUBED_SPHERE)
+#if defined(USE_INTERNAL_BOUNDARIES) || defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_CUBED_SPHERE) || defined(GEOMETRY_2D_CYLINDRICAL)
         r = lgrid%r(i,j,k)
 #else
         r = lgrid%coords(2,i,j,k)
@@ -12140,6 +12259,11 @@ contains
         lgrid%fe_x1(i) = lgrid%fe_x1(i)*r
 #endif
 
+#ifdef GEOMETRY_2D_CYLINDRICAL
+        r = lgrid%r_x1(i,j,k)
+        lgrid%fe_x1(i) = lgrid%fe_x1(i)*r
+#endif
+
 #if defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
         r = lgrid%r_x1(i,j,k)
         lgrid%fe_x1(i) = lgrid%fe_x1(i)*r*r
@@ -12160,6 +12284,10 @@ contains
 #endif
 
 #ifdef GEOMETRY_2D_POLAR
+        r = lgrid%r(i,j,k)
+        lgrid%res(i_rhoe,i,j,k) = lgrid%res(i_rhoe,i,j,k) - &
+        (lgrid%fe_x1(i+1)-lgrid%fe_x1(i))*inv_dl/r
+#elif defined(GEOMETRY_2D_CYLINDRICAL)
         r = lgrid%r(i,j,k)
         lgrid%res(i_rhoe,i,j,k) = lgrid%res(i_rhoe,i,j,k) - &
         (lgrid%fe_x1(i+1)-lgrid%fe_x1(i))*inv_dl/r
@@ -12253,13 +12381,20 @@ contains
 #ifdef GEOMETRY_CARTESIAN_NONUNIFORM
         inv_dl = rp1/(lgrid%coords(2,i,j,k)-lgrid%coords(2,i,j-1,k))
 #endif
+
+#ifdef GEOMETRY_2D_CYLINDRICAL
+#ifdef NONUNIFORM_RADIAL_NODES
+        inv_dl = rp1/(lgrid%coords(2,i,j,k)-lgrid%coords(2,i,j-1,k))
+#endif
+#endif
+
 #ifdef BALANCE_THERMAL_DIFFUSION
         Tplus = Tplus-lgrid%eq_prim_cc(ieq_T,i,j,k)
         Tminus = Tminus-lgrid%eq_prim_cc(ieq_T,i,j-1,k)
 #endif
         gradT = (Tplus-Tminus)*inv_dl
 
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) 
         r = lgrid%r_x2(i,j,k)
         gradT = gradT/r
 #endif
@@ -12276,7 +12411,12 @@ contains
        do j=lx2,ux2
 
 #ifdef GEOMETRY_CARTESIAN_NONUNIFORM
-        inv_dl = rp1/(lgrid%coords_x1(2,i,j+1,k)-lgrid%coords_x2(2,i,j,k))
+        inv_dl = rp1/(lgrid%coords_x2(2,i,j+1,k)-lgrid%coords_x2(2,i,j,k))
+#endif
+#ifdef GEOMETRY_2D_CYLINDRICAL
+#ifdef NONUNIFORM_RADIAL_NODES
+        inv_dl = rp1/(lgrid%coords_x2(2,i,j+1,k)-lgrid%coords_x2(2,i,j,k))
+#endif
 #endif
 #ifdef GEOMETRY_2D_POLAR
         r = lgrid%r(i,j,k)
@@ -12825,6 +12965,12 @@ contains
        inv_dl = rph*(tmp2+tmp1)*tmp
 #endif
 
+#ifdef GEOMETRY_2D_CYLINDRICAL
+#ifdef NONUNIFORM_RADIAL_NODES
+        inv_dl = rp1/(lgrid%coords_x2(2,i,j+1,k)-lgrid%coords_x2(2,i,j,k))
+#endif
+#endif
+
        sx2 = (abs(vx2) + c)*inv_dl
 
 #if sdims_make==3
@@ -13343,7 +13489,7 @@ contains
 #endif
 
         fL(i_rho) = rhoL*vx1L
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_2D_CYLINDRICAL)
         fL(i_rhovx1) = rhoL*vx1L*vx1L-bx1_2
 #else
         fL(i_rhovx1) = rhoL*vx1L*vx1L+ptL-bx1_2
@@ -13366,7 +13512,7 @@ contains
 #endif
 
         fR(i_rho) = rhoR*vx1R
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_2D_CYLINDRICAL)
         fR(i_rhovx1) = rhoR*vx1R*vx1R-bx1_2
 #else
         fR(i_rhovx1) = rhoR*vx1R*vx1R+ptR-bx1_2
@@ -13399,7 +13545,7 @@ contains
          fluxb(iv,idx) = dummy*(sR*fbL(iv)-sL*fbR(iv)+phi*(UbR(iv)-UbL(iv)))
         end do
 
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_2D_CYLINDRICAL)
         ru%pn(ru%dir)%val(idx) = dummy*(sR*ptL-sL*ptR)
 #endif
 
@@ -13545,7 +13691,7 @@ contains
       end if
 
       flux(i_rho,idx) = rho*vx1
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_2D_CYLINDRICAL)
       flux(i_rhovx1,idx) = rho*vx1*vx1-bx1_2
       ru%pn(ru%dir)%val(idx) = pres
 #else
@@ -13614,7 +13760,7 @@ contains
       end if
 
       flux(i_rho,idx) = rho*vx1
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_2D_CYLINDRICAL)
       flux(i_rhovx1,idx) = rho*vx1*vx1-bx1_2
       ru%pn(ru%dir)%val(idx) = pres
 #else
@@ -13671,7 +13817,7 @@ contains
 #endif
 
        f(i_rho) = rhoL*vx1L
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_2D_CYLINDRICAL)
        f(i_rhovx1) = rhoL*vx1L*vx1L-bx1_2
        ru%pn(ru%dir)%val(idx) = ptL
 #else
@@ -13809,7 +13955,7 @@ contains
 #endif
 
        f(i_rho) = rhoR*vx1R
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_2D_CYLINDRICAL)
        f(i_rhovx1) = rhoR*vx1R*vx1R-bx1_2
        ru%pn(ru%dir)%val(idx) = ptR
 #else
@@ -14874,7 +15020,7 @@ contains
 #endif
 
         fL(i_rho) = rhoL*vx1L
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_2D_CYLINDRICAL)
         fL(i_rhovx1) = rhoL*vx1L*vx1L
 #else
         fL(i_rhovx1) = rhoL*vx1L*vx1L+pL
@@ -14891,7 +15037,7 @@ contains
 #endif
    
         fR(i_rho) = rhoR*vx1R
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_2D_CYLINDRICAL)
         fR(i_rhovx1) = rhoR*vx1R*vx1R
 #else
         fR(i_rhovx1) = rhoR*vx1R*vx1R+pR
@@ -14914,7 +15060,7 @@ contains
          flux(iv,idx) = dummy*(sR*fL(iv)-sL*fR(iv)+phi*(UR(iv)-UL(iv)))
         end do
 
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_2D_CYLINDRICAL)
         ru%pn(ru%dir)%val(idx) = dummy*(sR*pL-sL*pR)
 #endif
 
@@ -14947,7 +15093,7 @@ contains
       if(sL>rp0) then
  
        flux(i_rho,idx) = rhoL*vx1L
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_2D_CYLINDRICAL)
        flux(i_rhovx1,idx) = rhoL*vx1L*vx1L
        ru%pn(ru%dir)%val(idx) = pL
 #else
@@ -14968,7 +15114,7 @@ contains
       else if(sR<rp0) then
 
        flux(i_rho,idx) = rhoR*vx1R
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_2D_CYLINDRICAL)
        flux(i_rhovx1,idx) = rhoR*vx1R*vx1R
        ru%pn(ru%dir)%val(idx) = pR
 #else
@@ -14989,7 +15135,7 @@ contains
       else
 
        flux(i_rho,idx) = rhostar*ustar
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_2D_CYLINDRICAL)
        flux(i_rhovx1,idx) = rhostar*ustar*ustar
        ru%pn(ru%dir)%val(idx) = pstar
 #else
@@ -15012,7 +15158,7 @@ contains
 #else
 
       flux(i_rho,idx) = rhostar*ustar
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_2D_CYLINDRICAL)
       flux(i_rhovx1,idx) = rhostar*ustar*ustar
       ru%pn(ru%dir)%val(idx) = pstar
 #else
@@ -15053,7 +15199,7 @@ contains
 #endif
 
         f(i_rho) = rhoL*vx1L
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_2D_CYLINDRICAL)
         f(i_rhovx1) = rhoL*vx1L*vx1L
         ru%pn(ru%dir)%val(idx) = pL
 #else
@@ -15115,7 +15261,7 @@ contains
 #endif
 
         f(i_rho) = rhoR*vx1R
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_2D_CYLINDRICAL)
         f(i_rhovx1) = rhoR*vx1R*vx1R
         ru%pn(ru%dir)%val(idx) = pR
 #else
@@ -15338,6 +15484,92 @@ contains
         lgrid%coords_x2(1,i,j,k) = r*cos(phi)
         lgrid%coords_x2(2,i,j,k) = r*sin(phi)
         lgrid%r_x2(i,j,k) = r
+
+     end do
+    end do
+   end do
+
+#ifdef USE_MHD 
+   do k=mgrid%i1(3),mgrid%i2(3)
+    do j=mgrid%i1(2),mgrid%i2(2)
+     do i=mgrid%i1(1),mgrid%i2(1)
+       rm = lgrid%r_x1(i,j,k)
+       rpl = lgrid%r_x1(i+1,j,k)
+       lgrid%cm(i,j,k) = (rpl+rp2*rm)/(rp3*(rpl+rm))
+     end do 
+    end do
+   end do
+#endif
+
+   mgrid%dummy = rp1
+
+ end subroutine create_geometry
+#endif
+ 
+#ifdef GEOMETRY_2D_CYLINDRICAL
+ subroutine create_geometry(lgrid,mgrid)
+   type(locgrid), intent(inout) :: lgrid
+   type(mpigrid), intent(inout) :: mgrid
+
+   real(kind=rp) :: r,z
+   integer :: i,j,k
+#ifdef USE_MHD
+   real(kind=rp) :: rpl,rm
+#endif
+
+   do k=lbound(lgrid%nodes,4),ubound(lgrid%nodes,4)
+    do j=lbound(lgrid%nodes,3),ubound(lgrid%nodes,3)
+     do i=lbound(lgrid%nodes,2),ubound(lgrid%nodes,2)
+
+       r = lgrid%x1l + real(i-1,kind=rp)*lgrid%dx1
+       z = lgrid%x2l + real(j-1,kind=rp)*lgrid%dx2
+
+       lgrid%nodes(1,i,j,k) = r
+       lgrid%nodes(2,i,j,k) = z
+
+     end do
+    end do
+   end do
+
+   do k=lbound(lgrid%coords,4),ubound(lgrid%coords,4)
+    do j=lbound(lgrid%coords,3),ubound(lgrid%coords,3)
+     do i=lbound(lgrid%coords,2),ubound(lgrid%coords,2)
+
+        r = lgrid%x1l + real(i-0.5,kind=rp)*lgrid%dx1
+        z = lgrid%x2l + real(j-0.5,kind=rp)*lgrid%dx2
+
+        lgrid%coords(1,i,j,k) = r
+        lgrid%coords(2,i,j,k) = z
+        lgrid%r(i,j,k) = r
+
+     end do
+    end do
+   end do
+
+   do k=lbound(lgrid%coords_x1,4),ubound(lgrid%coords_x1,4)
+    do j=lbound(lgrid%coords_x1,3),ubound(lgrid%coords_x1,3)
+     do i=lbound(lgrid%coords_x1,2),ubound(lgrid%coords_x1,2)
+
+        r = lgrid%x1l + real(i-1.0,kind=rp)*lgrid%dx1
+        z = lgrid%x2l + real(j-0.5,kind=rp)*lgrid%dx2
+
+        lgrid%coords_x1(1,i,j,k) = r
+        lgrid%coords_x1(2,i,j,k) = z
+        lgrid%r_x1(i,j,k) = r
+
+     end do
+    end do
+   end do
+
+   do k=lbound(lgrid%coords_x2,4),ubound(lgrid%coords_x2,4)
+    do j=lbound(lgrid%coords_x2,3),ubound(lgrid%coords_x2,3)
+     do i=lbound(lgrid%coords_x2,2),ubound(lgrid%coords_x2,2)
+
+        r = lgrid%x1l + real(i-0.5,kind=rp)*lgrid%dx1
+        z = lgrid%x2l + real(j-1.0,kind=rp)*lgrid%dx2
+
+        lgrid%coords_x2(1,i,j,k) = r
+        lgrid%coords_x2(2,i,j,k) = z
 
      end do
     end do
@@ -18677,6 +18909,13 @@ contains
       inv_dl2 = inv_dx1*inv_dx1+inv_dx2*inv_dx2
 #endif
 
+#ifdef GEOMETRY_2D_CYLINDRICAL
+#ifdef NONUNIFORM_RADIAL_NODES
+      inv_dx2 = rp1/(lgrid%coords_x2(2,i,j+1,k)-lgrid%coords_x2(2,i,j,k))
+#endif
+      inv_dl2 = inv_dx1*inv_dx1+inv_dx2*inv_dx2
+#endif
+
 #ifdef GEOMETRY_3D_SPHERICAL
       r = lgrid%r(i,j,k)
       inv_dx2 = rp1/r*inv_dx2
@@ -19296,6 +19535,11 @@ contains
      lgrid%fe_x1(i) = lgrid%fe_x1(i)*r
 #endif
 
+#ifdef GEOMETRY_2D_CYLINDRICAL
+     r = lgrid%r_x1(i,j,k)
+     lgrid%fe_x1(i) = lgrid%fe_x1(i)*r
+#endif
+
 #if defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
      r = lgrid%r_x1(i,j,k)
      lgrid%fe_x1(i) = lgrid%fe_x1(i)*r*r
@@ -19316,6 +19560,9 @@ contains
 #endif
 
 #ifdef GEOMETRY_2D_POLAR
+     r = lgrid%r(i,j,k)
+     lgrid%Me_jm1(i,j,k) = (lgrid%fe_x1(i+1)-lgrid%fe_x1(i))*inv_dl/r
+#elif defined(GEOMETRY_2D_CYLINDRICAL)
      r = lgrid%r(i,j,k)
      lgrid%Me_jm1(i,j,k) = (lgrid%fe_x1(i+1)-lgrid%fe_x1(i))*inv_dl/r
 #elif defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
@@ -19406,10 +19653,18 @@ contains
 #ifdef GEOMETRY_CARTESIAN_NONUNIFORM
      inv_dl = rp1/(lgrid%coords(2,i,j,k)-lgrid%coords(2,i,j-1,k))
 #endif
+
+#ifdef GEOMETRY_2D_CYLINDRICAL
+#ifdef NONUNIFORM_RADIAL_NODES
+     inv_dl = rp1/(lgrid%coords(2,i,j,k)-lgrid%coords(2,i,j-1,k))
+#endif
+#endif
+
 #ifdef BALANCE_THERMAL_DIFFUSION
      Tplus = Tplus-lgrid%eq_prim_cc(ieq_T,i,j,k)
      Tminus = Tminus-lgrid%eq_prim_cc(ieq_T,i,j-1,k)
 #endif
+
      gradT = (Tplus-Tminus)*inv_dl
 
 #if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
@@ -19429,8 +19684,15 @@ contains
     do j=lx2,ux2
 
 #ifdef GEOMETRY_CARTESIAN_NONUNIFORM
-     inv_dl = rp1/(lgrid%coords_x1(2,i,j+1,k)-lgrid%coords_x2(2,i,j,k))
+     inv_dl = rp1/(lgrid%coords_x2(2,i,j+1,k)-lgrid%coords_x2(2,i,j,k))
 #endif
+
+#ifdef GEOMETRY_2D_CYLINDRICAL
+#ifdef NONUNIFORM_RADIAL_NODES
+     inv_dl = rp1/(lgrid%coords_x2(2,i,j+1,k)-lgrid%coords_x2(2,i,j,k))
+#endif
+#endif
+
 #ifdef GEOMETRY_2D_POLAR
      r = lgrid%r(i,j,k)
      lgrid%Me_jm1(i,j,k) = lgrid%Me_jm1(i,j,k) + (lgrid%fe_x2(j+1)-lgrid%fe_x2(j))*inv_dl/r

@@ -289,8 +289,7 @@ For `LHLL-type` solvers, if both low-Mach and supersonic flows need to be captur
 | `spj_dt_dump_make=1.5_rp` | Output cadence of the spherical projections in units of simulation time. In `app.F90`, the radii of the projections must be provided as `lgrid%spj_r(<projection index>) = <radius of projection>`. |
 | `USE_POINT_PROBES` | This option allows the value of state variables in certain cells to be saved to file at very timestep. The number of probes (`nprobes_make`) alongside their coordinates must be provided by the user. The coordinates are the indexes of the probe on the computational grid and must be specified in `app.F90` as `lgrid%pp_index(<probe index>,1)=<index along the x1 axis>` etc. The point probes are saved in the `pps` directory, which is automatically created at compile time. |
 | `nprobes_make=2` | The number of point probes used in the run. |
-|`RESIZE_OUTPUT` | Performs rebinning to save a grid snapshot to the output at half the original resolution, without modifying the restart files. |
-|`compression_factor_make=4` | Compression factor used by `RESIZE_OUTPUT` (the default value is 2). |
+|`compression_factor_make=4` | If >1, the code performs rebinning to save a grid snapshot to the output at reduced resolution according to the provided compression factor (CF), without modifying the restart files (only for `sdims_make=3`). The reduced output is computed via volume-weighted averaging of neighboring blocks of CFxCFxCF cells. |
 
 ### 13. Specs
 

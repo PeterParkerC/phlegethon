@@ -398,13 +398,11 @@ module source
   100.0_rp
 #endif
 
-#ifdef RESIZE_OUTPUT
  integer, parameter :: compression_factor = &
 #ifdef compression_factor_make
   compression_factor_make
 #else
-  2
-#endif
+  1
 #endif
 
 #ifdef SAVE_PLANES
@@ -4259,31 +4257,23 @@ contains
     integer :: err
 
     integer :: nx1l,nx2l,nx3l
-    real(kind=rp) :: tmp
 
-#ifdef RESIZE_OUTPUT
     real(kind=rp), allocatable :: vec_aux(:,:,:)
     real(kind=rp) :: v1,v2,ivol_sum
     integer :: i,j,k,ii,jj,kk,ia,ja,ka
     integer, dimension(3) :: i1r,i2r
-#endif
 
-    if(is_restart==1) then
-     nx1l = 0
-     tmp = ivol(lx1,lx2,lx3)
-    endif
+    v1 = ivol(lx1,lx2,lx3)
 
     nx1l = ux1-lx1+1
     nx2l = ux2-lx2+1
     nx3l = ux3-lx3+1
 
-#ifdef RESIZE_OUTPUT
     if(is_restart==0) then
-     nx1l = int(nx1l/compression_factor)
-     nx2l = int(nx2l/compression_factor)
-     nx3l = int(nx3l/compression_factor)
+      nx1l = int(nx1l/compression_factor)
+      nx2l = int(nx2l/compression_factor)
+      nx3l = int(nx3l/compression_factor)
     endif
-#endif
 
     gnc(1) = nx1l*mgrid%bricks(1)
     gnc(2) = nx2l*mgrid%bricks(2)
@@ -4326,36 +4316,34 @@ contains
     off(1) = nx1l*mgrid%coords_dd(1)
     off(2) = nx2l*mgrid%coords_dd(2)
     off(3) = nx3l*mgrid%coords_dd(3)
+
+    if(compression_factor>1 .and. is_restart==0) then 
+
+      i1r(1) = int(mgrid%coords_dd(1)*nx1l+1)
+      i2r(1) = int((mgrid%coords_dd(1)+1)*nx1l)
  
-#ifdef RESIZE_OUTPUT
+      i1r(2) = int(mgrid%coords_dd(2)*nx2l+1)
+      i2r(2) = int((mgrid%coords_dd(2)+1)*nx2l)
 
-    if(is_restart==0) then
+      i1r(3) = int(mgrid%coords_dd(3)*nx3l+1)
+      i2r(3) = int((mgrid%coords_dd(3)+1)*nx3l)
 
-     i1r(1) = int(mgrid%coords_dd(1)*nx1l+1)
-     i2r(1) = int((mgrid%coords_dd(1)+1)*nx1l)
+      allocate(vec_aux(i1r(1)-ghost:i2r(1)+ghost,i1r(2)-ghost:i2r(2)+ghost,i1r(3)-ghost:i2r(3)+ghost))
+
+      do k=i1r(3),i2r(3)
+       do j=i1r(2),i2r(2)
+        do i=i1r(1),i2r(1)
  
-     i1r(2) = int(mgrid%coords_dd(2)*nx2l+1)
-     i2r(2) = int((mgrid%coords_dd(2)+1)*nx2l)
+         ia = compression_factor*i-(compression_factor-1)
+         ja = compression_factor*j-(compression_factor-1)
+         ka = compression_factor*k-(compression_factor-1)
 
-     i1r(3) = int(mgrid%coords_dd(3)*nx3l+1)
-     i2r(3) = int((mgrid%coords_dd(3)+1)*nx3l)
+         ivol_sum = rp0
+         v2 = rp0
 
-     allocate(vec_aux(i1r(1)-ghost:i2r(1)+ghost,i1r(2)-ghost:i2r(2)+ghost,i1r(3)-ghost:i2r(3)+ghost))
-
-     do k=i1r(3),i2r(3)
-      do j=i1r(2),i2r(2)
-       do i=i1r(1),i2r(1)
- 
-        ia = compression_factor*i-(compression_factor-1)
-        ja = compression_factor*j-(compression_factor-1)
-        ka = compression_factor*k-(compression_factor-1)
-
-        ivol_sum = rp0
-        v2 = rp0
-
-        do kk=0,compression_factor-1
-         do jj=0,compression_factor-1
-          do ii=0,compression_factor-1
+         do kk=0,compression_factor-1
+          do jj=0,compression_factor-1
+           do ii=0,compression_factor-1
 
 #if defined(GEOMETRY_CARTESIAN_NONUNIFORM) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_CUBED_SPHERE)            
             v1 = rp1/ivol(ia+ii,ja+jj,ka+kk)
@@ -4365,61 +4353,46 @@ contains
             ivol_sum = ivol_sum + v1
             v2 = v2 + vec(ia+ii,ja+jj,ka+kk)*v1
 
+           end do
           end do
          end do
-        end do
 
-        ivol_sum = rp1/ivol_sum
-        vec_aux(i,j,k) = v2*ivol_sum
+         ivol_sum = rp1/ivol_sum
+         vec_aux(i,j,k) = v2*ivol_sum
                   
-       end do
-      end do 
-     end do
+        end do
+       end do 
+      end do
 
     end if
-
-#endif
 
     call h5dget_space_f(dset_id, filespace, err)
     call h5sselect_hyperslab_f(filespace,H5S_SELECT_SET_F,off,cnt,err)
 
     call h5pcreate_f(H5P_DATASET_XFER_F,plist_id,err)
     call h5pset_dxpl_mpio_f(plist_id,H5FD_MPIO_COLLECTIVE_F,err)
+  
+    if(compression_factor>1 .and. is_restart==0) then
 
-#ifdef RESIZE_OUTPUT
-   
-    if(is_restart==0) then
+      call h5dwrite_f(dset_id,h5%pref_dtypef, &
+      vec_aux( &
+      lbound(vec_aux,1), &
+      lbound(vec_aux,2), &
+      lbound(vec_aux,3) ), &
+      gnc,err,memspace,filespace,plist_id)
 
-     call h5dwrite_f(dset_id,h5%pref_dtypef, &
-     vec_aux( &
-     lbound(vec_aux,1), &
-     lbound(vec_aux,2), &
-     lbound(vec_aux,3) ), &
-     gnc,err,memspace,filespace,plist_id)
-
-     deallocate(vec_aux)
+      deallocate(vec_aux)
     
     else
 
-     call h5dwrite_f(dset_id,h5%pref_dtypef, &
-     vec( &
-     lbound(vec,1), &
-     lbound(vec,2), &
-     lbound(vec,3) ), &
-     gnc,err,memspace,filespace,plist_id)
+      call h5dwrite_f(dset_id,h5%pref_dtypef, &
+      vec( &
+      lbound(vec,1), &
+      lbound(vec,2), &
+      lbound(vec,3) ), &
+      gnc,err,memspace,filespace,plist_id)
 
     endif
-
-#else
-
-    call h5dwrite_f(dset_id,h5%pref_dtypef, &
-    vec( &
-    lbound(vec,1), &
-    lbound(vec,2), &
-    lbound(vec,3) ), &
-    gnc,err,memspace,filespace,plist_id)
-
-#endif
 
     call h5sclose_f(filespace,err)
     call h5sclose_f(memspace,err)
@@ -4457,33 +4430,25 @@ contains
     integer(kind=HSIZE_T), dimension(4) :: gnc,cnt,off
     integer(kind=HSIZE_T), dimension(4) :: memcnt,memcnt2,memoff
     integer :: err
-    real(kind=rp) :: tmp
 
     integer :: nx1l,nx2l,nx3l
 
-#ifdef RESIZE_OUTPUT
     integer, dimension(3) :: i1r,i2r
     integer :: iv,i,j,k,ia,ja,ka,ii,jj,kk
     real(kind=rp) :: v1,v2(1:nv),ivol_sum
     real(kind=rp), allocatable :: vec_aux(:,:,:,:)
-#endif
 
-    if(is_restart==1) then
-     nx1l = 0
-     tmp = ivol(lx1,lx2,lx3)
-    endif
+    v1 = ivol(lx1,lx2,lx3)
 
     nx1l = ux1-lx1+1
     nx2l = ux2-lx2+1
     nx3l = ux3-lx3+1
 
-#ifdef RESIZE_OUTPUT 
     if(is_restart==0) then
      nx1l = int(nx1l/compression_factor)
      nx2l = int(nx2l/compression_factor)
      nx3l = int(nx3l/compression_factor)
     endif
-#endif
 
     gnc(1) = nv
     gnc(2) = nx1l*mgrid%bricks(1)
@@ -4532,10 +4497,8 @@ contains
     off(2) = nx1l*mgrid%coords_dd(1)
     off(3) = nx2l*mgrid%coords_dd(2)
     off(4) = nx3l*mgrid%coords_dd(3)
-
-#ifdef RESIZE_OUTPUT
    
-    if(is_restart==0) then
+    if(compression_factor>1 .and. is_restart==0) then
 
      i1r(1) = int(mgrid%coords_dd(1)*nx1l+1)
      i2r(1) = int((mgrid%coords_dd(1)+1)*nx1l)
@@ -4592,17 +4555,13 @@ contains
 
     endif
 
-#endif
-
     call h5dget_space_f(dset_id,filespace,err)
     call h5sselect_hyperslab_f(filespace,H5S_SELECT_SET_F,off,cnt,err)
 
     call h5pcreate_f(H5P_DATASET_XFER_F,plist_id,err)
     call h5pset_dxpl_mpio_f(plist_id,H5FD_MPIO_COLLECTIVE_F,err)
 
-#ifdef RESIZE_OUTPUT
-
-     if(is_restart==0) then
+    if(compression_factor>1 .and. is_restart==0) then
 
       call h5dwrite_f(dset_id,h5%pref_dtypef, &
       vec_aux(1, &
@@ -4613,7 +4572,7 @@ contains
 
       deallocate(vec_aux)
 
-     else
+    else
 
       call h5dwrite_f(dset_id,h5%pref_dtypef, &
       vec(1, &
@@ -4622,18 +4581,7 @@ contains
       lbound(vec,4) ), &
       gnc,err,memspace,filespace,plist_id)
      
-     endif
-
-#else
-
-     call h5dwrite_f(dset_id,h5%pref_dtypef, &
-     vec(1, &
-     lbound(vec,2), &
-     lbound(vec,3), &
-     lbound(vec,4) ), &
-     gnc,err,memspace,filespace,plist_id)
- 
-#endif
+    endif
 
     call h5sclose_f(filespace,err)
     call h5sclose_f(memspace,err)

@@ -247,7 +247,7 @@ For `LHLL-type` solvers, if both low-Mach and supersonic flows need to be captur
 | `boost_reacs_make=100.0_rp` | Boost factor for the nuclear reactions rates. |
 | `BOOST_NEULOSS` | Activates boosting of non-nuclear neutrino losses. |
 | `boost_neuloss_make=10.0_rp` | Boost factor for non-nuclear neutrino losses. |
-| `SAVE_SPECIES_FLUXES` | Saves rate of change of each species due to each reaction. |
+| `SAVE_SPECIES_FLUXES` | Saves rate of change of each species due to each reaction (only for `sdims_make=2`). |
 
 ### 12. Velocity damping
 
@@ -275,24 +275,24 @@ For `LHLL-type` solvers, if both low-Mach and supersonic flows need to be captur
 
 | Option | Meaning |
 | --- | --- |
-|`OUTPUT_NSTEPS` | Enables output dumping every `nsteps_dump` integration steps. |
+|`OUTPUT_NSTEPS` | Enables output dumping every `nsteps_dump` integration steps. Grid snapshots are saved in the `grids` directory, which is automatically created at compile time. |
 |`nsteps_dump_make=10` | Dumping frequency (only if `OUTPUT_NSTEPS` is declared). |
-| `OUTPUT_DT` | Enables output dumping every (approximately) `dt_dump` of simulation time (in seconds). |
+| `OUTPUT_DT` | Enables output dumping every (approximately) `dt_dump` of simulation time (in seconds). Grid snapshots are saved in the `grids` directory, which is automatically created at compile time. |
 | `dt_dump_make=1.5_rp` | Dumping frequency (only if `OUTPUT_DT` is declared). |
 | `info_terminal_rate_make=100000` | Frequency at which the simulation time, cycle, and time step are written to terminal. Further information on the gravity solver or the thermal diffusion step (if used) is also shown. |
 | `dt_restart_make=100.0_rp` | Dumps a restart file every `dt_restart_make` of wall clock time (in seconds). |
-| `RESTART_LAST` | Restarts the simulation from the restart file indicated in the last line of `restart_info.txt` (by default, the last restart). |
-| `SAVE_PLANES` | Dumps 2D slices (planes) to a separate hdf5 output channel (only if `sdims_make=3`). In `app.F90`, the indices of the slices must be provided as `lgrid%planes_x1_index(<plane index>) = <x1 index>` and analogously for slices in the other directions. |
+| `RESTART_LAST` | Restarts the simulation from the restart file indicated in the last line of `restart_info.txt` (by default, the last restart). The restart files are saved in the `restarts` directory, which is automatically created at compile time. |
+| `SAVE_PLANES` | Dumps 2D slices (planes) to a separate hdf5 output channel (only if `sdims_make=3`). In `app.F90`, the indices of the slices must be provided as `lgrid%planes_x1_index(<plane index>) = <x1 index>` and analogously for slices in the other directions. Planes are saved in the `planes` directory, which is automatically created at compile time. |
 | `nplanes_x1_make=2` | Number of `(x2,x3)` planes to be saved to output. |
 | `nplanes_x2_make=4` | Number of `(x1,x3)` planes to be saved to output. |
 | `nplanes_x3_make=1` | Number of `(x1,x2)` planes to be saved to output. |
 | `planes_dt_dump_make=1.0_rp` | Output cadence of the planes in units of simulation time. |
-| `SAVE_SPHERICAL_PROJECTIONS` | Dumps spherical projections onto given radii (only if `sdims_make=3` and if `USE_INTERNAL_BOUNDARIES` is declared). |
+| `SAVE_SPHERICAL_PROJECTIONS` | Dumps spherical projections onto given radii (only if `sdims_make=3` and if `USE_INTERNAL_BOUNDARIES` is declared). Spherical projections are saved in the `spj` directory, which is automatically created at compile time. |
 | `nspj_make=5` | number of spherical projections |
 | `spj_dt_dump_make=1.5_rp` | Output cadence of the spherical projections in units of simulation time. In `app.F90`, the radii of the projections must be provided as `lgrid%spj_r(<projection index>) = <radius of projection>`. |
-| `USE_POINT_PROBES` | This option allows the value of state variables in certain cells to be saved to file at very timestep. The number of probes (`nprobes_make`) alongside their coordinates must be provided by the user. The coordinates are the indexes of the probe on the computational grid and must be specified in `app.F90` as `lgrid%pp_index(<probe index>,1)=<index along the x1 axis>` etc. |
+| `USE_POINT_PROBES` | This option allows the value of state variables in certain cells to be saved to file at very timestep. The number of probes (`nprobes_make`) alongside their coordinates must be provided by the user. The coordinates are the indexes of the probe on the computational grid and must be specified in `app.F90` as `lgrid%pp_index(<probe index>,1)=<index along the x1 axis>` etc. The point probes are saved in the `pps` directory, which is automatically created at compile time. |
 | `nprobes_make=2` | The number of point probes used in the run. |
-|`RESIZE_OUTPUT` | Performs rebinning to save a grid snapshot to the output at half the original resolution, without modifying the restart files. |
+|`compression_factor_make=4` | If >1, the code performs rebinning to save a grid snapshot to the output at reduced resolution according to the provided compression factor (CF), without modifying the restart files (only for `sdims_make=3`). The reduced output is computed via volume-weighted averaging of neighboring blocks of CFxCFxCF cells. |
 
 ### 13. Specs
 

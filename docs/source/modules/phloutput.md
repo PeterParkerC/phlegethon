@@ -50,7 +50,7 @@ print("step     =", grid.step)
 print("geometry =", grid.geometry)
 print("dims     =", grid.nx1, grid.nx2, grid.nx3)
 ```
-If you are already in the directory where the snapshots are located, you can use defaults and run just: `grid = h5grid(25)`.
+If you are already in the directory where the executable is located, you can use defaults and run just: `grid = h5grid(25)`.
 Note that snapshot `0` must always be present, because it contains static data that is not saved in later snapshots.
 
 ### 2. Get basic physical fields
@@ -114,14 +114,14 @@ t, max_mach = timeprof(
 If your run writes `planes_nXXXXX.h5`, use `h5plane`:
 
 ```python
-pl = h5plane(0, path=path, path_to_grids=path, mode='i')
+pl = h5plane(0, path=<path_to_planes>, path_to_grids=<path_to_grids>, mode='i')
 pl.planeshow(pl.rho(iz=0))
 ```
 
 If your run writes `spj_nXXXXX.h5`, use `h5spj`:
 
 ```python
-spj = h5spj(0, path=path, path_to_grids=path, mode='i')
+spj = h5spj(0, path=<path_to_spjs>, path_to_grids=<path_to_grids>, mode='i')
 spj.mollweide(spj.rho(ir=0), cmap='viridis', cb_lbl=r'$\rho$')
 ```
 
@@ -165,7 +165,7 @@ Initialize:
 ```python
 grid = h5grid(
     12,
-    path="./",
+    path="./grids",
     mode='i',
     data_path="../../data/",
     helm_table='helm_table_timmes_x2.dat',
@@ -238,8 +238,8 @@ Initialize:
 ```python
 pl = h5plane(
     0,
-    path="./",
-    path_to_grids="./",
+    path="./planes",
+    path_to_grids="./grids",
     mode='i',
     data_path="../../data/",
     helm_table='helm_table_timmes_x2.dat',
@@ -301,8 +301,8 @@ Initialization:
 
 spj = h5spj(
     0,
-    path="./",
-    path_to_grids="./",
+    path="./spjs",
+    path_to_grids="./grids",
     mode='i',
     data_path="../../data/",
     helm_table='helm_table_timmes_x2.dat',
@@ -362,7 +362,7 @@ A point probe is at one fixed grid location that records selected simulation var
 Initialize:
 
 ```python
-probe = Probe(nprobe=1, dire="./")
+probe = Probe(nprobe=1, dire="./pps")
 ```
 
 - `nprobe`: probe ID to load. Files are matched as `pp<nprobe>_<chunk>.dat`.

@@ -398,6 +398,13 @@ module source
   100.0_rp
 #endif
 
+ integer, parameter :: compression_factor = &
+#ifdef compression_factor_make
+  compression_factor_make
+#else
+  1
+#endif
+
 #ifdef SAVE_PLANES
  integer, parameter :: nplanes_x1 = &
 #ifdef nplanes_x1_make
@@ -2462,7 +2469,7 @@ contains
     integer :: error
     integer(HID_T) :: id,plist_id
     
-    write(h5%filename, "('restart_n',I0.5,'.h5')") lgrid%step
+    write(h5%filename, "('./restarts/restart_n',I0.5,'.h5')") lgrid%step
 
     call h5pcreate_f(H5P_FILE_ACCESS_F,plist_id,error)
 
@@ -2522,37 +2529,37 @@ contains
 #endif
 
     call hdf5_write_ndarray(h5,id,"prim",mgrid,nvars,&
-    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,.false.,.false.,lgrid%ivol,lgrid%prim)
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%prim,1)
 
 #ifdef USE_MHD
     call hdf5_write_array(h5,id,"b_x1",mgrid,&
-    mgrid%i1(1),mgrid%i2(1)+1,mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),1,.false.,.false.,lgrid%ivol,lgrid%b_x1)
+    mgrid%i1(1),mgrid%i2(1)+1,mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),1,lgrid%ivol,lgrid%b_x1,1)
 
     call hdf5_write_array(h5,id,"b_x2",mgrid,&
-    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2)+1,mgrid%i1(3),mgrid%i2(3),1,.false.,.false.,lgrid%ivol,lgrid%b_x2)
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2)+1,mgrid%i1(3),mgrid%i2(3),1,lgrid%ivol,lgrid%b_x2,1)
 
 #if sdims_make==3
     call hdf5_write_array(h5,id,"b_x3",mgrid,&
-    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3)+1,1,.false.,.false.,lgrid%ivol,lgrid%b_x3)
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3)+1,1,lgrid%ivol,lgrid%b_x3,1)
 #endif
 #endif
 
 #ifdef USE_GRAVITY
 #ifdef USE_GRAVITY_SOLVER
     call hdf5_write_array(h5,id,"phi_cc",mgrid,&
-    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,.false.,.false.,lgrid%ivol,lgrid%phi_cc)
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%phi_cc,1)
 
     call hdf5_write_ndarray(h5,id,"grav",mgrid,sdims,&
-    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,.false.,.false.,lgrid%ivol,lgrid%grav)
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%grav,1)
 #endif
 #ifdef USE_MONOPOLE_GRAVITY
     call hdf5_write_ndarray(h5,id,"grav",mgrid,sdims,&
-    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,.false.,.false.,lgrid%ivol,lgrid%grav)
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%grav,1)
 #endif
 #endif
 
     call hdf5_write_array(h5,id,"temp",mgrid,&
-    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,.false.,.false.,lgrid%ivol,lgrid%temp)
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%temp,1)
 
     call h5gclose_f(id, error)
     call h5fclose_f(h5%file_id, error)
@@ -2711,7 +2718,7 @@ contains
     integer :: error
     integer(HID_T) :: file_id,group_id
     
-    write(h5%filename, "('restart_n',I0.5,'.h5')") lgrid%step
+    write(h5%filename, "('./restarts/restart_n',I0.5,'.h5')") lgrid%step
 
 #ifdef USE_SINGLE_PRECISION 
 #ifdef LITTLE_ENDIAN
@@ -2844,17 +2851,9 @@ contains
     integer :: error,i,j,k
     integer(HID_T) :: id,plist_id
 
-    logical :: resize
-
     real(kind=rp), allocatable, dimension(:,:,:) :: vol
 
-#ifdef RESIZE_OUTPUT
-    resize = .true.
-#else
-    resize = .false.
-#endif
-
-    write(h5%filename, "('grid_n',I0.5,'.h5')") lgrid%step
+    write(h5%filename, "('./grids/grid_n',I0.5,'.h5')") lgrid%step
 
     call h5pcreate_f(H5P_FILE_ACCESS_F,plist_id,error)
 
@@ -3002,11 +3001,11 @@ contains
 
 #if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(USE_INTERNAL_BOUNDARIES) || defined(GEOMETRY_CUBED_SPHERE) || defined(GEOMETRY_2D_CYLINDRICAL)
       call hdf5_write_array(h5,id,"r",mgrid, &
-      mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,resize,.false.,lgrid%ivol,lgrid%r)
+      mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%r,0)
 #endif
 
       call hdf5_write_ndarray(h5,id,"coords",mgrid,sdims, &
-      mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,resize,.false.,lgrid%ivol,lgrid%coords)
+      mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%coords,0)
 
 #ifdef USE_TIMMES_KAPPA
       call hdf5_annotate_string(id,"update_kappa","true")
@@ -3017,7 +3016,7 @@ contains
 #if defined(THERMAL_DIFFUSION_STS) || defined(THERMAL_DIFFUSION_EXPLICIT)
 #ifndef USE_TIMMES_KAPPA
       call hdf5_write_array(h5,id,"kappa",mgrid, &
-      mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,resize,.true.,lgrid%ivol,lgrid%kappa)
+      mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%kappa,0)
 #endif
 #endif
 
@@ -3035,10 +3034,10 @@ contains
 #ifndef USE_MONOPOLE_GRAVITY
 #ifdef USE_GRAVITY
       call hdf5_write_ndarray(h5,id,"grav",mgrid,sdims, &
-      mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,resize,.true.,lgrid%ivol,lgrid%grav)
+      mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%grav,0)
 #ifdef EVOLVE_ETOT
       call hdf5_write_array(h5,id,"phi_cc",mgrid, &
-      mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,resize,.true.,lgrid%ivol,lgrid%phi_cc)
+      mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%phi_cc,0)
 #endif
 #endif
 #endif
@@ -3046,7 +3045,7 @@ contains
 
 #ifdef USE_EDOT
       call hdf5_write_array(h5,id,"edot",mgrid, &
-      mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,resize,.true.,lgrid%ivol,lgrid%edot)
+      mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%edot,0)
 #endif
 
 #ifdef COROTATING_FRAME
@@ -3054,55 +3053,60 @@ contains
 #endif
 
       call hdf5_write_array(h5,id,"vol",mgrid, &
-      mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),0,resize,.false.,lgrid%ivol,vol)
+      mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),0,lgrid%ivol,vol,0)
      
       deallocate(vol)
 
     endif
 
     call hdf5_write_ndarray(h5,id,"prim",mgrid,nvars, &
-    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,resize,.true.,lgrid%ivol,lgrid%prim)
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%prim,0)
 
     call hdf5_write_array(h5,id,"temp",mgrid, &
-    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,resize,.true.,lgrid%ivol,lgrid%temp)
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%temp,0)
 
 #ifdef USE_MHD
     call hdf5_write_ndarray(h5,id,"bfield",mgrid,sdims, &
-    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,resize,.true.,lgrid%ivol,lgrid%b_cc)
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%b_cc,0)
 #endif
 
 #ifdef USE_GRAVITY_SOLVER
     call hdf5_write_array(h5,id,"phi_cc",mgrid, &
-    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,resize,.true.,lgrid%ivol,lgrid%phi_cc)
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%phi_cc,0)
 
     call hdf5_write_ndarray(h5,id,"grav",mgrid,sdims, &
-    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,resize,.true.,lgrid%ivol,lgrid%grav)
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%grav,0)
 #endif
 
 #ifdef USE_MONOPOLE_GRAVITY
     call hdf5_write_ndarray(h5,id,"grav",mgrid,sdims, &
-    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,resize,.true.,lgrid%ivol,lgrid%grav)
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%grav,0)
 #endif
 
 #ifdef USE_TIMMES_KAPPA
     call hdf5_write_array(h5,id,"kappa",mgrid, &
-    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,resize,.true.,lgrid%ivol,lgrid%kappa)
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%kappa,0)
 #endif
 
 #ifdef USE_NUCLEAR_NETWORK
+
 #ifdef USE_NEULOSS
     call hdf5_write_ndarray(h5,id,"edot_nuc",mgrid,nreacs+1, &
-    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),0,resize,.true.,lgrid%ivol,lgrid%edot_nuc)
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),0,lgrid%ivol,lgrid%edot_nuc,0)
 #else
     call hdf5_write_ndarray(h5,id,"edot_nuc",mgrid,nreacs, &
-    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),0,resize,.true.,lgrid%ivol,lgrid%edot_nuc)
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),0,lgrid%ivol,lgrid%edot_nuc,0)
 #endif
     call hdf5_write_ndarray(h5,id,"X_species_dot",mgrid,nspecies, &
-    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),0,resize,.true.,lgrid%ivol,lgrid%X_species_dot)
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),0,lgrid%ivol,lgrid%X_species_dot,0)
+
+#if sdims_make==2
 #ifdef SAVE_SPECIES_FLUXES
     call hdf5_write_nd2array(h5,id,"X_species_dot_reacs",mgrid,nspecies,nreacs, &
-    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),0,resize,lgrid%X_species_dot_reacs)
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),0,lgrid%X_species_dot_reacs)
 #endif
+#endif
+
 #endif
 
     call h5gclose_f(id,error)
@@ -3168,7 +3172,7 @@ contains
      h5%pref_dtypei = H5T_STD_I32BE
 #endif
 
-     write(h5%filename, "('spj_n',I0.5,'.h5')") lgrid%step
+     write(h5%filename, "('./spjs/spj_n',I0.5,'.h5')") lgrid%step
      call h5fcreate_f(h5%filename,H5F_ACC_TRUNC_F,h5%file_id,error)
 
      call h5gcreate_f(h5%file_id,"grid",group_id,error)
@@ -3414,7 +3418,7 @@ contains
     integer(HID_T) :: id,plist_id
     character(len=filename_size) :: filename
 
-    write(h5%filename, "('planes_n',I0.5,'.h5')") lgrid%step
+    write(h5%filename, "('./planes/planes_n',I0.5,'.h5')") lgrid%step
 
     call h5pcreate_f(H5P_FILE_ACCESS_F,plist_id,error)
 
@@ -3464,6 +3468,13 @@ contains
 
     do ip=1,nplanes_x1
 
+     if(lgrid%step==0) then
+      write(filename, "('coords_x1_n',I0.5)") ip
+      call hdf5_write_ndarray_x1(h5,id,filename,mgrid,3, &
+      mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),lgrid%planes_x1_index(ip),& 
+      ngc,lgrid%coords,lgrid%planes_x1_inside_domain(ip))
+     endif
+
      write(filename, "('prim_x1_n',I0.5)") ip
      call hdf5_write_ndarray_x1(h5,id,filename,mgrid,nvars, &
      mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),lgrid%planes_x1_index(ip),& 
@@ -3492,6 +3503,13 @@ contains
 
     do ip=1,nplanes_x2
 
+     if(lgrid%step==0) then
+      write(filename, "('coords_x2_n',I0.5)") ip
+      call hdf5_write_ndarray_x2(h5,id,filename,mgrid,3, &
+      mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),lgrid%planes_x2_index(ip),& 
+      ngc,lgrid%coords,lgrid%planes_x2_inside_domain(ip))
+     endif
+
      write(filename, "('prim_x2_n',I0.5)") ip
      call hdf5_write_ndarray_x2(h5,id,filename,mgrid,nvars, &
      mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),lgrid%planes_x2_index(ip),& 
@@ -3519,6 +3537,13 @@ contains
     call hdf5_annotate_array_ip(h5,id,filename,lgrid%planes_x3_index)
 
     do ip=1,nplanes_x3
+
+     if(lgrid%step==0) then
+      write(filename, "('coords_x3_n',I0.5)") ip
+      call hdf5_write_ndarray_x3(h5,id,filename,mgrid,3, &
+      mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),lgrid%planes_x3_index(ip),& 
+      ngc,lgrid%coords,lgrid%planes_x3_inside_domain(ip))
+     endif
 
      write(filename, "('prim_x3_n',I0.5)") ip
      call hdf5_write_ndarray_x3(h5,id,filename,mgrid,nvars, &
@@ -4211,13 +4236,12 @@ contains
 
 #endif
 
- subroutine hdf5_write_array(h5,group_id,dsetname,mgrid,lx1,ux1,lx2,ux2,lx3,ux3,ghost,resize,apply_weights,ivol,vec)
+ subroutine hdf5_write_array(h5,group_id,dsetname,mgrid,lx1,ux1,lx2,ux2,lx3,ux3,ghost,ivol,vec,is_restart)
     type(h5_file) :: h5
     integer(kind=HID_T), intent(in) :: group_id
     character(len=*) :: dsetname
     type(mpigrid), intent(in) :: mgrid
     integer, intent(in) :: lx1,ux1,lx2,ux2,lx3,ux3,ghost
-    logical, intent(in) :: resize,apply_weights
     real(kind=rp), intent(in), dimension(lx1-ngc:ux1+ngc,lx2-ngc:ux2+ngc, &
 #if sdims_make==2
     lx3:ux3) :: ivol
@@ -4234,37 +4258,30 @@ contains
 #if sdims_make==3
     lx3-ghost:ux3+ghost), intent(in) :: vec
 #endif
+    integer, intent(in) :: is_restart
 
     integer(kind=HID_T) :: dset_id,filespace,memspace,plist_id
     integer(kind=HSIZE_T), dimension(3) :: gnc,cnt,off
     integer(kind=HSIZE_T), dimension(3) :: memcnt,memcnt2,memoff
     integer :: err
-    real(kind=rp) :: tmp
 
     integer :: nx1l,nx2l,nx3l
 
-    integer, dimension(3) :: i1r,i2r
-    integer :: i,j,k,ia,ja,ka
     real(kind=rp), allocatable :: vec_aux(:,:,:)
+    real(kind=rp) :: v1,v2,ivol_sum
+    integer :: i,j,k,ii,jj,kk,ia,ja,ka
+    integer, dimension(3) :: i1r,i2r
 
-#if defined(GEOMETRY_CARTESIAN_NONUNIFORM) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_CUBED_SPHERE)
-    real(kind=rp) :: v1=rp1,v2=rp1,v3=rp1,v4=rp1,v5=rp1,v6=rp1,v7=rp1,v8=rp1,ivol_sum=rp1
-#endif
-
-    tmp = ivol(lx1,lx1,ux1)
-
-    if(apply_weights) then
-     nx1l = 1
-    end if
+    v1 = ivol(lx1,lx2,lx3)
 
     nx1l = ux1-lx1+1
     nx2l = ux2-lx2+1
     nx3l = ux3-lx3+1
- 
-    if(resize .eqv. .true.) then
-     nx1l = int(nx1l/2)
-     nx2l = int(nx2l/2)
-     nx3l = int(nx3l/2)
+
+    if(is_restart==0) then
+      nx1l = int(nx1l/compression_factor)
+      nx2l = int(nx2l/compression_factor)
+      nx3l = int(nx3l/compression_factor)
     endif
 
     gnc(1) = nx1l*mgrid%bricks(1)
@@ -4308,102 +4325,81 @@ contains
     off(1) = nx1l*mgrid%coords_dd(1)
     off(2) = nx2l*mgrid%coords_dd(2)
     off(3) = nx3l*mgrid%coords_dd(3)
+
+    if(compression_factor>1 .and. is_restart==0) then 
+
+      i1r(1) = int(mgrid%coords_dd(1)*nx1l+1)
+      i2r(1) = int((mgrid%coords_dd(1)+1)*nx1l)
  
-    if(resize .eqv. .true.) then
+      i1r(2) = int(mgrid%coords_dd(2)*nx2l+1)
+      i2r(2) = int((mgrid%coords_dd(2)+1)*nx2l)
 
-     i1r(1) = int(mgrid%coords_dd(1)*nx1l+1)
-     i2r(1) = int((mgrid%coords_dd(1)+1)*nx1l)
+      i1r(3) = int(mgrid%coords_dd(3)*nx3l+1)
+      i2r(3) = int((mgrid%coords_dd(3)+1)*nx3l)
 
-     i1r(2) = int(mgrid%coords_dd(2)*nx2l+1)
-     i2r(2) = int((mgrid%coords_dd(2)+1)*nx2l)
+      allocate(vec_aux(i1r(1)-ghost:i2r(1)+ghost,i1r(2)-ghost:i2r(2)+ghost,i1r(3)-ghost:i2r(3)+ghost))
 
-     i1r(3) = int(mgrid%coords_dd(3)*nx3l+1)
-     i2r(3) = int((mgrid%coords_dd(3)+1)*nx3l)
+      do k=i1r(3),i2r(3)
+       do j=i1r(2),i2r(2)
+        do i=i1r(1),i2r(1)
+ 
+         ia = compression_factor*i-(compression_factor-1)
+         ja = compression_factor*j-(compression_factor-1)
+         ka = compression_factor*k-(compression_factor-1)
 
-     allocate(vec_aux(i1r(1)-ghost:i2r(1)+ghost,i1r(2)-ghost:i2r(2)+ghost,i1r(3)-ghost:i2r(3)+ghost))
+         ivol_sum = rp0
+         v2 = rp0
 
-     do k=i1r(3),i2r(3)
-      do j=i1r(2),i2r(2)
-       do i=i1r(1),i2r(1)
-   
-        ia = 2*i-1
-        ja = 2*j-1
-        ka = 2*k-1
+         do kk=0,compression_factor-1
+          do jj=0,compression_factor-1
+           do ii=0,compression_factor-1
 
-#if defined(GEOMETRY_CARTESIAN_NONUNIFORM) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_CUBED_SPHERE)
-
-        if(apply_weights .eqv. .true.) then
-
-         v1 = rp1/ivol(ia,ja,ka)
-         v2 = rp1/ivol(ia+1,ja,ka)
-         v3 = rp1/ivol(ia,ja+1,ka)
-         v4 = rp1/ivol(ia,ja,ka+1)
-         v5 = rp1/ivol(ia+1,ja+1,ka)
-         v6 = rp1/ivol(ia,ja+1,ka+1)
-         v7 = rp1/ivol(ia+1,ja,ka+1)
-         v8 = rp1/ivol(ia+1,ja+1,ka+1)
-
-         ivol_sum = rp1/(v1+v2+v3+v4+v5+v6+v7+v8)
-
-        end if
-
-        vec_aux(i,j,k) = ivol_sum*( &
-        v1*vec(ia,ja,ka) + &
-        v2*vec(ia+1,ja,ka) + &
-        v3*vec(ia,ja+1,ka) + &
-        v4*vec(ia,ja,ka+1) + &
-        v5*vec(ia+1,ja+1,ka) + &
-        v6*vec(ia,ja+1,ka+1) + &
-        v7*vec(ia+1,ja,ka+1) + &
-        v8*vec(ia+1,ja+1,ka+1) &
-        )
-
+#if defined(GEOMETRY_CARTESIAN_NONUNIFORM) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_CUBED_SPHERE)            
+            v1 = rp1/ivol(ia+ii,ja+jj,ka+kk)
 #else
-
-        vec_aux(i,j,k) = 0.125_rp*( &
-        vec(ia,ja,ka) + &
-        vec(ia+1,ja,ka) + &
-        vec(ia,ja+1,ka) + &
-        vec(ia,ja,ka+1) + &
-        vec(ia+1,ja+1,ka) + &
-        vec(ia,ja+1,ka+1) + &
-        vec(ia+1,ja,ka+1) + &
-        vec(ia+1,ja+1,ka+1) &
-        )
-
+            v1 = rp1
 #endif
+            ivol_sum = ivol_sum + v1
+            v2 = v2 + vec(ia+ii,ja+jj,ka+kk)*v1
 
-       end do
-      end do 
-     end do
- 
-    endif
+           end do
+          end do
+         end do
+
+         ivol_sum = rp1/ivol_sum
+         vec_aux(i,j,k) = v2*ivol_sum
+                  
+        end do
+       end do 
+      end do
+
+    end if
 
     call h5dget_space_f(dset_id, filespace, err)
     call h5sselect_hyperslab_f(filespace,H5S_SELECT_SET_F,off,cnt,err)
 
     call h5pcreate_f(H5P_DATASET_XFER_F,plist_id,err)
     call h5pset_dxpl_mpio_f(plist_id,H5FD_MPIO_COLLECTIVE_F,err)
-
-    if(resize .eqv. .true.) then
-
-     call h5dwrite_f(dset_id,h5%pref_dtypef, &
-     vec_aux( &
-     lbound(vec_aux,1), &
-     lbound(vec_aux,2), &
-     lbound(vec_aux,3) ), &
-     gnc,err,memspace,filespace,plist_id)
-
-     deallocate(vec_aux)
   
+    if(compression_factor>1 .and. is_restart==0) then
+
+      call h5dwrite_f(dset_id,h5%pref_dtypef, &
+      vec_aux( &
+      lbound(vec_aux,1), &
+      lbound(vec_aux,2), &
+      lbound(vec_aux,3) ), &
+      gnc,err,memspace,filespace,plist_id)
+
+      deallocate(vec_aux)
+    
     else
 
-     call h5dwrite_f(dset_id,h5%pref_dtypef, &
-     vec( &
-     lbound(vec,1), &
-     lbound(vec,2), &
-     lbound(vec,3) ), &
-     gnc,err,memspace,filespace,plist_id)
+      call h5dwrite_f(dset_id,h5%pref_dtypef, &
+      vec( &
+      lbound(vec,1), &
+      lbound(vec,2), &
+      lbound(vec,3) ), &
+      gnc,err,memspace,filespace,plist_id)
 
     endif
 
@@ -4414,14 +4410,13 @@ contains
 
  end subroutine hdf5_write_array
 
- subroutine hdf5_write_ndarray(h5,group_id,dsetname,mgrid,nv,lx1,ux1,lx2,ux2,lx3,ux3,ghost,resize,apply_weights,ivol,vec)
+ subroutine hdf5_write_ndarray(h5,group_id,dsetname,mgrid,nv,lx1,ux1,lx2,ux2,lx3,ux3,ghost,ivol,vec,is_restart)
     type(h5_file) :: h5
     integer(kind=HID_T), intent(in) :: group_id
     character(len=*) :: dsetname
     type(mpigrid), intent(in) :: mgrid
     integer, intent(in) :: nv
     integer, intent(in) :: lx1,ux1,lx2,ux2,lx3,ux3,ghost
-    logical, intent(in) :: resize,apply_weights
     real(kind=rp), intent(in), dimension(lx1-ngc:ux1+ngc,lx2-ngc:ux2+ngc, &
 #if sdims_make==2
     lx3:ux3) :: ivol
@@ -4438,39 +4433,32 @@ contains
 #if sdims_make==3
     lx3-ghost:ux3+ghost), intent(in) :: vec
 #endif
+    integer, intent(in) :: is_restart
 
     integer(kind=HID_T) :: dset_id,filespace,memspace,plist_id
     integer(kind=HSIZE_T), dimension(4) :: gnc,cnt,off
     integer(kind=HSIZE_T), dimension(4) :: memcnt,memcnt2,memoff
     integer :: err
-    real(kind=rp) :: tmp
 
     integer :: nx1l,nx2l,nx3l
 
     integer, dimension(3) :: i1r,i2r
-    integer :: iv,i,j,k,ia,ja,ka
+    integer :: iv,i,j,k,ia,ja,ka,ii,jj,kk
+    real(kind=rp) :: v1,v2(1:nv),ivol_sum
     real(kind=rp), allocatable :: vec_aux(:,:,:,:)
 
-#if defined(GEOMETRY_CARTESIAN_NONUNIFORM) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_CUBED_SPHERE)
-    real(kind=rp) :: v1=rp1,v2=rp1,v3=rp1,v4=rp1,v5=rp1,v6=rp1,v7=rp1,v8=rp1,ivol_sum=rp1
-#endif
-
-    tmp = ivol(lx1,lx1,ux1)
-
-    if(apply_weights) then
-     nx1l = 1
-    end if
+    v1 = ivol(lx1,lx2,lx3)
 
     nx1l = ux1-lx1+1
     nx2l = ux2-lx2+1
     nx3l = ux3-lx3+1
- 
-    if(resize .eqv. .true.) then
-     nx1l = int(nx1l/2)
-     nx2l = int(nx2l/2)
-     nx3l = int(nx3l/2)
+
+    if(is_restart==0) then
+     nx1l = int(nx1l/compression_factor)
+     nx2l = int(nx2l/compression_factor)
+     nx3l = int(nx3l/compression_factor)
     endif
- 
+
     gnc(1) = nv
     gnc(2) = nx1l*mgrid%bricks(1)
     gnc(3) = nx2l*mgrid%bricks(2)
@@ -4518,8 +4506,8 @@ contains
     off(2) = nx1l*mgrid%coords_dd(1)
     off(3) = nx2l*mgrid%coords_dd(2)
     off(4) = nx3l*mgrid%coords_dd(3)
-
-    if(resize .eqv. .true.) then
+   
+    if(compression_factor>1 .and. is_restart==0) then
 
      i1r(1) = int(mgrid%coords_dd(1)*nx1l+1)
      i2r(1) = int((mgrid%coords_dd(1)+1)*nx1l)
@@ -4536,63 +4524,45 @@ contains
       do j=i1r(2),i2r(2)
        do i=i1r(1),i2r(1)
 
-        ia = 2*i-1
-        ja = 2*j-1
-        ka = 2*k-1
+        ia = compression_factor*i-(compression_factor-1)
+        ja = compression_factor*j-(compression_factor-1)
+        ka = compression_factor*k-(compression_factor-1)
 
-#if defined(GEOMETRY_CARTESIAN_NONUNIFORM) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_CUBED_SPHERE)
-
-        if(apply_weights .eqv. .true.) then 
-         v1 = rp1/ivol(ia,ja,ka)
-         v2 = rp1/ivol(ia+1,ja,ka)
-         v3 = rp1/ivol(ia,ja+1,ka)
-         v4 = rp1/ivol(ia,ja,ka+1)
-         v5 = rp1/ivol(ia+1,ja+1,ka)
-         v6 = rp1/ivol(ia,ja+1,ka+1)
-         v7 = rp1/ivol(ia+1,ja,ka+1)
-         v8 = rp1/ivol(ia+1,ja+1,ka+1)
-         ivol_sum = rp1/(v1+v2+v3+v4+v5+v6+v7+v8)
-        endif
-
+        ivol_sum = rp0
         do iv=1,nv
-
-         vec_aux(iv,i,j,k) = ivol_sum*( &
-         v1*vec(iv,ia,ja,ka) + &
-         v2*vec(iv,ia+1,ja,ka) + &
-         v3*vec(iv,ia,ja+1,ka) + &
-         v4*vec(iv,ia,ja,ka+1) + &
-         v5*vec(iv,ia+1,ja+1,ka) + &
-         v6*vec(iv,ia,ja+1,ka+1) + &
-         v7*vec(iv,ia+1,ja,ka+1) + &
-         v8*vec(iv,ia+1,ja+1,ka+1) &
-         )
-
+         v2(iv) = rp0
         end do
 
+        do kk=0,compression_factor-1
+         do jj=0,compression_factor-1
+          do ii=0,compression_factor-1
+
+#if defined(GEOMETRY_CARTESIAN_NONUNIFORM) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_CUBED_SPHERE)            
+            v1 = rp1/ivol(ia+ii,ja+jj,ka+kk)
 #else
+            v1 = rp1
+#endif
+            ivol_sum = ivol_sum + v1
+
+            do iv=1,nv
+             v2(iv) = v2(iv) + vec(iv,ia+ii,ja+jj,ka+kk)*v1
+            end do
+
+          end do
+         end do
+        end do
+       
+        ivol_sum = rp1/ivol_sum
 
         do iv=1,nv
-
-         vec_aux(iv,i,j,k) = 0.125_rp*( &
-         vec(iv,ia,ja,ka) + &
-         vec(iv,ia+1,ja,ka) + &
-         vec(iv,ia,ja+1,ka) + &
-         vec(iv,ia,ja,ka+1) + &
-         vec(iv,ia+1,ja+1,ka) + &
-         vec(iv,ia,ja+1,ka+1) + &
-         vec(iv,ia+1,ja,ka+1) + &
-         vec(iv,ia+1,ja+1,ka+1) &
-         )
-
+         vec_aux(iv,i,j,k) = v2(iv)*ivol_sum
         end do
-
-#endif
 
        end do
-      end do 
+      end do
      end do
- 
-    end if
+
+    endif
 
     call h5dget_space_f(dset_id,filespace,err)
     call h5sselect_hyperslab_f(filespace,H5S_SELECT_SET_F,off,cnt,err)
@@ -4600,27 +4570,27 @@ contains
     call h5pcreate_f(H5P_DATASET_XFER_F,plist_id,err)
     call h5pset_dxpl_mpio_f(plist_id,H5FD_MPIO_COLLECTIVE_F,err)
 
-    if(resize .eqv. .true.) then
+    if(compression_factor>1 .and. is_restart==0) then
 
-     call h5dwrite_f(dset_id,h5%pref_dtypef, &
-     vec_aux(1, &
-     lbound(vec_aux,2), &
-     lbound(vec_aux,3), &
-     lbound(vec_aux,4) ), &
-     gnc,err,memspace,filespace,plist_id)
+      call h5dwrite_f(dset_id,h5%pref_dtypef, &
+      vec_aux(1, &
+      lbound(vec_aux,2), &
+      lbound(vec_aux,3), &
+      lbound(vec_aux,4) ), &
+      gnc,err,memspace,filespace,plist_id)
 
-     deallocate(vec_aux)
+      deallocate(vec_aux)
 
     else
 
-     call h5dwrite_f(dset_id,h5%pref_dtypef, &
-     vec(1, &
-     lbound(vec,2), &
-     lbound(vec,3), &
-     lbound(vec,4) ), &
-     gnc,err,memspace,filespace,plist_id)
- 
-    end if
+      call h5dwrite_f(dset_id,h5%pref_dtypef, &
+      vec(1, &
+      lbound(vec,2), &
+      lbound(vec,3), &
+      lbound(vec,4) ), &
+      gnc,err,memspace,filespace,plist_id)
+     
+    endif
 
     call h5sclose_f(filespace,err)
     call h5sclose_f(memspace,err)
@@ -4629,16 +4599,16 @@ contains
 
  end subroutine hdf5_write_ndarray
 
+#if sdims_make==2
 #ifdef SAVE_SPECIES_FLUXES
 
- subroutine hdf5_write_nd2array(h5,group_id,dsetname,mgrid,nv,nr,lx1,ux1,lx2,ux2,lx3,ux3,ghost,resize,vec)
+ subroutine hdf5_write_nd2array(h5,group_id,dsetname,mgrid,nv,nr,lx1,ux1,lx2,ux2,lx3,ux3,ghost,vec)
     type(h5_file) :: h5
     integer(kind=HID_T), intent(in) :: group_id
     character(len=*) :: dsetname
     type(mpigrid), intent(in) :: mgrid
     integer, intent(in) :: nv,nr
     integer, intent(in) :: lx1,ux1,lx2,ux2,lx3,ux3,ghost
-    logical, intent(in) :: resize
     real(kind=rp), dimension(1:nv,1:nr, &
     lx1-ghost:ux1+ghost, &
     lx2-ghost:ux2+ghost, &
@@ -4655,19 +4625,9 @@ contains
 
     integer :: nx1l,nx2l,nx3l
 
-    integer, dimension(3) :: i1r,i2r
-    integer :: iv,ir,i,j,k,ia,ja,ka
-    real(kind=rp), allocatable :: vec_aux(:,:,:,:,:)
-
     nx1l = ux1-lx1+1
     nx2l = ux2-lx2+1
     nx3l = ux3-lx3+1
- 
-    if(resize .eqv. .true.) then
-     nx1l = int(nx1l/2)
-     nx2l = int(nx2l/2)
-     nx3l = int(nx3l/2)
-    endif
  
     gnc(1) = nv
     gnc(2) = nr
@@ -4723,77 +4683,19 @@ contains
     off(4) = nx2l*mgrid%coords_dd(2)
     off(5) = nx3l*mgrid%coords_dd(3)
 
-    if(resize .eqv. .true.) then
-
-     i1r(1) = int(mgrid%coords_dd(1)*nx1l+1)
-     i2r(1) = int((mgrid%coords_dd(1)+1)*nx1l)
-
-     i1r(2) = int(mgrid%coords_dd(2)*nx2l+1)
-     i2r(2) = int((mgrid%coords_dd(2)+1)*nx2l)
-
-     i1r(3) = int(mgrid%coords_dd(3)*nx3l+1)
-     i2r(3) = int((mgrid%coords_dd(3)+1)*nx3l)
-
-     allocate(vec_aux(1:nv,1:nr,i1r(1)-ghost:i2r(1)+ghost,i1r(2)-ghost:i2r(2)+ghost,i1r(3)-ghost:i2r(3)+ghost))
-
-     do k=i1r(3),i2r(3)
-      do j=i1r(2),i2r(2)
-       do i=i1r(1),i2r(1)
-        do ir=1,nr
-         do iv=1,nv
-
-          ia = 2*i-1
-          ja = 2*j-1
-          ka = 2*k-1
-
-          vec_aux(iv,ir,i,j,k) = 0.125_rp*( &
-          vec(iv,ir,ia,ja,ka) + &
-          vec(iv,ir,ia+1,ja,ka) + &
-          vec(iv,ir,ia,ja+1,ka) + &
-          vec(iv,ir,ia,ja,ka+1) + &
-          vec(iv,ir,ia+1,ja+1,ka) + &
-          vec(iv,ir,ia,ja+1,ka+1) + &
-          vec(iv,ir,ia+1,ja,ka+1) + &
-          vec(iv,ir,ia+1,ja+1,ka+1) &
-          )
-
-         end do
-        end do
-       end do
-      end do 
-     end do
- 
-    end if
-
     call h5dget_space_f(dset_id,filespace,err)
     call h5sselect_hyperslab_f(filespace,H5S_SELECT_SET_F,off,cnt,err)
 
     call h5pcreate_f(H5P_DATASET_XFER_F,plist_id,err)
     call h5pset_dxpl_mpio_f(plist_id,H5FD_MPIO_COLLECTIVE_F,err)
 
-    if(resize .eqv. .true.) then
-
-     call h5dwrite_f(dset_id,h5%pref_dtypef, &
-     vec_aux(1, &
-     1, &
-     lbound(vec_aux,3), &
-     lbound(vec_aux,4), &
-     lbound(vec_aux,5) ), &
-     gnc,err,memspace,filespace,plist_id)
-
-     deallocate(vec_aux)
-
-    else
-
-     call h5dwrite_f(dset_id,h5%pref_dtypef, &
-     vec(1, &
-     1, &
-     lbound(vec,3), &
-     lbound(vec,4), &
-     lbound(vec,5) ), &
-     gnc,err,memspace,filespace,plist_id)
- 
-    end if
+    call h5dwrite_f(dset_id,h5%pref_dtypef, &
+    vec(1, &
+    1, &
+    lbound(vec,3), &
+    lbound(vec,4), &
+    lbound(vec,5) ), &
+    gnc,err,memspace,filespace,plist_id)
 
     call h5sclose_f(filespace,err)
     call h5sclose_f(memspace,err)
@@ -4802,6 +4704,7 @@ contains
 
  end subroutine hdf5_write_nd2array
 
+#endif
 #endif
 
  subroutine hdf5_annotate_rp(h5,id,key,val)
@@ -5747,7 +5650,7 @@ contains
 
           if(iflush==10000) then
         
-           open(newunit=iv,file='pp'//trim(str(ipr))//'_'//trim(str(lgrid%step))//'.dat', &
+           open(newunit=iv,file='./pps/pp'//trim(str(ipr))//'_'//trim(str(lgrid%step))//'.dat', &
            status='replace',action='write',form='unformatted',access='stream')
 
            do i=1,10000
@@ -5958,7 +5861,7 @@ contains
 
        if(lgrid%pp_inside_domain(ipr).eqv..true.) then
   
-         open(newunit=iv,file='pp'//trim(str(ipr))//'_'//trim(str(lgrid%step-1))//'.dat', &
+         open(newunit=iv,file='./pps/pp'//trim(str(ipr))//'_'//trim(str(lgrid%step-1))//'.dat', &
          status='replace',action='write',form='unformatted',access='stream')
 
          do i=1,iflush

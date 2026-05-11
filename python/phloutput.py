@@ -111,7 +111,7 @@ def read_data(file,n1):
 
 class Probe:
 
-    def __init__(self,nprobe=1,dire='./'):
+    def __init__(self,nprobe=1,dire='./pps'):
 
         self.nprobe = nprobe
         self.dir = dire
@@ -191,7 +191,7 @@ def spj_list(path=""):
  
 class h5spj:
 
-    def __init__(self,filename,path='./',path_to_grids='./',mode='i',data_path=data,helm_table='helm_table_timmes_x2.dat',pig_table='401x401_pig_table_h2_offset.dat',
+    def __init__(self,filename,path='./spjs',path_to_grids='./grids',mode='i',data_path=data,helm_table='helm_table_timmes_x2.dat',pig_table='401x401_pig_table_h2_offset.dat',
     NRHO=541,NT=201,LOGRHOMIN=-12.0,LOGRHOMAX=15.0,LOGTMIN=3.0,LOGTMAX=13.0):
 
         if(mode=='n'):
@@ -601,7 +601,7 @@ def plane_list(path=""):
 
 class h5plane:
 
-    def __init__(self,filename,path='./',path_to_grids='./',mode='i',data_path=data,helm_table='helm_table_timmes_x2.dat',pig_table='401x401_pig_table_h2_offset.dat',
+    def __init__(self,filename,path='./planes',path_to_grids='./grids',mode='i',data_path=data,helm_table='helm_table_timmes_x2.dat',pig_table='401x401_pig_table_h2_offset.dat',
     NRHO=541,NT=201,LOGRHOMIN=-12.0,LOGRHOMAX=15.0,LOGTMIN=3.0,LOGTMAX=13.0):
         if(mode=='n'):
             filename = os.path.join(path, 'planes_n{:05}.h5'.format(filename))
@@ -626,14 +626,17 @@ class h5plane:
         self.planes['x2'] = {}
         self.planes['x3'] = {}
 
+        self.planes['x1']['coords'] = []
         self.planes['x1']['prim'] = []
         self.planes['x1']['temp'] = []
         self.planes['x1']['bfield'] = []
 
+        self.planes['x2']['coords'] = []
         self.planes['x2']['prim'] = []
         self.planes['x2']['temp'] = []
         self.planes['x2']['bfield'] = []
 
+        self.planes['x3']['coords'] = []
         self.planes['x3']['prim'] = []
         self.planes['x3']['temp'] = []
         self.planes['x3']['bfield'] = []
@@ -683,6 +686,49 @@ class h5plane:
         self.eos_evaluated = False
  
         self.grid0 = h5grid(0,path=path_to_grids,data_path=data_path,helm_table=helm_table,pig_table=pig_table,NRHO=NRHO,NT=NT,LOGRHOMIN=LOGRHOMIN,LOGRHOMAX=LOGRHOMAX,LOGTMIN=LOGTMIN,LOGTMAX=LOGTMAX)
+
+        try:
+
+         filename = os.path.join(path, 'planes_n{:05}.h5'.format(0))
+         self.plane0 = h5py.File(filename,"r")['grid']
+
+         #coords
+         #x1-slices
+         for ip in range(self.nplanes_x1):
+          self.planes['x1']['coords'].append(self.plane0['coords_x1_n{:05d}'.format(ip+1)][()])
+
+         #x2-slices
+         for ip in range(self.nplanes_x2):
+          self.planes['x2']['coords'].append(self.plane0['coords_x2_n{:05d}'.format(ip+1)][()])
+
+         #x3-slices
+         for ip in range(self.nplanes_x3):
+          self.planes['x3']['coords'].append(self.plane0['coords_x3_n{:05d}'.format(ip+1)][()])
+
+        except:
+
+         dummy = 1
+
+    def coords(self,ix=-1,iy=-1,iz=-1):
+
+     try:
+
+      self.ix = ix
+      self.iy = iy
+      self.iz = iz
+      if(ix>=0):
+       ik = np.where((self.planes_x1_index-1)==ix)[0][0]
+       return self.planes['x1']['coords'][ik].transpose(2,1,0)
+      if(iy>=0):
+       ik = np.where((self.planes_x2_index-1)==iy)[0][0]
+       return self.planes['x2']['coords'][ik].transpose(2,1,0)
+      if(iz>=0):
+       ik = np.where((self.planes_x3_index-1)==iz)[0][0]
+       return self.planes['x3']['coords'][ik].transpose(2,1,0)
+
+     except:
+
+       print('coordinates not available in this plane')
 
     def prim(self,ix=-1,iy=-1,iz=-1):
      self.ix = ix
@@ -741,26 +787,47 @@ class h5plane:
     def vr(self,ix=-1,iy=-1,iz=-1):
 
       vel = self.vel(ix=ix,iy=iy,iz=iz)
-      coords = self.grid0.coords(ix=ix,iy=iy,iz=iz)
 
-      shape_plane = vel[0].shape
-      shape_grid = coords[0].shape
+      try:
 
-      if(shape_plane!=shape_grid):
-       coords = zoom(coords, zoom=2, order=1) 
+       coords = self.coords(ix=ix,iy=iy,iz=iz)
 
-      if(self.grid0.geometry!='cartesian'):
-       vr = vel[0]
-      elif(self.grid0.geometry=='cartesian') and (self.grid0.use_internal_boundaries=='true'):
-       r = self.grid0.r(ix=ix,iy=iy,iz=iz)
+       if(self.grid0.geometry!='cartesian'):
+        vr = vel[0]
+       elif(self.grid0.geometry=='cartesian') and (self.grid0.use_internal_boundaries=='true'):
+        if(self.grid0.sdims==2):
+         r = np.sqrt(coords[0]**2+coords[1]**2)
+        else:
+         r = np.sqrt(coords[0]**2+coords[1]**2+coords[2]**2)
+        if(self.grid0.sdims==2):
+          vr = (coords[0]*vel[0]+coords[1]*vel[1])/r
+        if(self.grid0.sdims==3):
+          vr = (coords[0]*vel[0]+coords[1]*vel[1]+coords[2]*vel[2])/r
+       else:
+        vr = vel[1]
+
+      except:
+
+       coords = self.grid0.coords(ix=ix,iy=iy,iz=iz)
+
+       shape_plane = vel[0].shape
+       shape_grid = coords[0].shape
+
        if(shape_plane!=shape_grid):
-        r = zoom(r, zoom=2, order=1) 
-       if(self.grid0.sdims==2):
-         vr = (coords[0]*vel[0]+coords[1]*vel[1])/r
-       if(self.grid0.sdims==3):
-         vr = (coords[0]*vel[0]+coords[1]*vel[1]+coords[2]*vel[2])/r
-      else:
-       vr = vel[1]
+        coords = zoom(coords, zoom=2, order=1) 
+
+       if(self.grid0.geometry!='cartesian'):
+        vr = vel[0]
+       elif(self.grid0.geometry=='cartesian') and (self.grid0.use_internal_boundaries=='true'):
+        r = self.grid0.r(ix=ix,iy=iy,iz=iz)
+        if(shape_plane!=shape_grid):
+         r = zoom(r, zoom=2, order=1) 
+        if(self.grid0.sdims==2):
+          vr = (coords[0]*vel[0]+coords[1]*vel[1])/r
+        if(self.grid0.sdims==3):
+          vr = (coords[0]*vel[0]+coords[1]*vel[1]+coords[2]*vel[2])/r
+       else:
+        vr = vel[1]
 
       return vr
  
@@ -839,26 +906,47 @@ class h5plane:
     def br(self,ix=-1,iy=-1,iz=-1):
 
       b = self.bfield(ix=ix,iy=iy,iz=iz)
-      coords = self.grid0.coords(ix=ix,iy=iy,iz=iz)
+ 
+      try:
 
-      shape_plane = b[0].shape
-      shape_grid = coords[0].shape
+       coords = self.coords(ix=ix,iy=iy,iz=iz)
 
-      if(shape_plane!=shape_grid):
-       coords = zoom(coords, zoom=2, order=1) 
+       if(self.grid0.geometry!='cartesian'):
+        br = b[0]
+       elif(self.grid0.geometry=='cartesian') and (self.grid0.use_internal_boundaries=='true'):
+        if(self.grid0.sdims==2):
+         r = np.sqrt(coords[0]**2+coords[1]**2)
+        else:
+         r = np.sqrt(coords[0]**2+coords[1]**2+coords[2]**2)
+        if(self.grid0.sdims==2):
+          br = (coords[0]*b[0]+coords[1]*b[1])/r
+        if(self.grid0.sdims==3):
+          br = (coords[0]*b[0]+coords[1]*b[1]+coords[2]*b[2])/r
+       else:
+        br = b[1]
+ 
+      except:
+ 
+       coords = self.grid0.coords(ix=ix,iy=iy,iz=iz)
 
-      if(self.grid0.geometry!='cartesian'):
-       br = b[0]
-      elif(self.grid0.geometry=='cartesian') and (self.grid0.use_internal_boundaries=='true'):
-       r = self.grid0.r(ix=ix,iy=iy,iz=iz)
+       shape_plane = b[0].shape
+       shape_grid = coords[0].shape
+
        if(shape_plane!=shape_grid):
-        r = zoom(r, zoom=2, order=1) 
-       if(self.grid0.sdims==2):
-         br = (coords[0]*b[0]+coords[1]*b[1])/r
-       if(self.grid0.sdims==3):
-         br = (coords[0]*b[0]+coords[1]*b[1]+coords[2]*b[2])/r
-      else:
-       br = b[1]
+        coords = zoom(coords, zoom=2, order=1) 
+
+       if(self.grid0.geometry!='cartesian'):
+        br = b[0]
+       elif(self.grid0.geometry=='cartesian') and (self.grid0.use_internal_boundaries=='true'):
+        r = self.grid0.r(ix=ix,iy=iy,iz=iz)
+        if(shape_plane!=shape_grid):
+         r = zoom(r, zoom=2, order=1) 
+        if(self.grid0.sdims==2):
+          br = (coords[0]*b[0]+coords[1]*b[1])/r
+        if(self.grid0.sdims==3):
+          br = (coords[0]*b[0]+coords[1]*b[1]+coords[2]*b[2])/r
+       else:
+        br = b[1]
 
       return br
  
@@ -1078,7 +1166,10 @@ class h5plane:
 
      fig, axs = subplots(figsize=(ichx,ichy))
 
-     coords = self.grid0.coords(ix=self.ix,iy=self.iy,iz=self.iz)
+     try:
+      coords = self.coords(ix=self.ix,iy=self.iy,iz=self.iz)
+     except:
+      coords = self.grid0.coords(ix=self.ix,iy=self.iy,iz=self.iz)
 
      if(self.grid0.geometry=='cartesian'):
       if(self.ix>=0):
@@ -1200,7 +1291,7 @@ def file_list(path=""):
 
 class h5grid:
 
-    def __init__(self,filename,path='./',mode='i',data_path=data,helm_table='helm_table_timmes_x2.dat',pig_table='401x401_pig_table_h2_offset.dat',
+    def __init__(self,filename,path='./grids',mode='i',data_path=data,helm_table='helm_table_timmes_x2.dat',pig_table='401x401_pig_table_h2_offset.dat',
     NRHO=541,NT=201,LOGRHOMIN=-12.0,LOGRHOMAX=15.0,LOGTMIN=3.0,LOGTMAX=13.0):
         if(mode=='n'):
             filename = os.path.join(path, 'grid_n{:05}.h5'.format(filename))

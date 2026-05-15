@@ -730,7 +730,7 @@ class h5rprof:
 
         self.grid0 = h5grid(0,path=path_to_grids,data_path=data_path,helm_table=helm_table,pig_table=pig_table,NRHO=NRHO,NT=NT,LOGRHOMIN=LOGRHOMIN,LOGRHOMAX=LOGRHOMAX,LOGTMIN=LOGTMIN,LOGTMAX=LOGTMAX)
 
-    def ap_bp_bar(a_bar,b_bar,a_b_bar):
+    def ap_bp_bar(self,a_bar,b_bar,a_b_bar):
       return a_b_bar - a_bar*b_bar
 
 #######################################################################################

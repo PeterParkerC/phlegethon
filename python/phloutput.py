@@ -581,6 +581,159 @@ class h5spj:
      rc('text', usetex=False)
 
 #######################################################################################
+# h5rprof class
+#######################################################################################
+
+ir_rho = 0
+ir_P = 1
+ir_T = 2
+ir_eint = 3
+
+def rprof_list(path=""):
+
+   filelist = glob.glob(os.path.join(path,'*.h5'))
+   files = []
+
+   for file in filelist:
+     f = os.path.basename(file)
+     m = re.search('rprofs_n([0-9]{5,})\\.(h5)$', f)
+     if m:
+       files.append((int(m.group(1)), f))
+
+   files.sort(key=lambda x: x[0])
+
+   return files
+
+class h5rprof:
+
+    def __init__(self,filename,path='./rprofs',path_to_grids='./grids',mode='i',data_path=data,helm_table='helm_table_timmes_x2.dat',pig_table='401x401_pig_table_h2_offset.dat',
+    NRHO=541,NT=201,LOGRHOMIN=-12.0,LOGRHOMAX=15.0,LOGTMIN=3.0,LOGTMAX=13.0):
+        if(mode=='n'):
+            filename = os.path.join(path, 'planes_n{:05}.h5'.format(filename))
+        if(mode=='i'):
+            filename = rprof_list(path=path)[filename][1]
+        else:
+          raise ValueError('Unknown mode' + str(mode),': mode must be n or i')
+
+        filename = os.path.join(path, filename)
+        self.grid = h5py.File(filename,"r")['grid']
+
+        self.time = self.grid['time'][()]
+        self.step = self.grid['step'][()]
+        self.dt = self.grid['dt'][()]
+        self.nas = self.grid['nas'][()]
+        self.nspecies = self.grid['nspecies'][()]
+        self.nreacs = self.grid['nreacs'][()]
+        havg = self.grid['havg'][()]
+        self.rf = self.grid['rf'][()]
+        self.r = 0.5*(self.rf[1:]+self.rf[:-1])
+        self.nr = len(self.r)
+        self.area = havg[:,0]
+        self.gr = havg[:,1]
+        self.epot = havg[:,2]
+        self.kappa = havg[:,3]
+        self.edot = havg[:,4]
+        self.rho = havg[:,5]
+        self.P = havg[:,6]
+        self.T = havg[:,7]
+        self.s = havg[:,8]
+        self.abar = havg[:,9]
+        self.ye = havg[:,10]
+        self.zbar = havg[:,11]
+        self.rho_rho = havg[:,12]
+        self.T_T = havg[:,13]
+        self.P_P = havg[:,14]
+        self.s_s = havg[:,15]
+        self.abs_vel = havg[:,16]
+        self.abs_vh = havg[:,17]
+        self.rho_vr = havg[:,18]
+        self.rho_eint = havg[:,19]
+        self.rho_ekin = havg[:,20]
+        self.rho_etot = havg[:,21]
+        self.rho_h = havg[:,22]
+        self.rho_s = havg[:,23]
+        self.rho_eint_vr = havg[:,24]
+        self.rho_ekin_vr = havg[:,25]
+        self.rho_h_vr = havg[:,26]
+        self.rho_s_vr = havg[:,27]
+        self.div_vel = havg[:,28]
+        self.P_div_vel = havg[:,29]
+        self.inv_T = havg[:,30]
+        self.vr = havg[:,31]
+        self.abar_vr = havg[:,32]
+        self.zbar_vr = havg[:,33]
+        self.P_vr = havg[:,34]
+        self.T_vr = havg[:,35]
+        self.rho_vel_dot_grav = havg[:,36] 
+        self.vel_dot_grav = havg[:,37]
+        self.dTdr = havg[:,38]
+        self.Kth = havg[:,39]
+        self.Kth_dTdr = havg[:,40]
+        self.abar_abar = havg[:,41]
+        self.edot_nuc = havg[:,42]
+        self.edot_neu = havg[:,43]
+        off = 43
+        if(self.nreacs>0):
+         self.edot_reacs = np.zeros((self.nreacs,self.nr))
+         for i in range(self.nreacs):
+          self.edot_reacs[i] = havg[:,off+1+i]
+        off = 43+self.nreacs
+        self.edot_nuc_inv_T = havg[:,off+1]
+        self.edot_neu_inv_T = havg[:,off+2]
+        off = 45+self.nreacs
+        if(self.nas>0):
+         self.rho_X = np.zeros((self.nas,self.nr))
+         for i in range(self.nas):
+          self.rho_X[i] = havg[:,off+1+i]
+        off = 45+self.nreacs+self.nas
+        if(self.nas>0):
+         self.rho_X_X = np.zeros((self.nas,self.nr))
+         for i in range(self.nas):
+          self.rho_X_X[i] = havg[:,off+1+i]
+        off = 45+self.nreacs+2*self.nas
+        if(self.nas>0):
+         self.rho_X_vr = np.zeros((self.nas,self.nr))
+         for i in range(self.nas):
+          self.rho_X_vr[i] = havg[:,off+1+i]
+        off = 45+self.nreacs+3*self.nas
+        if(self.nspecies>0 and self.nreacs>0) :
+         self.rho_Xdot = np.zeros((self.nspecies,self.nr))
+         for i in range(self.nspecies):
+          self.rho_Xdot[i] = havg[:,off+1+i]
+        off = 45+self.nreacs+3*self.nas+self.nspecies
+        if(self.nspecies>0 and self.nreacs>0) :
+         self.rho_X_Xdot = np.zeros((self.nspecies,self.nr))
+         for i in range(self.nspecies):
+          self.rho_X_Xdot[i] = havg[:,off+1+i]  
+        off = 45+self.nreacs+3*self.nas+2*self.nspecies
+        self.rho_vr_vr = havg[:,off+1]
+        self.rho_vt1 = havg[:,off+2]
+        self.rho_vt1_vt1 = havg[:,off+3]
+        self.rho_vt2 = havg[:,off+4]
+        self.rho_vt2_vt2 = havg[:,off+5]
+        self.emag = havg[:,off+6]
+        self.br = havg[:,off+7]
+        self.abs_b = havg[:,off+8]
+        self.abs_bh = havg[:,off+9]
+        self.br_br =  havg[:,off+10]
+        self.bt1 =  havg[:,off+11]
+        self.bt2 =  havg[:,off+12]
+        self.bt1_bt1 =  havg[:,off+13]
+        self.bt2_bt2 =  havg[:,off+14]
+        self.rho_vr_vt1 =  havg[:,off+15]
+        self.rho_vr_vt2 =  havg[:,off+16]
+        self.rho_vt1_vt2 =  havg[:,off+17]
+        self.br_bt1 =  havg[:,off+18]
+        self.br_bt2 =  havg[:,off+19]
+        self.bt1_bt2 =  havg[:,off+20]
+        self.fpoy = havg[:,off+21]
+
+        self.grid0 = h5grid(0,path=path_to_grids,data_path=data_path,helm_table=helm_table,pig_table=pig_table,NRHO=NRHO,NT=NT,LOGRHOMIN=LOGRHOMIN,LOGRHOMAX=LOGRHOMAX,LOGTMIN=LOGTMIN,LOGTMAX=LOGTMAX)
+
+    def ap_bp_bar(a_bar,b_bar,a_b_bar):
+      return a_b_bar - a_bar*b_bar
+
+#######################################################################################
 # h5plane class
 #######################################################################################
 

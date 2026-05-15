@@ -3479,7 +3479,7 @@ contains
     abs_b,abs_bh,abs_vel,abs_vh,area,bt1,bt2,div_vel,dTdr,edot_neu, &
     edot_nuc,inv_T,Kth,s,tmp,vel_dot_grav,vt1,vt2,Eid,lswot15,mu,Pid,ywot, &
     sid,T4,Prad,Erad,srad,cos_phi,cos_theta,phi,sin_phi,sin_theta,theta, &
-    rmi,rpl,sin_theta_mi,sin_theta_pl
+    rmi,rpl,sin_theta_mi,sin_theta_pl,om1,om2,om3,oor1,oor2,oor3,ov1,ov2,ov3
 
 #ifndef USE_NUCLEAR_NETWORK
     integer :: nreacs = 0
@@ -3557,10 +3557,25 @@ contains
     rpl = rp0
     sin_theta_mi = rp0
     sin_theta_pl = rp0    
+    om1 = rp0
+    om2 = rp0
+    om3 = rp0
+    oor1 = rp0
+    oor2 = rp0
+    oor3 = rp0
+    ov1 = rp0
+    ov2 = rp0
+    ov3 = rp0
+
+#ifdef COROTATING_FRAME
+    om1 = lgrid%omega_rot(1)
+    om2 = lgrid%omega_rot(2)
+    om3 = lgrid%omega_rot(3)
+#endif
 
     isp = 0
 
-    rprofs_nv = 67+nreacs+nas+nas+nas+nspecies+nspecies
+    rprofs_nv = 74+nreacs+nas+nas+nas+nspecies+nspecies
     rprofs_nr = lgrid%rprofs_nr
 
     rnv_tot = rprofs_nv*rprofs_nr
@@ -3629,6 +3644,10 @@ contains
 
         ekin = rph*(vx1*vx1+vx2*vx2+vx3*vx3)
 
+        x = lgrid%coords(1,i,j,k)
+        y = lgrid%coords(2,i,j,k)
+        z = lgrid%coords(3,i,j,k)
+
 #ifdef EVOLVE_ETOT
         epot = lgrid%phi_cc(i,j,k) 
 #endif
@@ -3647,9 +3666,6 @@ contains
 #endif
 
 #ifdef USE_INTERNAL_BOUNDARIES
-        x = lgrid%coords(1,i,j,k)
-        y = lgrid%coords(2,i,j,k)
-        z = lgrid%coords(3,i,j,k)
         r = lgrid%r(i,j,k)
         theta = acos(z/r)
         phi = atan2(y,x)
@@ -3669,9 +3685,6 @@ contains
         gr = (x*gx1+y*gx2+z*gx3)/r
 #endif
 #elif defined(GEOMETRY_CUBED_SPHERE)
-        x = lgrid%coords(1,i,j,k)
-        y = lgrid%coords(2,i,j,k)
-        z = lgrid%coords(3,i,j,k)
         r = lgrid%r(i,j,k)
         theta = acos(z/r)
         phi = atan2(y,x)
@@ -3815,8 +3828,8 @@ contains
         (rpl*rpl*lgrid%prim(i_vx1,i+1,j,k)-rmi*rmi*lgrid%prim(i_vx1,i-1,j,k)) / &
         (r*r*(rpl-rmi)) 
 
-        sin_theta_pl = rp1/(lgrid%r(i,j+1,k)*lgrid%inv_r_sin_theta(i,j+1,k))
-        sin_theta_mi = rp1/(lgrid%r(i,j-1,k)*lgrid%inv_r_sin_theta(i,j-1,k))
+        sin_theta_pl = lgrid%sin_theta(i,j+1,k)
+        sin_theta_mi = lgrid%sin_theta(i,j-1,k)
 
         tmp = lgrid%inv_r_sin_theta(i,j,k)
 
@@ -3882,6 +3895,49 @@ contains
  
         abs_b = sqrt(rp2*emag)
         abs_bh = sqrt(bt1*bt1+bt2*bt2)
+
+#ifdef COROTATING_FRAME
+
+#if defined(GEOMETRY_CUBED_SPHERE) || defined(USE_INTERNAL_BOUNDARIES)
+
+        tmp = rho*vt2*om3
+        ov1 = -sin_theta*tmp
+        ov2 = -cos_theta*tmp
+        ov3 = (cos_theta*rho*vt1+sin_theta*rho*vr)*om3
+        or3 = r*sin_theta*om3
+        tmp = or3*om3
+        oor1 = -sin_theta*tmp
+        oor2 = -cos_theta*tmp
+
+#elif defined(GEOMETRY_3D_SPHERICAL)
+
+        sin_theta = lgrid%sin_theta(i,j,k)
+        cos_theta = lgrid%cos_theta(i,j,k)
+
+        tmp = rho*vt2*om3
+        ov1 = -sin_theta*tmp
+        ov2 = -cos_theta*tmp
+        ov3 = (cos_theta*rho*vt1+sin_theta*rho*vr)*om3
+        or3 = r*sin_theta*om3
+        tmp = or3*om3
+        oor1 = -sin_theta*tmp
+        oor2 = -cos_theta*tmp
+
+#else
+
+        ov1 = rho*vx3*om2-rho*vx2*om3
+        ov2 = -rho*vx3*om1+rho*vx1*om3
+        ov3 = rho*vx2*om1-rho*vx1*om2
+        or1 = z*om2-y*om3
+        or2 = -z*om1+x*om3
+        or3 = y*om1-x*om2
+        oor1 = or3*om2-or2*om3
+        oor2 = -or3*om1+or1*om3
+        oor3 = or2*om1-or1*om2
+
+#endif
+
+#endif
 
         lbuff(ir) = lbuff(ir) + area
         lbuff(rprofs_nr+ir) = lbuff(rprofs_nr+ir) + gr
@@ -3995,7 +4051,18 @@ contains
         lbuff((off+19)*rprofs_nr+ir) = lbuff((off+19)*rprofs_nr+ir) + br*bt2
         lbuff((off+20)*rprofs_nr+ir) = lbuff((off+20)*rprofs_nr+ir) + bt1*bt2
         lbuff((off+21)*rprofs_nr+ir) = lbuff((off+21)*rprofs_nr+ir) - br*(br*vr+bt1*vt1+bt2*vt2)
-   
+        lbuff((off+22)*rprofs_nr+ir) = lbuff((off+22)*rprofs_nr+ir) + rp2*ov1
+        lbuff((off+23)*rprofs_nr+ir) = lbuff((off+23)*rprofs_nr+ir) + rho*oor1
+        lbuff((off+24)*rprofs_nr+ir) = lbuff((off+24)*rprofs_nr+ir) + rp2*ov2
+        lbuff((off+25)*rprofs_nr+ir) = lbuff((off+25)*rprofs_nr+ir) + rho*oor2
+        lbuff((off+26)*rprofs_nr+ir) = lbuff((off+26)*rprofs_nr+ir) + rp2*ov3
+        lbuff((off+27)*rprofs_nr+ir) = lbuff((off+27)*rprofs_nr+ir) + rho*oor3
+#if defined(GEOMETRY_CUBED_SPHERE) || defined(USE_INTERNAL_BOUNDARIES) || defined(GEOMETRY_3D_SPHERICAL)
+        lbuff((off+28)*rprofs_nr+ir) = lbuff((off+28)*rprofs_nr+ir) + (rho*vr*oor1+rho*vt1*oor2)
+#else
+        lbuff((off+28)*rprofs_nr+ir) = lbuff((off+28)*rprofs_nr+ir) + (rho*vx1*oor1+rho*vx2*oor2+rho*vx3*oor3)
+#endif
+
        endif
 
       end do

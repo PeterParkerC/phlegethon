@@ -727,6 +727,13 @@ class h5rprof:
         self.br_bt2 =  havg[:,off+19]
         self.bt1_bt2 =  havg[:,off+20]
         self.fpoy = havg[:,off+21]
+        self.twoov1 = havg[:,off+22]
+        self.rho_oor1 = havg[:,off+23]
+        self.twoov2 = havg[:,off+24]
+        self.rho_oor2 = havg[:,off+25]
+        self.twoov3 = havg[:,off+26]
+        self.rho_oor3 = havg[:,off+27]
+        self.rho_vel_dot_oor = havg[:,off+28]
 
         self.grid0 = h5grid(0,path=path_to_grids,data_path=data_path,helm_table=helm_table,pig_table=pig_table,NRHO=NRHO,NT=NT,LOGRHOMIN=LOGRHOMIN,LOGRHOMAX=LOGRHOMAX,LOGTMIN=LOGTMIN,LOGTMAX=LOGTMAX)
 

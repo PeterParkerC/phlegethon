@@ -3481,7 +3481,7 @@ contains
     sid,T4,Prad,Erad,srad,cos_phi,cos_theta,phi,sin_phi,sin_theta,theta, &
     rmi,rpl,sin_theta_mi,sin_theta_pl,om1,om2,om3,oor1,oor2,oor3,ov1,ov2,ov3, &
     b_dot_b_dot_nabla_vel,d_vx1_d_x1,d_vx1_d_x2,d_vx1_d_x3,d_vx2_d_x1,d_vx2_d_x2,d_vx2_d_x3, &
-    d_vx3_d_x1,d_vx3_d_x2,d_vx3_d_x3,Jx1,Jx2,Jx3,WL
+    d_vx3_d_x1,d_vx3_d_x2,d_vx3_d_x3,Jx1,Jx2,Jx3,WL,or1,or2,or3
 
 #ifndef USE_NUCLEAR_NETWORK
     integer :: nreacs = 0
@@ -3562,6 +3562,9 @@ contains
     om1 = rp0
     om2 = rp0
     om3 = rp0
+    or1 = rp0
+    or2 = rp0
+    or3 = rp0
     oor1 = rp0
     oor2 = rp0
     oor3 = rp0
@@ -3735,7 +3738,7 @@ contains
         vt1 = vx1
         vt2 = vx3
 #ifdef USE_MHD
-        br = vx2
+        br = bx2
         bt1 = bx1
         bt2 = bx3
 #endif

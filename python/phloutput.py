@@ -629,120 +629,325 @@ class h5rprof:
         self.r = 0.5*(self.rf[1:]+self.rf[:-1])
         self.nr = len(self.r)
         self.area = havg[:,0]
-        self.gr = havg[:,1]
-        self.epot = havg[:,2]
-        self.kappa = havg[:,3]
-        self.edot = havg[:,4]
-        self.rho = havg[:,5]
-        self.P = havg[:,6]
-        self.T = havg[:,7]
-        self.s = havg[:,8]
-        self.abar = havg[:,9]
-        self.ye = havg[:,10]
-        self.zbar = havg[:,11]
-        self.rho_rho = havg[:,12]
-        self.T_T = havg[:,13]
-        self.P_P = havg[:,14]
-        self.s_s = havg[:,15]
-        self.abs_vel = havg[:,16]
-        self.abs_vh = havg[:,17]
-        self.rho_vr = havg[:,18]
-        self.rho_eint = havg[:,19]
-        self.rho_ekin = havg[:,20]
-        self.rho_etot = havg[:,21]
-        self.rho_h = havg[:,22]
-        self.rho_s = havg[:,23]
-        self.rho_eint_vr = havg[:,24]
-        self.rho_ekin_vr = havg[:,25]
-        self.rho_h_vr = havg[:,26]
-        self.rho_s_vr = havg[:,27]
-        self.div_vel = havg[:,28]
-        self.P_div_vel = havg[:,29]
-        self.inv_T = havg[:,30]
-        self.vr = havg[:,31]
-        self.abar_vr = havg[:,32]
-        self.zbar_vr = havg[:,33]
-        self.P_vr = havg[:,34]
-        self.T_vr = havg[:,35]
-        self.rho_vel_dot_grav = havg[:,36] 
-        self.vel_dot_grav = havg[:,37]
-        self.dTdr = havg[:,38]
-        self.Kth = havg[:,39]
-        self.Kth_dTdr = havg[:,40]
-        self.abar_abar = havg[:,41]
-        self.edot_nuc = havg[:,42]
-        self.edot_neu = havg[:,43]
+ 
+        self.dd = {}
+ 
+        self.dd['gr'] = havg[:,1]
+        self.dd['epot'] = havg[:,2]
+        self.dd['kappa'] = havg[:,3]
+        self.dd['edot'] = havg[:,4]
+        self.dd['rho'] = havg[:,5]
+        self.dd['P'] = havg[:,6]
+        self.dd['T'] = havg[:,7]
+        self.dd['s'] = havg[:,8]
+        self.dd['abar'] = havg[:,9]
+        self.dd['ye'] = havg[:,10]
+        self.dd['zbar'] = havg[:,11]
+        self.dd['rho_rho'] = havg[:,12]
+        self.dd['T_T'] = havg[:,13]
+        self.dd['P_P'] = havg[:,14]
+        self.dd['s_s'] = havg[:,15]
+        self.dd['abs_vel'] = havg[:,16]
+        self.dd['abs_vh'] = havg[:,17]
+        self.dd['rho_vr'] = havg[:,18]
+        self.dd['rho_eint'] = havg[:,19]
+        self.dd['rho_ekin'] = havg[:,20]
+        self.dd['rho_etot'] = havg[:,21]
+        self.dd['rho_h'] = havg[:,22]
+        self.dd['rho_s'] = havg[:,23]
+        self.dd['rho_eint_vr'] = havg[:,24]
+        self.dd['rho_ekin_vr'] = havg[:,25]
+        self.dd['rho_h_vr'] = havg[:,26]
+        self.dd['rho_s_vr'] = havg[:,27]
+        self.dd['div_vel'] = havg[:,28]
+        self.dd['P_div_vel'] = havg[:,29]
+        self.dd['inv_T'] = havg[:,30]
+        self.dd['vr'] = havg[:,31]
+        self.dd['abar_vr'] = havg[:,32]
+        self.dd['zbar_vr'] = havg[:,33]
+        self.dd['P_vr'] = havg[:,34]
+        self.dd['T_vr'] = havg[:,35]
+        self.dd['rho_vel_dot_grav'] = havg[:,36] 
+        self.dd['vel_dot_grav'] = havg[:,37]
+        self.dd['dTdr'] = havg[:,38]
+        self.dd['Kth'] = havg[:,39]
+        self.dd['Kth_dTdr'] = havg[:,40]
+        self.dd['abar_abar'] = havg[:,41]
+        self.dd['edot_nuc'] = havg[:,42]
+        self.dd['edot_neu'] = havg[:,43]
         off = 43
         if(self.nreacs>0):
-         self.edot_reacs = np.zeros((self.nreacs,self.nr))
+         self.dd['edot_reacs'] = np.zeros((self.nreacs,self.nr))
          for i in range(self.nreacs):
-          self.edot_reacs[i] = havg[:,off+1+i]
+          self.dd['edot_reacs'][i] = havg[:,off+1+i]
         off = 43+self.nreacs
-        self.edot_nuc_inv_T = havg[:,off+1]
-        self.edot_neu_inv_T = havg[:,off+2]
+        self.dd['edot_nuc_inv_T'] = havg[:,off+1]
+        self.dd['edot_neu_inv_T'] = havg[:,off+2]
         off = 45+self.nreacs
         if(self.nas>0):
-         self.rho_X = np.zeros((self.nas,self.nr))
+         self.dd['rho_X'] = np.zeros((self.nas,self.nr))
          for i in range(self.nas):
-          self.rho_X[i] = havg[:,off+1+i]
+          self.dd['rho_X'][i] = havg[:,off+1+i]
         off = 45+self.nreacs+self.nas
         if(self.nas>0):
-         self.rho_X_X = np.zeros((self.nas,self.nr))
+         self.dd['rho_X_X'] = np.zeros((self.nas,self.nr))
          for i in range(self.nas):
-          self.rho_X_X[i] = havg[:,off+1+i]
+          self.dd['rho_X_X'][i] = havg[:,off+1+i]
         off = 45+self.nreacs+2*self.nas
         if(self.nas>0):
-         self.rho_X_vr = np.zeros((self.nas,self.nr))
+         self.dd['rho_X_vr'] = np.zeros((self.nas,self.nr))
          for i in range(self.nas):
-          self.rho_X_vr[i] = havg[:,off+1+i]
+          self.dd['rho_X_vr'][i] = havg[:,off+1+i]
         off = 45+self.nreacs+3*self.nas
         if(self.nspecies>0 and self.nreacs>0) :
-         self.rho_Xdot = np.zeros((self.nspecies,self.nr))
+         self.dd['rho_Xdot'] = np.zeros((self.nspecies,self.nr))
          for i in range(self.nspecies):
-          self.rho_Xdot[i] = havg[:,off+1+i]
+          self.dd['rho_Xdot'][i] = havg[:,off+1+i]
         off = 45+self.nreacs+3*self.nas+self.nspecies
         if(self.nspecies>0 and self.nreacs>0) :
-         self.rho_X_Xdot = np.zeros((self.nspecies,self.nr))
+         self.dd['rho_X_Xdot'] = np.zeros((self.nspecies,self.nr))
          for i in range(self.nspecies):
-          self.rho_X_Xdot[i] = havg[:,off+1+i]  
+          self.dd['rho_X_Xdot'][i] = havg[:,off+1+i]  
         off = 45+self.nreacs+3*self.nas+2*self.nspecies
-        self.rho_vr_vr = havg[:,off+1]
-        self.rho_vt1 = havg[:,off+2]
-        self.rho_vt1_vt1 = havg[:,off+3]
-        self.rho_vt2 = havg[:,off+4]
-        self.rho_vt2_vt2 = havg[:,off+5]
-        self.emag = havg[:,off+6]
-        self.br = havg[:,off+7]
-        self.abs_b = havg[:,off+8]
-        self.abs_bh = havg[:,off+9]
-        self.br_br =  havg[:,off+10]
-        self.bt1 =  havg[:,off+11]
-        self.bt2 =  havg[:,off+12]
-        self.bt1_bt1 =  havg[:,off+13]
-        self.bt2_bt2 =  havg[:,off+14]
-        self.rho_vr_vt1 =  havg[:,off+15]
-        self.rho_vr_vt2 =  havg[:,off+16]
-        self.rho_vt1_vt2 =  havg[:,off+17]
-        self.br_bt1 =  havg[:,off+18]
-        self.br_bt2 =  havg[:,off+19]
-        self.bt1_bt2 =  havg[:,off+20]
-        self.fpoy = havg[:,off+21]
-        self.twoov1 = havg[:,off+22]
-        self.rho_oor1 = havg[:,off+23]
-        self.twoov2 = havg[:,off+24]
-        self.rho_oor2 = havg[:,off+25]
-        self.twoov3 = havg[:,off+26]
-        self.rho_oor3 = havg[:,off+27]
-        self.rho_vel_dot_oor = havg[:,off+28]
-        self.emag_vr = havg[:,off+29]
-        self.emag_div_vel = havg[:,off+30]
-        self.b_dot_b_dot_nabla_vel = havg[:,off+31]
-        self.WL = havg[:,off+32]
+        self.dd['rho_vr_vr'] = havg[:,off+1]
+        self.dd['rho_vt1'] = havg[:,off+2]
+        self.dd['rho_vt1_vt1'] = havg[:,off+3]
+        self.dd['rho_vt2'] = havg[:,off+4]
+        self.dd['rho_vt2_vt2'] = havg[:,off+5]
+        self.dd['emag'] = havg[:,off+6]
+        self.dd['br'] = havg[:,off+7]
+        self.dd['abs_b'] = havg[:,off+8]
+        self.dd['abs_bh'] = havg[:,off+9]
+        self.dd['br_br'] =  havg[:,off+10]
+        self.dd['bt1'] =  havg[:,off+11]
+        self.dd['bt2'] =  havg[:,off+12]
+        self.dd['bt1_bt1'] = havg[:,off+13]
+        self.dd['bt2_bt2'] = havg[:,off+14]
+        self.dd['rho_vr_vt1'] = havg[:,off+15]
+        self.dd['rho_vr_vt2'] = havg[:,off+16]
+        self.dd['rho_vt1_vt2'] = havg[:,off+17]
+        self.dd['br_bt1'] = havg[:,off+18]
+        self.dd['br_bt2'] = havg[:,off+19]
+        self.dd['bt1_bt2'] = havg[:,off+20]
+        self.dd['fpoy'] = havg[:,off+21]
+        self.dd['twoov1'] = havg[:,off+22]
+        self.dd['rho_oor1'] = havg[:,off+23]
+        self.dd['twoov2'] = havg[:,off+24]
+        self.dd['rho_oor2'] = havg[:,off+25]
+        self.dd['twoov3'] = havg[:,off+26]
+        self.dd['rho_oor3'] = havg[:,off+27]
+        self.dd['rho_vel_dot_oor'] = havg[:,off+28]
+        self.dd['emag_vr'] = havg[:,off+29]
+        self.dd['emag_div_vel'] = havg[:,off+30]
+        self.dd['b_dot_b_dot_nabla_vel'] = havg[:,off+31]
+        self.dd['WL'] = havg[:,off+32]
         
         self.grid0 = h5grid(0,path=path_to_grids,data_path=data_path,helm_table=helm_table,pig_table=pig_table,NRHO=NRHO,NT=NT,LOGRHOMIN=LOGRHOMIN,LOGRHOMAX=LOGRHOMAX,LOGTMIN=LOGTMIN,LOGTMAX=LOGTMAX)
 
-    def ap_bp_bar(self,a_bar,b_bar,a_b_bar):
-      return a_b_bar - a_bar*b_bar
+def ra_iles(i1,i2,delta=1,path='./rprofs',filename=None):
+    
+  r1 = h5rprof(i1,path=path)
+  r2 = h5rprof(i2,path=path)
+  dd = {}
+  dd['t1'] = r1.time
+  dd['t2'] = r2.time
+
+  for key in r1.dd.keys():
+   dd[key] = 0.0
+
+  cnt = 0
+  for i in range(i1,i2+1,delta):
+    
+    rpr = h5rprof(i,path=path)
+ 
+    for key in r1.dd.keys():
+     dd[key] += rpr.dd[key]
+
+    cnt += 1
+  
+  for key in r1.dd.keys():
+   dd[key] /= cnt
+
+  dd['r'] = rpr.r
+  dd['area'] = rpr.area
+
+  nas = r2.nas
+  nr = r2.nr
+  geometry = r2.grid0.geometry 
+  use_internal_boundaries = r2.grid0.use_internal_boundaries
+
+  #-------------------------------------------#
+  #time derivatives 
+
+  eint_tildep = r2.dd['rho_eint']/dd['rho']
+  ekin_tildep = r2.dd['rho_ekin']/dd['rho']
+  etot_tildep = r2.dd['rho_etot']/dd['rho']
+  s_tildep = r2.dd['rho_s']/dd['rho']
+  emagp = r2.dd['emag']
+
+  try:
+   X_tildep = np.zeros((nas,nr))
+   for i in range(nas):
+    X_tildep[i] = r2.dd['rho_X'][i]/dd['rho']
+  except:
+    dummy = 1
+
+  eint_tildem = r1.dd['rho_eint']/dd['rho']
+  ekin_tildem = r1.dd['rho_ekin']/dd['rho']
+  etot_tildem = r1.dd['rho_etot']/dd['rho']
+  s_tildem = r1.dd['rho_s']/dd['rho']
+  emagm = r1.dd['emag']
+
+  try:
+   X_tildem = np.zeros((nas,nr))
+   for i in range(nas):
+    X_tildem[i] = r1.dd['rho_X'][i]/dd['rho']
+  except:
+    dummy = 1
+
+  dd['d_eint_tilde_dt'] = (eint_tildep-eint_tildem)/(dd['t2']-dd['t1'])
+  dd['d_ekin_tilde_dt'] = (ekin_tildep-ekin_tildem)/(dd['t2']-dd['t1'])
+  dd['d_etot_tilde_dt'] = (etot_tildep-etot_tildem)/(dd['t2']-dd['t1'])
+  dd['d_s_tilde_dt'] = (s_tildep-s_tildem)/(dd['t2']-dd['t1'])
+  dd['d_emag_dt'] = (emagp-emagm)/(dd['t2']-dd['t1'])
+
+  try:
+   dd['d_X_tilde_dt'] = np.zeros((nas,nr))
+   for i in range(nas):
+    dd['d_X_tilde_dt'][i] = (X_tildep[i]-X_tildem[i])/(dd['t2']-dd['t1'])
+  except:
+   dd['d_X_tilde_dt'] = 0.0
+ 
+  #-------------------------------------------#
+
+  dd['vr_tilde'] = dd['rho_vr']/dd['rho']
+  dd['eint_tilde'] = dd['rho_eint']/dd['rho']
+  dd['ekin_tilde'] = dd['rho_ekin']/dd['rho']
+  dd['etot_tilde'] = dd['rho_etot']/dd['rho']
+  dd['s_tilde'] = dd['rho_s']/dd['rho']
+  dd['h_tilde'] = dd['rho_h']/dd['rho']
+ 
+  try:
+   dd['X_tilde'] = np.zeros((nas,nr))
+   for i in range(nas):
+    dd['X_tilde'][i] = dd['rho_X'][i]/dd['rho']
+  except:
+   dd['X_tilde'] = 0.0
+
+  dd['eint_vr_tilde'] = dd['rho_eint_vr']/dd['rho']
+  dd['ekin_vr_tilde'] = dd['rho_ekin_vr']/dd['rho']
+  dd['h_vr_tilde'] = dd['rho_h_vr']/dd['rho']
+  dd['s_vr_tilde'] = dd['rho_s_vr']/dd['rho']
+
+  #-------------------------------------------#
+  #continuity equation
+
+  dd['vr_tilde_d_rho_bar_dr'] = dd['vr_tilde']*np.gradient(dd['rho'],dd['r'])
+  dd['rho_bar_gradr_vr_tilde'] = dd['rho']*gradr(dd['r'],dd['vr_tilde'],geometry,use_internal_boundaries)
+
+  #-------------------------------------------#
+  #internal energy equation
+
+  dd['vr_tilde_d_eint_tilde_dr'] = dd['vr_tilde']*np.gradient(dd['eint_tilde'],dd['r'])
+  dd['eintpp_vrpp_tilde'] = dd['eint_vr_tilde']-dd['eint_tilde']*dd['vr_tilde']
+  dd['gradr_rho_bar_eintpp_vrpp_tilde'] = gradr(dd['r'],dd['rho']*dd['eintpp_vrpp_tilde'],geometry,use_internal_boundaries)
+  dd['gradr_vr_bar'] = gradr(dd['r'],dd['vr'],geometry,use_internal_boundaries)
+  dd['P_bar_gradr_vr_bar'] = dd['P']*dd['gradr_vr_bar']
+  dd['Pp_div_velp_bar'] = dd['P_div_vel']-dd['P']*dd['div_vel']
+  try:
+   dd['gradr_Kth_dTdr_bar'] = gradr(dd['r'],dd['Kth_dTdr'],geometry,use_internal_boundaries)
+   dd['Kthp_dTdrp_bar'] = dd['Kth_dTdr']-dd['Kth']*dd['dTdr']
+   dd['gradr_Kthp_dTdrp_bar'] = gradr(dd['r'],dd['Kth_dTdr'],geometry,use_internal_boundaries)
+  except:
+   dd['gradr_Kth_dTdr_bar'] = 0.0
+   dd['Kthp_dTdrp_bar'] = 0.0
+   dd['gradr_Kthp_dTdrp_bar'] = 0.0
+
+  #-------------------------------------------#
+  #kinetic energy equation
+
+  dd['vr_tilde_d_ekin_tilde_dr'] = dd['vr_tilde']*np.gradient(dd['ekin_tilde'],dd['r'])
+  dd['ekinpp_vrpp_tilde'] = dd['ekin_vr_tilde']-dd['ekin_tilde']*dd['vr_tilde']
+  dd['gradr_rho_bar_ekinpp_vrpp_tilde'] = gradr(dd['r'],dd['rho']*dd['ekinpp_vrpp_tilde'],geometry,use_internal_boundaries)
+  dd['Pp_vrp_bar'] = dd['P_vr']-dd['P']*dd['vr']
+  dd['gradr_Pp_vrp_bar'] = gradr(dd['r'],dd['Pp_vrp_bar'],geometry,use_internal_boundaries)
+  dd['rhop_g_velp_bar'] = dd['rho_vel_dot_grav']-dd['rho']*dd['vel_dot_grav']
+
+  #-------------------------------------------#
+  #total energy equation
+
+  dd['vr_tilde_d_etot_tilde_dr'] = dd['vr_tilde']*np.gradient(dd['etot_tilde'],dd['r'])
+  dd['hpp_vrpp_tilde'] = dd['h_vr_tilde']-dd['h_tilde']*dd['vr_tilde']
+  dd['gradr_rho_bar_hpp_vrpp_tilde'] = gradr(dd['r'],dd['rho']*dd['hpp_vrpp_tilde'],geometry,use_internal_boundaries)
+  dd['P_bar_vr_tilde'] = dd['P']*dd['vr_tilde']
+  dd['gradr_P_bar_vr_tilde'] = gradr(dd['r'],dd['P_bar_vr_tilde'],geometry,use_internal_boundaries)
+  dd['gradr_fpoy_bar'] = gradr(dd['r'],dd['fpoy'],geometry,use_internal_boundaries)
+
+  #-------------------------------------------#
+  #entropy equation
+
+  dd['vr_tilde_d_s_tilde_dr'] = dd['vr_tilde']*np.gradient(dd['s_tilde'],dd['r'])
+  dd['spp_vrpp_tilde'] = dd['s_vr_tilde']-dd['s_tilde']*dd['vr_tilde']
+  dd['gradr_rho_bar_spp_vrpp_tilde'] = gradr(dd['r'],dd['rho']*dd['spp_vrpp_tilde'],geometry,use_internal_boundaries)
+  dd['edot_iT_bar'] = dd['edot']*dd['inv_T']
+
+  #-------------------------------------------#
+  #species fluxes and variance
+
+  try:
+   dd['vr_tilde_d_X_tilde_dr'] = np.zeros((nas,nr))
+   dd['Xpp_vrpp_tilde'] = np.zeros((nas,nr))
+   dd['rho_bar_Xpp_vrpp_tilde'] = np.zeros((nas,nr))
+   dd['Xpp_Xpp_tilde'] = np.zeros((nas,nr))
+   for i in range(nas):
+    dd['vr_tilde_d_X_tilde_dr'][i] = dd['vr_tilde']*np.gradient(dd['X_tilde'][i],dd['r'])
+    dd['Xpp_vrpp_tilde'][i] = dd['rho_X'][i]/dd['rho']-dd['X_tilde'][i]*dd['vr_tilde'][i]
+    dd['rho_bar_Xpp_vrpp_tilde'][i] = dd['rho']*dd['Xpp_vrpp_tilde'][i]
+    dd['Xpp_Xpp_tilde'][i] = dd['rho_X_X'][i]/dd['rho']-dd['X_tilde'][i]**2
+  except:
+   dd['vr_tilde_d_X_tilde_dr'] = 0.0
+   dd['Xpp_vrpp_tilde'] = 0.0
+   dd['rho_bar_Xpp_vrpp_tilde'] = 0.0
+   dd['Xpp_Xpp_tilde'] = 0.0
+
+  #-------------------------------------------#
+  #magnetic energy equation
+
+  dd['gradr_emag_vr_bar'] = gradr(dd['r'],dd['emag_vr'],geometry,use_internal_boundaries)
+  
+  #-------------------------------------------#
+
+  dd['vrpp_vrpp_tilde'] = dd['rho_vr_vr']/dd['rho']-dd['vr_tilde']**2
+  dd['vt1pp_vt1pp_tilde'] = dd['rho_vt1_vt1']/dd['rho']-dd['rho_vt1']**2/dd['rho']**2
+  dd['vt2pp_vt2pp_tilde'] = dd['rho_vt2_vt2']/dd['rho']-dd['rho_vt2']**2/dd['rho']**2
+
+  dd['rhop_vrp'] = dd['rho_vr']-dd['rho']*dd['vr']
+  dd['Tp_vrp'] = dd['T_vr']-dd['T']*dd['vr']
+  dd['abarp_vrp'] = dd['abar_vr']-dd['abar']*dd['vr']
+  dd['zbarp_vrp'] = dd['zbar_vr']-dd['zbar']*dd['vr']
+
+  dd['rhop_rms'] = np.sqrt(dd['rho_rho']-dd['rho']**2)
+  dd['Pp_rms']   = np.sqrt(dd['P_P']-dd['P']**2)
+  dd['Tp_rms']   = np.sqrt(dd['T_T']-dd['T']**2)
+  dd['sp_rms']   = np.sqrt(dd['s_s']-dd['s']**2)
+
+  #-------------------------------------------#
+
+  if(filename!=None):
+   np.savez(filename,dd=dd)
+
+  return dd
+
+def gradr(r,q,geometry,use_internal_boundaries):
+
+   if(geometry=='3d-spherical'):
+     gradr_q = np.gradient(r*r*q,r)/(r*r)
+   elif(geometry=='cartesian' and use_internal_boundaries=='true'):
+     gradr_q = np.gradient(r*r*q,r)/(r*r)
+   else:
+     gradr_q = np.gradient(q,r)
+
+   return gradr_q
 
 #######################################################################################
 # h5plane class

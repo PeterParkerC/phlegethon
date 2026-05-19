@@ -385,29 +385,58 @@ rp = h5rprof(
 )
 ```
 
+`h5rprof` loads one profile snapshot and stores all profile arrays in the dictionary `rp.dd`.
+
 ### Metadata and profile geometry
 
 - Attributes (no function call): `time`, `dt`, `step`, `nas`, `nspecies`, `nreacs`, `rf`, `r`, `nr`.
 - `rf` stores radial cell faces; `r` is the cell-centered radius (`0.5*(rf[1:]+rf[:-1])`).
 - `path_to_grids` should point to a directory containing `grid_n00000.h5` metadata/EOS context.
+- Optional argument `eval_eos=True` computes additional EOS derivatives/thermodynamics and appends them to `rp.dd`.
 
 ### Exposed profile fields
 
-The class maps the `havg` dataset columns to named attributes, including:
+The class maps the `havg` dataset columns to named entries in `rp.dd`, including:
 
 - Mean/background fields: `area`, `gr`, `epot`, `kappa`, `edot`, `rho`, `P`, `T`, `s`, `abar`, `ye`, `zbar`.
 - Second moments and correlations: `rho_rho`, `T_T`, `P_P`, `s_s`, `rho_vr`, `rho_eint`, `rho_ekin`, `rho_etot`, `rho_h`, `rho_s`.
 - Transport/source terms: `rho_eint_vr`, `rho_ekin_vr`, `rho_h_vr`, `rho_s_vr`, `div_vel`, `P_div_vel`, `inv_T`, `vr`, `abar_vr`, `zbar_vr`, `P_vr`, `T_vr`, `rho_vel_dot_grav`, `vel_dot_grav`, `dTdr`, `Kth`, `Kth_dTdr`, `edot_nuc`, `edot_neu`, `edot_nuc_inv_T`, `edot_neu_inv_T`.
 - Optional arrays (depending on network configuration): `edot_reacs`, `rho_X`, `rho_X_X`, `rho_X_vr`, `rho_Xdot`, `rho_X_Xdot`.
 - Reynolds/MHD stresses and couplings: `rho_vr_vr`, `rho_vt1`, `rho_vt1_vt1`, `rho_vt2`, `rho_vt2_vt2`, `emag`, `br`, `abs_b`, `abs_bh`, `br_br`, `bt1`, `bt2`, `bt1_bt1`, `bt2_bt2`, `rho_vr_vt1`, `rho_vr_vt2`, `rho_vt1_vt2`, `br_bt1`, `br_bt2`, `bt1_bt2`, `fpoy`.
-- Corotating acceleration terms: `twoov1`, `rho_oor1`, `twoov2`, `rho_oor2`, `twoov3`, `rho_oor3`, `rho_vel_dot_oor`.
+- Corotating acceleration terms: `two_rho_ov1`, `rho_oor1`, `two_rho_ov2`, `rho_oor2`, `two_rho_ov3`, `rho_oor3`, `rho_vel_dot_oor`.
 - Induction terms and Lorentz work: `emag_vr`, `emag_div_vel`, `b_dot_b_dot_nabla_vel`, `WL`. 
 
-### Utility method
+Typical access:
 
-- `ap_bp_bar(a_bar, b_bar, a_b_bar)`: returns the fluctuation covariance-like term `a_b_bar - a_bar*b_bar`.
+```python
+rp = h5rprof(0, path="./rprofs", path_to_grids="./grids")
+rho_bar = rp.dd["rho"]
+conv_flux = rp.dd["rho_eint_vr"] - rp.dd["rho_eint"] * rp.dd["rho_vr"] / rp.dd["rho"]
+```
 
-### 6. `Probe`: point-probe time series and spectra
+### 6. `ra_iles`: time-averaged Reynolds-ILES diagnostics
+
+`ra_iles(i1, i2, delta=1, ...)` loads `h5rprof` snapshots from index `i1` to `i2` (inclusive), computes a time average for each base profile in `dd`, and then adds derived terms used in Reynolds-averaged ILES analyses.
+
+Minimal usage:
+
+```python
+from phloutput import ra_iles
+
+dd = ra_iles(0, 50, delta=1, path="./rprofs", path_to_grids="./grids")
+```
+
+Useful returned entries:
+
+- Time window: `dd["t1"]`, `dd["t2"]`
+- Radius/geometry helpers: `dd["r"]`, `dd["area"]`
+- Mean/tilde fields: `dd["rho"]`, `dd["vr_tilde"]`, `dd["eint_tilde"]`, `dd["etot_tilde"]`, `dd["s_tilde"]`
+- Temporal terms: `dd["d_eint_tilde_dt"]`, `dd["d_ekin_tilde_dt"]`, `dd["d_etot_tilde_dt"]`, `dd["d_s_tilde_dt"]`
+- Flux/correlation terms (examples): `dd["gradr_rho_bar_eintpp_vrpp_tilde"]`, `dd["Pp_div_velp_bar"]`, `dd["gradr_Pp_vrp_bar"]`, `dd["gradr_fpoy_bar"]`
+
+If `filename` is provided, `ra_iles` also writes `np.savez(filename, dd=dd)`.
+
+### 7. `Probe`: point-probe time series and spectra
 
 A point probe is at one fixed grid location that records selected simulation variables as the run evolves. `Probe` reads all `pp<id>_<chunk>.dat` files for one probe ID and stitches the chunked records into one continuous time series.
 
@@ -468,4 +497,3 @@ probe.power_spectrum(
 # Results:
 # probe.t, probe.signal, probe.freq, probe.pow
 ```
-

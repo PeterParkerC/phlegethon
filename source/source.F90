@@ -32,7 +32,7 @@ module source
 #ifdef sdims_make
   sdims_make
 #else
-  1
+  2
 #endif
 
   integer, parameter :: nx1 = &
@@ -96,7 +96,7 @@ module source
 #ifdef nspecies_make
   nspecies_make
 #else
-  1
+  0
 #endif
 #endif
 
@@ -105,7 +105,7 @@ module source
 #ifdef nreacs_make
   nreacs_make
 #else
-  1
+  0
 #endif
 #endif
 
@@ -405,6 +405,15 @@ module source
   1
 #endif
 
+#ifdef SAVE_RPROFS
+ real(kind=rp), parameter :: rprofs_dt_dump = &
+#ifdef rprofs_dt_dump_make
+  rprofs_dt_dump_make
+#else
+  1.0_rp
+#endif
+#endif
+
 #ifdef SAVE_PLANES
  integer, parameter :: nplanes_x1 = &
 #ifdef nplanes_x1_make
@@ -615,7 +624,9 @@ module source
  CONST_AV = 6.02214076e23_rp, &
  CONST_QE = 4.8032042712e-10_rp, &
  CONST_KB = 1.380650424e-16_rp, & 
- CONST_NAV_MEV_TO_ERG = 9.648533007578216e+17_rp
+ CONST_NAV_MEV_TO_ERG = 9.648533007578216e+17_rp, &
+ CONST_H = 6.62606896e-27_rp, &
+ CONST_MU = 1.660538782e-24_rp
 
 #ifdef USE_COULOMB_CORRECTIONS
  real(kind=rp), parameter :: &
@@ -1074,6 +1085,14 @@ module source
     integer, dimension(1:nprobes,1:3) :: pp_index
     logical, dimension(1:nprobes) :: pp_inside_domain
     real(kind=rp), dimension(1:nprobes,10000,i_rho:i_p+n_probe_vars) :: pp_state
+#endif
+
+#ifdef SAVE_RPROFS
+    integer :: rprofs_dstep_dump, rprofs_inextoutput
+    integer :: rprofs_nr
+    integer, allocatable, dimension(:,:,:) :: rprofs_ir
+    integer, allocatable, dimension(:) :: rprofs_counts
+    real(kind=rp), allocatable, dimension(:) :: rprofs_r
 #endif
 
 #ifdef SAVE_PLANES
@@ -1729,6 +1748,25 @@ contains
 
 #endif
 
+#ifdef SAVE_RPROFS
+    lgrid%rprofs_dstep_dump = 0
+    lgrid%rprofs_inextoutput = 0
+#ifdef USE_INTERNAL_BOUNDARIES
+    lgrid%rprofs_nr = int(nx1/2)
+#else
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+    lgrid%rprofs_nr = nx1
+#elif defined(GEOMETRY_CUBED_SPHERE)
+    lgrid%rprofs_nr = int(nx1/2)
+#else
+    lgrid%rprofs_nr = nx2
+#endif
+#endif
+    allocate(lgrid%rprofs_ir(lx1:ux1,lx2:ux2,lx3:ux3))
+    allocate(lgrid%rprofs_counts(1:lgrid%rprofs_nr))
+    allocate(lgrid%rprofs_r(1:lgrid%rprofs_nr+1))
+#endif
+
     call create_geometry(lgrid,mgrid)
 
     lgrid%time = rp0
@@ -2170,6 +2208,12 @@ contains
 #endif
 #endif
 
+#ifdef SAVE_RPROFS
+    deallocate(lgrid%rprofs_ir)
+    deallocate(lgrid%rprofs_counts)
+    deallocate(lgrid%rprofs_r)
+#endif
+
  end subroutine finalize_simulation
 
  !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
@@ -2518,6 +2562,11 @@ contains
     call hdf5_annotate_rp(h5,id,"tnextoutput",lgrid%tnextoutput)
 #endif
 
+#ifdef SAVE_RPROFS
+    call hdf5_annotate_ip(h5,id,"rprofs_inextoutput",lgrid%rprofs_inextoutput)
+    call hdf5_annotate_ip(h5,id,"rprofs_dstep_dump",lgrid%rprofs_dstep_dump)
+#endif
+
 #ifdef SAVE_PLANES
     call hdf5_annotate_ip(h5,id,"planes_inextoutput",lgrid%planes_inextoutput)
     call hdf5_annotate_ip(h5,id,"planes_dstep_dump",lgrid%planes_dstep_dump)
@@ -2824,6 +2873,11 @@ contains
 
 #ifdef OUTPUT_DT
     call read_rp(h5,group_id,"tnextoutput",lgrid%tnextoutput)
+#endif
+
+#ifdef SAVE_RPROFS
+    call read_ip(h5,group_id,"rprofs_dstep_dump",lgrid%rprofs_dstep_dump)
+    call read_ip(h5,group_id,"rprofs_inextoutput",lgrid%rprofs_inextoutput)
 #endif
 
 #ifdef SAVE_PLANES
@@ -3403,6 +3457,813 @@ contains
     if(mgrid%rankl==master_rank) call h5fclose_f(h5%file_id,error)
 
  end subroutine write_spherical_projections
+
+#endif
+
+#ifdef SAVE_RPROFS
+ 
+ subroutine write_rprofs(mgrid,lgrid)
+    type(mpigrid), intent(in) :: mgrid
+    type(locgrid), intent(inout) :: lgrid
+
+    type(h5_file) :: h5
+    integer(HID_T) :: group_id,plist_id,dset_id
+    integer(kind=HSIZE_T), dimension(2) :: gnc
+
+    integer :: error,isp,off
+    integer :: i,j,k,ir,rnv_tot,ierr,rprofs_nv,rprofs_nr
+    real(kind=rp), allocatable :: lbuff(:), gbuff(:), vars(:,:) 
+    real(kind=rp) :: fac
+    real(kind=rp) :: rho,T,P,eint,h,vx1,vx2,vx3,ekin,epot,gx1,gx2,gx3, &
+    bx1,bx2,bx3,emag,x,y,z,r,vr,br,gr,kappa,edot,abar,zbar,ye,inv_abar,etot, &
+    abs_b,abs_bh,abs_vel,abs_vh,area,bt1,bt2,div_vel,dTdr,edot_neu, &
+    edot_nuc,inv_T,Kth,s,tmp,vel_dot_grav,vt1,vt2,Eid,lswot15,mu,Pid,ywot, &
+    sid,T4,Prad,Erad,srad,cos_phi,cos_theta,phi,sin_phi,sin_theta,theta, &
+    rmi,rpl,sin_theta_mi,sin_theta_pl,om1,om2,om3,oor1,oor2,oor3,ov1,ov2,ov3, &
+    b_dot_b_dot_nabla_vel,d_vx1_d_x1,d_vx1_d_x2,d_vx1_d_x3,d_vx2_d_x1,d_vx2_d_x2,d_vx2_d_x3, &
+    d_vx3_d_x1,d_vx3_d_x2,d_vx3_d_x3,Jx1,Jx2,Jx3,WL,or1,or2,or3
+
+#ifndef USE_NUCLEAR_NETWORK
+    integer :: nreacs = 0
+#endif
+#ifndef ADVECT_SPECIES
+    integer :: nspecies = 0
+#endif
+
+    rho = rp0
+    T = rp0
+    P = rp0
+    eint = rp0
+    h = rp0
+    vx1 = rp0
+    vx2 = rp0
+    vx3 = rp0
+    ekin = rp0
+    epot = rp0
+    gx1 = rp0
+    gx2 = rp0
+    gx3 = rp0
+    bx1 = rp0
+    bx2 = rp0
+    bx3 = rp0
+    emag = rp0
+    x = rp0
+    y = rp0 
+    z = rp0
+    r = rp0
+    vr = rp0
+    br = rp0
+    gr = rp0
+    kappa = rp0
+    edot = rp0
+    abar = rp0
+    zbar = rp0
+    ye = rp0
+    inv_abar = rp0
+    etot = rp0   
+    abs_b = rp0
+    abs_bh = rp0
+    abs_vel = rp0
+    abs_vh = rp0
+    area = rp0
+    bt1 = rp0
+    bt2 = rp0
+    div_vel = rp0
+    dTdr = rp0
+    edot_neu = rp0
+    edot_nuc = rp0
+    inv_T = rp0
+    Kth = rp0
+    s = rp0
+    tmp = rp0
+    vel_dot_grav = rp0
+    vt1 = rp0
+    vt2 = rp0
+    Eid = rp0
+    lswot15 = rp0
+    mu = rp0
+    Pid = rp0
+    ywot = rp0
+    sid = rp0
+    T4 = rp0
+    Prad = rp0
+    Erad = rp0
+    srad = rp0
+    cos_phi = rp0
+    cos_theta = rp0
+    phi = rp0
+    sin_phi = rp0
+    sin_theta = rp0
+    theta = rp0
+    rmi = rp0
+    rpl = rp0
+    sin_theta_mi = rp0
+    sin_theta_pl = rp0    
+    om1 = rp0
+    om2 = rp0
+    om3 = rp0
+    or1 = rp0
+    or2 = rp0
+    or3 = rp0
+    oor1 = rp0
+    oor2 = rp0
+    oor3 = rp0
+    ov1 = rp0
+    ov2 = rp0
+    ov3 = rp0
+    b_dot_b_dot_nabla_vel = rp0
+    d_vx1_d_x1 = rp0
+    d_vx1_d_x2 = rp0
+    d_vx1_d_x3 = rp0
+    d_vx2_d_x1 = rp0
+    d_vx2_d_x2 = rp0 
+    d_vx2_d_x3 = rp0
+    d_vx3_d_x1 = rp0
+    d_vx3_d_x2 = rp0
+    d_vx3_d_x3 = rp0
+    Jx1 = rp0
+    Jx2 = rp0
+    Jx3 = rp0
+    WL = rp0
+
+#ifdef COROTATING_FRAME
+    om1 = lgrid%omega_rot(1)
+    om2 = lgrid%omega_rot(2)
+    om3 = lgrid%omega_rot(3)
+#endif
+
+    isp = 0
+
+    rprofs_nv = 78+nreacs+nas+nas+nas+nspecies+nspecies
+    rprofs_nr = lgrid%rprofs_nr
+
+    rnv_tot = rprofs_nv*rprofs_nr
+
+    if(mgrid%rankl==master_rank) then
+
+#ifdef USE_SINGLE_PRECISION 
+#ifdef LITTLE_ENDIAN
+     h5%pref_dtypef = H5T_IEEE_F32LE
+#endif
+#ifdef BIG_ENDIAN
+     h5%pref_dtypef = H5T_IEEE_F32BE
+#endif
+#endif
+
+#ifdef USE_DOUBLE_PRECISION
+#ifdef LITTLE_ENDIAN
+     h5%pref_dtypef = H5T_IEEE_F64LE
+#endif
+#ifdef BIG_ENDIAN
+     h5%pref_dtypef = H5T_IEEE_F64BE
+#endif
+#endif
+
+#ifdef LITTLE_ENDIAN
+     h5%pref_dtypei = H5T_STD_I32LE
+#endif
+#ifdef BIG_ENDIAN
+     h5%pref_dtypei = H5T_STD_I32BE
+#endif
+
+     write(h5%filename, "('./rprofs/rprofs_n',I0.5,'.h5')") lgrid%step
+     call h5fcreate_f(h5%filename,H5F_ACC_TRUNC_F,h5%file_id,error)
+
+     call h5gcreate_f(h5%file_id,"grid",group_id,error)
+     call hdf5_annotate_rp(h5,group_id,"time",lgrid%time)
+     call hdf5_annotate_rp(h5,group_id,"dt",lgrid%dt)
+     call hdf5_annotate_ip(h5,group_id,"step",lgrid%step)
+
+    end if
+
+    allocate(lbuff(1:rnv_tot))
+    allocate(gbuff(1:rnv_tot))
+   
+    do ir=1,rnv_tot
+     lbuff(ir) = rp0
+    end do
+
+    do k=mgrid%i1(3),mgrid%i2(3)
+     do j=mgrid%i1(2),mgrid%i2(2)
+      do i=mgrid%i1(1),mgrid%i2(1)
+
+       ir = lgrid%rprofs_ir(i,j,k)
+ 
+       if(ir>0) then
+       
+        rho = lgrid%prim(i_rho,i,j,k)
+        P = lgrid%prim(i_p,i,j,k)
+        T = lgrid%temp(i,j,k)
+        eint = lgrid%eint(i,j,k)/rho
+        h = eint + P/rho
+
+        vx1 = lgrid%prim(i_vx1,i,j,k)
+        vx2 = lgrid%prim(i_vx2,i,j,k)
+#if sdims_make==3
+        vx3 = lgrid%prim(i_vx3,i,j,k)
+#endif
+        ekin = rph*(vx1*vx1+vx2*vx2+vx3*vx3)
+
+        x = lgrid%coords(1,i,j,k)
+        y = lgrid%coords(2,i,j,k)
+#if sdims_make==3
+        z = lgrid%coords(3,i,j,k)
+#endif
+
+#ifdef EVOLVE_ETOT
+        epot = lgrid%phi_cc(i,j,k) 
+#endif
+
+#ifdef USE_GRAVITY
+        gx1 = lgrid%grav(1,i,j,k) 
+        gx2 = lgrid%grav(2,i,j,k) 
+#if sdims_make==3
+        gx3 = lgrid%grav(3,i,j,k) 
+#endif
+#endif
+ 
+#ifdef USE_MHD
+        bx1 = lgrid%b_cc(1,i,j,k)
+        bx2 = lgrid%b_cc(2,i,j,k)
+#if sdims_make==3
+        bx3 = lgrid%b_cc(3,i,j,k)
+#endif
+        emag = rph*(bx1*bx1+bx2*bx2+bx3*bx3)
+#endif
+
+#ifdef USE_INTERNAL_BOUNDARIES
+        r = lgrid%r(i,j,k)
+        theta = acos(z/r)
+        phi = atan2(y,x)
+        cos_theta = cos(theta)
+        sin_theta = sin(theta)
+        cos_phi = cos(phi)
+        sin_phi = sin(phi)
+        vr = (x*vx1+y*vx2+z*vx3)/r
+        vt1 = cos_theta*cos_phi*vx1+cos_theta*sin_theta*vx2-sin_theta*vx3
+        vt2 = -sin_phi*vx1+cos_phi*vx2
+#ifdef USE_MHD
+        br = (x*bx1+y*bx2+z*bx3)/r
+        bt1 = cos_theta*cos_phi*bx1+cos_theta*sin_theta*bx2-sin_theta*bx3
+        bt2 = -sin_phi*bx1+cos_phi*bx2
+#endif
+#ifdef USE_GRAVITY
+        gr = (x*gx1+y*gx2+z*gx3)/r
+#endif
+#elif defined(GEOMETRY_CUBED_SPHERE)
+        r = lgrid%r(i,j,k)
+        theta = acos(z/r)
+        phi = atan2(y,x)
+        cos_theta = cos(theta)
+        sin_theta = sin(theta)
+        cos_phi = cos(phi)
+        sin_phi = sin(phi)
+        vr = (x*vx1+y*vx2+z*vx3)/r
+        vt1 = cos_theta*cos_phi*vx1+cos_theta*sin_theta*vx2-sin_theta*vx3
+        vt2 = -sin_phi*vx1+cos_phi*vx2
+#ifdef USE_MHD
+        br = (x*bx1+y*bx2+z*bx3)/r
+        bt1 = cos_theta*cos_phi*bx1+cos_theta*sin_theta*bx2-sin_theta*bx3
+        bt2 = -sin_phi*bx1+cos_phi*bx2
+#endif
+#elif defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+        r = lgrid%r(i,j,k)
+        vr = vx1
+        vt1 = vx2
+        vt2 = vx3
+#ifdef USE_MHD
+        br = bx1
+        bt1 = bx2
+        bt2 = bx3
+#endif
+#ifdef USE_GRAVITY
+        gr = gx1
+#endif
+#else
+        r = y
+        vr = vx2
+        vt1 = vx1
+        vt2 = vx3
+#ifdef USE_MHD
+        br = bx2
+        bt1 = bx1
+        bt2 = bx3
+#endif
+#ifdef USE_GRAVITY
+        gr = gx2
+#endif
+#endif
+
+#if defined(THERMAL_DIFFUSION_EXPLICIT) || defined(THERMAL_DIFFUSION_STS)
+        kappa = lgrid%kappa(i,j,k)
+#endif
+
+#ifdef USE_EDOT
+        edot = lgrid%edot(i,j,k)
+#endif
+
+#ifdef ADVECT_YE_IABAR
+        abar = rp1/lgrid%prim(i_iabar,i,j,k)
+        ye = lgrid%prim(i_ye,i,j,k)
+        zbar = ye*abar 
+#elif defined(ADVECT_SPECIES)
+        inv_abar = rp0
+        ye = rp0
+        do isp=1,nspecies
+         tmp = lgrid%prim(i_as1+isp-1,i,j,k)/lgrid%A(isp)
+         inv_abar = inv_abar + tmp
+         ye = ye + lgrid%Z(isp)*tmp
+        end do
+        abar = rp1/inv_abar
+        zbar = ye*abar
+#else
+        abar = lgrid%mu/(rp1-rph*lgrid%mu)
+        ye = rph
+        zbar = ye*abar        
+#endif
+
+        mu = abar/(zbar+rp1)
+
+#ifdef HELMHOLTZ_EOS
+
+        call helm_rhoT_given_entropy(rho,T,abar,zbar,s)
+
+#elif defined(PIG_EOS)
+
+        call pig_rhoT_given_entropy(rho,T,s)
+
+#elif defined(USE_PRAD)
+
+        tmp = rp1/mu
+        Pid = CONST_RGAS*rho*T*tmp
+        Eid = CONST_RGAS*T*tmp/(lgrid%gm-rp1)
+        lswot15 = rpoh*log((rp2*CONST_PI*CONST_MU*CONST_KB)/(CONST_H*CONST_H))
+        ywot = log(mu*mu*sqrt(mu)/(rho*CONST_AV))
+        y = ywot+lswot15+rpoh*log(T)
+        sid = (Pid/rho+Eid)/T + CONST_KB*CONST_AV*tmp*y
+
+        T4 = T*T*T*T
+        Prad = CONST_RAD*T4*othird
+        Erad = CONST_RAD*T4/rho
+        srad = (Prad/rho+Erad)/T
+
+        s = sid + srad 
+
+#else
+
+        tmp = rp1/mu
+        Pid = CONST_RGAS*rho*T*tmp
+        Eid = CONST_RGAS*T*tmp/(lgrid%gm-rp1)
+        lswot15 = rpoh*log((rp2*CONST_PI*CONST_MU*CONST_KB)/(CONST_H*CONST_H))
+        ywot = log(mu*mu*sqrt(mu)/(rho*CONST_AV))
+        y = ywot+lswot15+rpoh*log(T)
+        s = (Pid/rho+Eid)/T + CONST_KB*CONST_AV*tmp*y
+
+#endif
+
+        etot = eint + ekin + emag 
+
+#ifdef USE_INTERNAL_BOUNDARIES
+        area = CONST_PI*(lgrid%rprofs_r(ir)+lgrid%rprofs_r(ir+1))**2
+#elif defined(GEOMETRY_CUBED_SPHERE)
+        area = CONST_PI*(lgrid%rprofs_r(ir)+lgrid%rprofs_r(ir+1))**2
+#elif defined(GEOMETRY_2D_POLAR)
+        area = CONST_PI*(lgrid%rprofs_r(ir)+lgrid%rprofs_r(ir+1))
+#elif defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+        area = CONST_PI*(lgrid%rprofs_r(ir)+lgrid%rprofs_r(ir+1))**2
+#else
+#if sdims_make==3
+        area = (lgrid%x1u-lgrid%x1l)*(lgrid%x3u-lgrid%x3l)
+#else
+        area = (lgrid%x1u-lgrid%x1l)
+#endif
+#endif
+
+        abs_vel = sqrt(rp2*ekin)
+        abs_vh = sqrt(vt1*vt1+vt2*vt2)
+
+#ifdef USE_INTERNAL_BOUNDARIES
+        div_vel = &
+        (lgrid%prim(i_vx1,i+1,j,k)-lgrid%prim(i_vx1,i-1,j,k)) / &
+        (lgrid%coords(1,i+1,j,k)-lgrid%coords(1,i-1,j,k)) + &
+        (lgrid%prim(i_vx2,i,j+1,k)-lgrid%prim(i_vx2,i,j-1,k)) / &
+        (lgrid%coords(2,i,j+1,k)-lgrid%coords(2,i,j-1,k)) 
+#if sdims_make==3
+        div_vel = div_vel + (lgrid%prim(i_vx3,i,j,k+1)-lgrid%prim(i_vx3,i,j,k-1)) / &
+        (lgrid%coords(3,i,j,k+1)-lgrid%coords(3,i,j,k-1))         
+#endif
+#elif defined(GEOMETRY_CUBED_SPHERE)
+        div_vel = rp0
+#elif defined(GEOMETRY_2D_POLAR)
+        rpl = lgrid%r(i+1,j,k)
+        rmi = lgrid%r(i-1,j,k)
+
+        div_vel = & 
+        (rpl*lgrid%prim(i_vx1,i+1,j,k)-rmi*lgrid%prim(i_vx1,i-1,j,k)) / &
+        (r*(rpl-rmi)) 
+
+        div_vel = div_vel + &
+        (lgrid%prim(i_vx2,i,j+1,k)-lgrid%prim(i_vx2,i,j-1,k)) / &
+        (r*lgrid%dx2)
+#elif defined(GEOMETRY_2D_SPHERICAL)
+        rpl = lgrid%r(i+1,j,k)
+        rmi = lgrid%r(i-1,j,k)
+
+        div_vel = & 
+        (rpl*rpl*lgrid%prim(i_vx1,i+1,j,k)-rmi*rmi*lgrid%prim(i_vx1,i-1,j,k)) / &
+        (r*r*(rpl-rmi)) 
+
+        sin_theta_pl = lgrid%sin_theta(i,j+1,k)
+        sin_theta_mi = lgrid%sin_theta(i,j-1,k)
+
+        tmp = rp1/(r*lgrid%sin_theta(i,j,k))
+
+        div_vel = div_vel + & 
+        tmp* &
+        (sin_theta_pl*lgrid%prim(i_vx2,i,j+1,k)-sin_theta_mi*lgrid%prim(i_vx2,i,j-1,k)) / &
+        lgrid%dx2
+#elif defined(GEOMETRY_3D_SPHERICAL)
+        rpl = lgrid%r(i+1,j,k)
+        rmi = lgrid%r(i-1,j,k)
+
+        div_vel = & 
+        (rpl*rpl*lgrid%prim(i_vx1,i+1,j,k)-rmi*rmi*lgrid%prim(i_vx1,i-1,j,k)) / &
+        (r*r*(rpl-rmi)) 
+
+        sin_theta_pl = lgrid%sin_theta(i,j+1,k)
+        sin_theta_mi = lgrid%sin_theta(i,j-1,k)
+
+        tmp = lgrid%inv_r_sin_theta(i,j,k)
+
+        div_vel = div_vel + & 
+        tmp* &
+        (sin_theta_pl*lgrid%prim(i_vx2,i,j+1,k)-sin_theta_mi*lgrid%prim(i_vx2,i,j-1,k)) / &
+        lgrid%dx2
+
+        div_vel = div_vel + &
+        tmp* &
+        (lgrid%prim(i_vx3,i,j,k+1)-lgrid%prim(i_vx3,i,j,k-1)) / &
+        lgrid%dx3
+#else
+        div_vel = &
+        (lgrid%prim(i_vx1,i+1,j,k)-lgrid%prim(i_vx1,i-1,j,k)) / &
+        (lgrid%coords(1,i+1,j,k)-lgrid%coords(1,i-1,j,k)) + &
+        (lgrid%prim(i_vx2,i,j+1,k)-lgrid%prim(i_vx2,i,j-1,k)) / &
+        (lgrid%coords(2,i,j+1,k)-lgrid%coords(2,i,j-1,k)) 
+#if sdims_make==3
+        div_vel = div_vel + (lgrid%prim(i_vx3,i,j,k+1)-lgrid%prim(i_vx3,i,j,k-1)) / &
+        (lgrid%coords(3,i,j,k+1)-lgrid%coords(3,i,j,k-1)) 
+#endif
+#endif
+
+        inv_T = rp1/T
+
+        vel_dot_grav = &
+        vx1*gx1+vx2*gx2+vx3*gx3
+
+#ifdef USE_INTERNAL_BOUNDARIES
+        dTdr = &
+        lgrid%coords(1,i,j,k)*(lgrid%temp(i+1,j,k)-lgrid%temp(i-1,j,k)) / &
+        (lgrid%coords(1,i+1,j,k)-lgrid%coords(1,i-1,j,k)) + &
+        lgrid%coords(2,i,j,k)*(lgrid%temp(i,j+1,k)-lgrid%temp(i,j-1,k)) / &
+        (lgrid%coords(2,i,j+1,k)-lgrid%coords(2,i,j-1,k)) 
+#if sdims_make==3
+        dTdr = dTdr + lgrid%coords(3,i,j,k)*(lgrid%temp(i,j,k+1)-lgrid%temp(i,j,k-1)) / &
+        (lgrid%coords(3,i,j,k+1)-lgrid%coords(3,i,j,k-1))         
+#endif
+        dTdr = dTdr/lgrid%r(i,j,k)
+#elif defined(GEOMETRY_CUBED_SPHERE)
+        dTdr = rp0
+#elif defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+        dTdr = &
+        (lgrid%temp(i+1,j,k)-lgrid%temp(i-1,j,k)) / &
+        (lgrid%r(i+1,j,k)-lgrid%r(i-1,j,k)) 
+#else
+        dTdr = &
+        (lgrid%temp(i,j+1,k)-lgrid%temp(i,j-1,k)) / &
+        (lgrid%coords(2,i,j+1,k)-lgrid%coords(2,i,j-1,k)) 
+#endif
+
+#if defined(THERMAL_DIFFUSION_EXPLICIT) || defined(THERMAL_DIFFUSION_STS)
+        Kth = fthirds*CONST_RAD*CONST_C*T*T*T/(kappa*rho)
+#endif 
+
+        edot_nuc = rp0
+        edot_neu = rp0
+#ifdef USE_NUCLEAR_NETWORK
+        do isp=1,nreacs
+         edot_nuc = edot_nuc + lgrid%edot_nuc(isp,i,j,k)
+        end do
+#ifdef USE_NEULOSS 
+        edot_neu = lgrid%edot_nuc(nreacs+1,i,j,k)
+#endif
+#endif
+ 
+        abs_b = sqrt(rp2*emag)
+        abs_bh = sqrt(bt1*bt1+bt2*bt2)
+
+#ifdef COROTATING_FRAME
+
+#if defined(GEOMETRY_CUBED_SPHERE) || defined(USE_INTERNAL_BOUNDARIES)
+
+        tmp = rho*vt2*om3
+        ov1 = -sin_theta*tmp
+        ov2 = -cos_theta*tmp
+        ov3 = (cos_theta*rho*vt1+sin_theta*rho*vr)*om3
+        or3 = r*sin_theta*om3
+        tmp = or3*om3
+        oor1 = -sin_theta*tmp
+        oor2 = -cos_theta*tmp
+
+#elif defined(GEOMETRY_2D_POLAR)
+
+        tmp = rho*vt2*om3
+        ov1 = -tmp
+        ov2 = rho*vr*om3
+        or2 = r*om3
+        tmp = or2*om3
+        oor1 = -tmp
+
+#elif defined(GEOMETRY_3D_SPHERICAL)
+
+        sin_theta = lgrid%sin_theta(i,j,k)
+        cos_theta = lgrid%cos_theta(i,j,k)
+
+        tmp = rho*vt2*om3
+        ov1 = -sin_theta*tmp
+        ov2 = -cos_theta*tmp
+        ov3 = (cos_theta*rho*vt1+sin_theta*rho*vr)*om3
+        or3 = r*sin_theta*om3
+        tmp = or3*om3
+        oor1 = -sin_theta*tmp
+        oor2 = -cos_theta*tmp
+
+#else
+
+        ov1 = rho*vx3*om2-rho*vx2*om3
+        ov2 = -rho*vx3*om1+rho*vx1*om3
+        ov3 = rho*vx2*om1-rho*vx1*om2
+        or1 = z*om2-y*om3
+        or2 = -z*om1+x*om3
+        or3 = y*om1-x*om2
+        oor1 = or3*om2-or2*om3
+        oor2 = -or3*om1+or1*om3
+        oor3 = or2*om1-or1*om2
+
+#endif
+
+#endif
+
+#ifdef USE_MHD
+
+#if defined(GEOMETRY_CARTESIAN_UNIFORM) || defined(GEOMETRY_CARTESIAN_NONUNIFORM)
+
+        d_vx1_d_x1 = &
+        (lgrid%prim(i_vx1,i+1,j,k)-lgrid%prim(i_vx1,i-1,j,k)) / &
+        (lgrid%coords(1,i+1,j,k)-lgrid%coords(1,i-1,j,k))
+
+        d_vx1_d_x2 = &
+        (lgrid%prim(i_vx1,i,j+1,k)-lgrid%prim(i_vx1,i,j-1,k)) / &
+        (lgrid%coords(2,i,j+1,k)-lgrid%coords(2,i,j-1,k))
+
+#if sdims_make==3
+        d_vx1_d_x3 = &
+        (lgrid%prim(i_vx1,i,j,k+1)-lgrid%prim(i_vx1,i,j,k-1)) / &
+        (lgrid%coords(3,i,j,k+1)-lgrid%coords(3,i,j,k-1))
+#endif
+
+        d_vx2_d_x1 = &
+        (lgrid%prim(i_vx2,i+1,j,k)-lgrid%prim(i_vx2,i-1,j,k)) / &
+        (lgrid%coords(1,i+1,j,k)-lgrid%coords(1,i-1,j,k))
+
+        d_vx2_d_x2 = &
+        (lgrid%prim(i_vx2,i,j+1,k)-lgrid%prim(i_vx2,i,j-1,k)) / &
+        (lgrid%coords(2,i,j+1,k)-lgrid%coords(2,i,j-1,k))
+
+#if sdims_make==3
+        d_vx2_d_x3 = &
+        (lgrid%prim(i_vx2,i,j,k+1)-lgrid%prim(i_vx2,i,j,k-1)) / &
+        (lgrid%coords(3,i,j,k+1)-lgrid%coords(3,i,j,k-1))
+#endif
+
+        d_vx3_d_x1 = &
+        (lgrid%prim(i_vx3,i+1,j,k)-lgrid%prim(i_vx3,i-1,j,k)) / &
+        (lgrid%coords(1,i+1,j,k)-lgrid%coords(1,i-1,j,k))
+
+        d_vx3_d_x2 = &
+        (lgrid%prim(i_vx3,i,j+1,k)-lgrid%prim(i_vx3,i,j-1,k)) / &
+        (lgrid%coords(2,i,j+1,k)-lgrid%coords(2,i,j-1,k))
+
+#if sdims_make==3
+        d_vx3_d_x3 = &
+        (lgrid%prim(i_vx3,i,j,k+1)-lgrid%prim(i_vx3,i,j,k-1)) / &
+        (lgrid%coords(3,i,j,k+1)-lgrid%coords(3,i,j,k-1))
+#endif 
+
+        b_dot_b_dot_nabla_vel = &
+        bx1*(bx1*d_vx1_d_x1+bx2*d_vx1_d_x2+bx3*d_vx1_d_x3) + &
+        bx2*(bx1*d_vx2_d_x1+bx2*d_vx2_d_x2+bx3*d_vx2_d_x3) + &
+        bx3*(bx1*d_vx3_d_x1+bx2*d_vx3_d_x2+bx3*d_vx3_d_x3) 
+
+#if sdims_make==3
+        Jx1 = &
+        (lgrid%b_cc(3,i,j+1,k)-lgrid%b_cc(3,i,j-1,k)) / &
+        (lgrid%coords(2,i,j+1,k)-lgrid%coords(2,i,j-1,k)) - & 
+        (lgrid%b_cc(2,i,j,k+1)-lgrid%b_cc(2,i,j,k-1)) / &
+        (lgrid%coords(3,i,j,k+1)-lgrid%coords(3,i,j,k-1)) 
+
+        Jx2 = &
+        (lgrid%b_cc(1,i,j,k+1)-lgrid%b_cc(1,i,j,k-1)) / &
+        (lgrid%coords(3,i,j,k+1)-lgrid%coords(3,i,j,k-1)) - &
+        (lgrid%b_cc(3,i+1,j,k)-lgrid%b_cc(3,i-1,j,k)) / &
+        (lgrid%coords(1,i+1,j,k)-lgrid%coords(1,i-1,j,k)) 
+#endif 
+
+        Jx3 = &
+        (lgrid%b_cc(2,i+1,j,k)-lgrid%b_cc(2,i-1,j,k)) / &
+        (lgrid%coords(1,i+1,j,k)-lgrid%coords(1,i-1,j,k)) - &
+        (lgrid%b_cc(1,i,j+1,k)-lgrid%b_cc(1,i,j-1,k)) / &
+        (lgrid%coords(2,i,j+1,k)-lgrid%coords(2,i,j-1,k)) 
+
+        WL = vx1*(Jx2*bx3-Jx3*bx2) + &
+        vx2*(Jx3*bx1-Jx1*bx3) + &
+        vx3*(Jx1*bx2-Jx2*bx1)        
+
+#endif
+
+#endif
+
+        lbuff(ir) = lbuff(ir) + area
+        lbuff(rprofs_nr+ir) = lbuff(rprofs_nr+ir) + gr
+        lbuff(2*rprofs_nr+ir) = lbuff(2*rprofs_nr+ir) + epot
+        lbuff(3*rprofs_nr+ir) = lbuff(3*rprofs_nr+ir) + kappa
+        lbuff(4*rprofs_nr+ir) = lbuff(4*rprofs_nr+ir) + edot
+        lbuff(5*rprofs_nr+ir) = lbuff(5*rprofs_nr+ir) + rho
+        lbuff(6*rprofs_nr+ir) = lbuff(6*rprofs_nr+ir) + P
+        lbuff(7*rprofs_nr+ir) = lbuff(7*rprofs_nr+ir) + T
+        lbuff(8*rprofs_nr+ir) = lbuff(8*rprofs_nr+ir) + s
+        lbuff(9*rprofs_nr+ir) = lbuff(9*rprofs_nr+ir) + abar
+        lbuff(10*rprofs_nr+ir) = lbuff(10*rprofs_nr+ir) + ye
+        lbuff(11*rprofs_nr+ir) = lbuff(11*rprofs_nr+ir) + zbar
+        lbuff(12*rprofs_nr+ir) = lbuff(12*rprofs_nr+ir) + rho*rho
+        lbuff(13*rprofs_nr+ir) = lbuff(13*rprofs_nr+ir) + T*T
+        lbuff(14*rprofs_nr+ir) = lbuff(14*rprofs_nr+ir) + P*P
+        lbuff(15*rprofs_nr+ir) = lbuff(15*rprofs_nr+ir) + s*s
+        lbuff(16*rprofs_nr+ir) = lbuff(16*rprofs_nr+ir) + abs_vel
+        lbuff(17*rprofs_nr+ir) = lbuff(17*rprofs_nr+ir) + abs_vh
+        lbuff(18*rprofs_nr+ir) = lbuff(18*rprofs_nr+ir) + rho*vr
+        lbuff(19*rprofs_nr+ir) = lbuff(19*rprofs_nr+ir) + rho*eint
+        lbuff(20*rprofs_nr+ir) = lbuff(20*rprofs_nr+ir) + rho*ekin
+        lbuff(21*rprofs_nr+ir) = lbuff(21*rprofs_nr+ir) + rho*etot
+        lbuff(22*rprofs_nr+ir) = lbuff(22*rprofs_nr+ir) + rho*h
+        lbuff(23*rprofs_nr+ir) = lbuff(23*rprofs_nr+ir) + rho*s
+        lbuff(24*rprofs_nr+ir) = lbuff(24*rprofs_nr+ir) + rho*eint*vr
+        lbuff(25*rprofs_nr+ir) = lbuff(25*rprofs_nr+ir) + rho*ekin*vr
+        lbuff(26*rprofs_nr+ir) = lbuff(26*rprofs_nr+ir) + rho*h*vr
+        lbuff(27*rprofs_nr+ir) = lbuff(27*rprofs_nr+ir) + rho*s*vr
+        lbuff(28*rprofs_nr+ir) = lbuff(28*rprofs_nr+ir) + div_vel
+        lbuff(29*rprofs_nr+ir) = lbuff(29*rprofs_nr+ir) + P*div_vel
+        lbuff(30*rprofs_nr+ir) = lbuff(30*rprofs_nr+ir) + inv_T
+        lbuff(31*rprofs_nr+ir) = lbuff(31*rprofs_nr+ir) + vr
+        lbuff(32*rprofs_nr+ir) = lbuff(32*rprofs_nr+ir) + abar*vr
+        lbuff(33*rprofs_nr+ir) = lbuff(33*rprofs_nr+ir) + zbar*vr
+        lbuff(34*rprofs_nr+ir) = lbuff(34*rprofs_nr+ir) + P*vr
+        lbuff(35*rprofs_nr+ir) = lbuff(35*rprofs_nr+ir) + T*vr
+        lbuff(36*rprofs_nr+ir) = lbuff(36*rprofs_nr+ir) + rho*vel_dot_grav
+        lbuff(37*rprofs_nr+ir) = lbuff(37*rprofs_nr+ir) + vel_dot_grav
+        lbuff(38*rprofs_nr+ir) = lbuff(38*rprofs_nr+ir) + dTdr
+        lbuff(39*rprofs_nr+ir) = lbuff(39*rprofs_nr+ir) + Kth
+        lbuff(40*rprofs_nr+ir) = lbuff(40*rprofs_nr+ir) + Kth*dTdr
+        lbuff(41*rprofs_nr+ir) = lbuff(41*rprofs_nr+ir) + abar*abar
+        lbuff(42*rprofs_nr+ir) = lbuff(42*rprofs_nr+ir) + edot_nuc
+        lbuff(43*rprofs_nr+ir) = lbuff(43*rprofs_nr+ir) + edot_neu
+        off = 43
+#ifdef USE_NUCLEAR_NETWORK
+        do isp=1,nreacs
+         lbuff((off+isp)*rprofs_nr+ir) = lbuff((off+isp)*rprofs_nr+ir) + &
+         lgrid%edot_nuc(isp,i,j,k)
+        end do
+#endif
+        off = 43+nreacs
+        lbuff((off+1)*rprofs_nr+ir) = lbuff((off+1)*rprofs_nr+ir) + edot_nuc*inv_T
+        lbuff((off+2)*rprofs_nr+ir) = lbuff((off+2)*rprofs_nr+ir) + edot_neu*inv_T
+        off = 45+nreacs
+#if nas_make>0
+        do isp=1,nas
+         lbuff((off+isp)*rprofs_nr+ir) = lbuff((off+isp)*rprofs_nr+ir) + & 
+         rho*lgrid%prim(i_as1+isp-1,i,j,k)
+        end do
+#endif
+        off = 45+nreacs+nas
+#if nas_make>0
+        do isp=1,nas
+         tmp = lgrid%prim(i_as1+isp-1,i,j,k)
+         lbuff((off+isp)*rprofs_nr+ir) = lbuff((off+isp)*rprofs_nr+ir) + & 
+         rho*tmp*tmp
+        end do
+#endif
+        off = 45+nreacs+nas+nas
+#if nas_make>0
+        do isp=1,nas
+         lbuff((off+isp)*rprofs_nr+ir) = lbuff((off+isp)*rprofs_nr+ir) + & 
+         rho*lgrid%prim(i_as1+isp-1,i,j,k)*vr
+        end do
+#endif
+         off = 45+nreacs+nas+nas+nas
+#ifdef USE_NUCLEAR_NETWORK
+        do isp=1,nspecies
+         lbuff((off+isp)*rprofs_nr+ir) = lbuff((off+isp)*rprofs_nr+ir) + & 
+         rho*lgrid%X_species_dot(isp,i,j,k)
+        end do
+#endif
+        off = 45+nreacs+nas+nas+nas+nspecies
+#ifdef USE_NUCLEAR_NETWORK
+        do isp=1,nspecies
+         lbuff((off+isp)*rprofs_nr+ir) = lbuff((off+isp)*rprofs_nr+ir) + & 
+         rho*lgrid%X_species_dot(isp,i,j,k)*lgrid%prim(i_as1+isp-1,i,j,k)
+        end do
+#endif
+        off = 45+nreacs+nas+nas+nas+nspecies+nspecies
+        lbuff((off+1)*rprofs_nr+ir) = lbuff((off+1)*rprofs_nr+ir) + rho*vr*vr
+        lbuff((off+2)*rprofs_nr+ir) = lbuff((off+2)*rprofs_nr+ir) + rho*vt1
+        lbuff((off+3)*rprofs_nr+ir) = lbuff((off+3)*rprofs_nr+ir) + rho*vt1*vt1
+        lbuff((off+4)*rprofs_nr+ir) = lbuff((off+4)*rprofs_nr+ir) + rho*vt2
+        lbuff((off+5)*rprofs_nr+ir) = lbuff((off+5)*rprofs_nr+ir) + rho*vt2*vt2
+        lbuff((off+6)*rprofs_nr+ir) = lbuff((off+6)*rprofs_nr+ir) + emag
+        lbuff((off+7)*rprofs_nr+ir) = lbuff((off+7)*rprofs_nr+ir) + br
+        lbuff((off+8)*rprofs_nr+ir) = lbuff((off+8)*rprofs_nr+ir) + abs_b
+        lbuff((off+9)*rprofs_nr+ir) = lbuff((off+9)*rprofs_nr+ir) + abs_bh
+        lbuff((off+10)*rprofs_nr+ir) = lbuff((off+10)*rprofs_nr+ir) + br*br
+        lbuff((off+11)*rprofs_nr+ir) = lbuff((off+11)*rprofs_nr+ir) + bt1
+        lbuff((off+12)*rprofs_nr+ir) = lbuff((off+12)*rprofs_nr+ir) + bt2
+        lbuff((off+13)*rprofs_nr+ir) = lbuff((off+13)*rprofs_nr+ir) + bt1*bt1
+        lbuff((off+14)*rprofs_nr+ir) = lbuff((off+14)*rprofs_nr+ir) + bt2*bt2
+        lbuff((off+15)*rprofs_nr+ir) = lbuff((off+15)*rprofs_nr+ir) + rho*vr*vt1
+        lbuff((off+16)*rprofs_nr+ir) = lbuff((off+16)*rprofs_nr+ir) + rho*vr*vt2
+        lbuff((off+17)*rprofs_nr+ir) = lbuff((off+17)*rprofs_nr+ir) + rho*vt1*vt2
+        lbuff((off+18)*rprofs_nr+ir) = lbuff((off+18)*rprofs_nr+ir) + br*bt1
+        lbuff((off+19)*rprofs_nr+ir) = lbuff((off+19)*rprofs_nr+ir) + br*bt2
+        lbuff((off+20)*rprofs_nr+ir) = lbuff((off+20)*rprofs_nr+ir) + bt1*bt2
+        lbuff((off+21)*rprofs_nr+ir) = lbuff((off+21)*rprofs_nr+ir) - br*(br*vr+bt1*vt1+bt2*vt2)
+        lbuff((off+22)*rprofs_nr+ir) = lbuff((off+22)*rprofs_nr+ir) + rp2*ov1
+        lbuff((off+23)*rprofs_nr+ir) = lbuff((off+23)*rprofs_nr+ir) + rho*oor1
+        lbuff((off+24)*rprofs_nr+ir) = lbuff((off+24)*rprofs_nr+ir) + rp2*ov2
+        lbuff((off+25)*rprofs_nr+ir) = lbuff((off+25)*rprofs_nr+ir) + rho*oor2
+        lbuff((off+26)*rprofs_nr+ir) = lbuff((off+26)*rprofs_nr+ir) + rp2*ov3
+        lbuff((off+27)*rprofs_nr+ir) = lbuff((off+27)*rprofs_nr+ir) + rho*oor3
+#if defined(GEOMETRY_CUBED_SPHERE) || defined(USE_INTERNAL_BOUNDARIES) || defined(GEOMETRY_3D_SPHERICAL)
+        lbuff((off+28)*rprofs_nr+ir) = lbuff((off+28)*rprofs_nr+ir) + (rho*vr*oor1+rho*vt1*oor2)
+#else
+        lbuff((off+28)*rprofs_nr+ir) = lbuff((off+28)*rprofs_nr+ir) + (rho*vx1*oor1+rho*vx2*oor2+rho*vx3*oor3)
+#endif
+        lbuff((off+29)*rprofs_nr+ir) = lbuff((off+29)*rprofs_nr+ir) + emag*vr
+        lbuff((off+30)*rprofs_nr+ir) = lbuff((off+30)*rprofs_nr+ir) + emag*div_vel
+        lbuff((off+31)*rprofs_nr+ir) = lbuff((off+31)*rprofs_nr+ir) + b_dot_b_dot_nabla_vel
+        lbuff((off+32)*rprofs_nr+ir) = lbuff((off+32)*rprofs_nr+ir) + WL
+
+       endif
+
+      end do
+     end do
+    end do
+
+    call mpi_reduce(lbuff,gbuff,rnv_tot, &
+    MPI_RP,MPI_SUM,master_rank,mgrid%comm_cart,ierr)
+ 
+    if(mgrid%rankl==master_rank) then
+     allocate(vars(1:rprofs_nv,1:rprofs_nr))
+
+     do ir=1,rprofs_nr
+      fac = rp1/real(lgrid%rprofs_counts(ir),kind=rp)
+      do i=1,rprofs_nv
+       vars(i,ir) = gbuff((i-1)*rprofs_nr+ir)*fac
+      end do
+     end do
+
+     gnc(1) = rprofs_nv
+     gnc(2) = lgrid%rprofs_nr
+     call h5screate_simple_f(2,gnc,plist_id,error)
+
+     call hdf5_annotate_ip(h5,group_id,"nas",nas)
+     call hdf5_annotate_ip(h5,group_id,"nspecies",nspecies)
+     call hdf5_annotate_ip(h5,group_id,"nreacs",nreacs)
+
+     call hdf5_annotate_array_rp(h5,group_id,"rf",lgrid%rprofs_r)
+     call h5dcreate_f(group_id,"havg",h5%pref_dtypef,plist_id,dset_id,error)
+     call h5dwrite_f(dset_id,h5%pref_dtypef,vars,gnc,error)
+
+     call h5dclose_f(dset_id,error)
+     call h5sclose_f(plist_id,error)
+     call h5gclose_f(group_id,error)
+     call h5fclose_f(h5%file_id,error)
+
+     deallocate(vars)
+    endif
+
+    deallocate(lbuff)
+    deallocate(gbuff)
+
+ end subroutine write_rprofs
 
 #endif
 
@@ -4845,6 +5706,10 @@ contains
     real(kind=rp) :: abar,eint,gm,gmm1,igmm1,p,rho,sound,sound2,T,ye,zbar,dp_drho,dp_deps
     real(kind=rp) :: mu,inv_mu,inv_abar,T2,T3,T4,dRes_dT,tmp,Res0,Res_prad,cv,tmp1,tmp2
 
+#ifdef SAVE_RPROFS
+    integer, allocatable :: rprofs_counts(:)
+#endif
+
 #ifdef GEOMETRY_2D_POLAR
     real(kind=rp) :: r,rm,rpl,dr
     r = rp0
@@ -5024,6 +5889,45 @@ contains
       end do
      end do
     end do
+
+#endif
+
+#ifdef SAVE_RPROFS
+
+    allocate(rprofs_counts(1:lgrid%rprofs_nr))
+
+    do ipr=1,lgrid%rprofs_nr
+      rprofs_counts(ipr) = 0
+    end do 
+
+    do k=lx3,ux3
+     do j=lx2,ux2
+      do i=lx1,ux1
+
+#if defined(USE_INTERNAL_BOUNDARIES) || defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_CUBED_SPHERE)
+        tmp = lgrid%r(i,j,k)
+#else
+        tmp = lgrid%coords(2,i,j,k)
+#endif
+
+        lgrid%rprofs_ir(i,j,k) = 0
+
+        do ipr=1,lgrid%rprofs_nr
+         if((tmp>lgrid%rprofs_r(ipr)) .and. (tmp<lgrid%rprofs_r(ipr+1))) then
+          lgrid%rprofs_ir(i,j,k) = ipr
+          rprofs_counts(ipr) = rprofs_counts(ipr) + 1
+         endif
+        end do
+
+      end do
+     end do
+    end do
+
+    call mpi_reduce(rprofs_counts,lgrid%rprofs_counts,lgrid%rprofs_nr, &
+    MPI_INTEGER,MPI_SUM,master_rank,mgrid%comm_cart,ierr)
+
+    deallocate(rprofs_counts)
+
 
 #endif
 
@@ -5483,6 +6387,10 @@ contains
 #endif
      call compute_hyperbolic_dt(mgrid,lgrid) 
 
+#ifdef SAVE_RPROFS
+     lgrid%rprofs_dstep_dump = nint(rprofs_dt_dump/lgrid%dt)
+#endif
+
 #ifdef SAVE_PLANES
      lgrid%planes_dstep_dump = nint(planes_dt_dump/lgrid%dt)
 #endif
@@ -5684,6 +6592,21 @@ contains
        end if
 #endif
 
+#ifdef SAVE_RPROFS
+       if(lgrid%step==lgrid%rprofs_inextoutput) then
+        call mpi_barrier(mgrid%comm_cart,ierr)
+        call communicate_ndarray(mgrid,sdims,lx1,ux1,lx2,ux2,lx3,ux3,ngc,lgrid%prim(i_vx1:i_vx3,:,:,:),.false.)
+#if defined(THERMAL_DIFFUSION_EXPLICIT) || defined(THERMAL_DIFFUSION_STS)
+        call communicate_array(mgrid,lx1,ux1,lx2,ux2,lx3,ux3,ngc,lgrid%temp,.false.)
+#endif
+#ifdef USE_MHD
+        call communicate_ndarray(mgrid,sdims,lx1,ux1,lx2,ux2,lx3,ux3,ngc,lgrid%b_cc,.false.)
+#endif   
+        call write_rprofs(mgrid,lgrid)
+        lgrid%rprofs_inextoutput = lgrid%rprofs_inextoutput + lgrid%rprofs_dstep_dump
+       end if
+#endif
+
 #ifdef SAVE_PLANES
        if(lgrid%step==lgrid%planes_inextoutput) then
         call mpi_barrier(mgrid%comm_cart,ierr)
@@ -5694,6 +6617,7 @@ contains
 
 #ifdef SAVE_SPHERICAL_PROJECTIONS
        if(lgrid%step==lgrid%spj_inextoutput) then
+#ifndef SAVE_RPROFS
 #ifdef ENFORCE_BARRIERS
         call mpi_barrier(mgrid%comm_cart,ierr)
 #endif
@@ -5701,6 +6625,7 @@ contains
         call communicate_array(mgrid,lx1,ux1,lx2,ux2,lx3,ux3,ngc,lgrid%temp,.true.)
 #ifdef USE_MHD
         call communicate_ndarray(mgrid,sdims,lx1,ux1,lx2,ux2,lx3,ux3,ngc,lgrid%b_cc,.true.)
+#endif
 #endif
         call write_spherical_projections(mgrid,lgrid)
         lgrid%spj_inextoutput = lgrid%spj_inextoutput + lgrid%spj_dstep_dump
@@ -5831,6 +6756,20 @@ contains
     if(lgrid%time>=lgrid%tnextoutput) lgrid%tnextoutput = lgrid%tnextoutput + dt_dump
 #endif
 
+#ifdef SAVE_RPROFS
+    if((lgrid%step==lgrid%rprofs_inextoutput) .or. (lgrid%time>=tmax) .or. (lgrid%step==stepmax)) then
+      call communicate_ndarray(mgrid,sdims,lx1,ux1,lx2,ux2,lx3,ux3,ngc,lgrid%prim(i_vx1:i_vx3,:,:,:),.false.)
+#if defined(THERMAL_DIFFUSION_EXPLICIT) || defined(THERMAL_DIFFUSION_STS)
+      call communicate_array(mgrid,lx1,ux1,lx2,ux2,lx3,ux3,ngc,lgrid%temp,.false.)
+#endif
+#ifdef USE_MHD
+      call communicate_ndarray(mgrid,sdims,lx1,ux1,lx2,ux2,lx3,ux3,ngc,lgrid%b_cc,.false.)
+#endif
+      call write_rprofs(mgrid,lgrid) 
+      lgrid%rprofs_inextoutput = lgrid%rprofs_inextoutput + lgrid%rprofs_dstep_dump
+    end if
+#endif
+
 #ifdef SAVE_PLANES
     if((lgrid%step==lgrid%planes_inextoutput) .or. (lgrid%time>=tmax) .or. (lgrid%step==stepmax)) then
       call write_planes(mgrid,lgrid) 
@@ -5840,6 +6779,7 @@ contains
 
 #ifdef SAVE_SPHERICAL_PROJECTIONS
     if((lgrid%step==lgrid%spj_inextoutput) .or. (lgrid%time>=tmax) .or. (lgrid%step==stepmax)) then
+#ifndef SAVE_RPROFS
 #ifdef ENFORCE_BARRIERS
       call mpi_barrier(mgrid%comm_cart,ierr)
 #endif
@@ -5847,6 +6787,7 @@ contains
       call communicate_array(mgrid,lx1,ux1,lx2,ux2,lx3,ux3,ngc,lgrid%temp,.true.)
 #ifdef USE_MHD
       call communicate_ndarray(mgrid,sdims,lx1,ux1,lx2,ux2,lx3,ux3,ngc,lgrid%b_cc,.true.)
+#endif
 #endif
       call write_spherical_projections(mgrid,lgrid)
       lgrid%spj_inextoutput = lgrid%spj_inextoutput + lgrid%spj_dstep_dump
@@ -15412,7 +16353,19 @@ contains
     end do
    end do
 #endif
- 
+
+#ifdef SAVE_RPROFS
+#ifdef USE_INTERNAL_BOUNDARIES
+  do i=1,lgrid%rprofs_nr+1
+   lgrid%rprofs_r(i) = real(lgrid%x1u/lgrid%rprofs_nr*(i-1),kind=rp)
+  end do
+#else
+  do j=1,nx2+1
+   lgrid%rprofs_r(j) = lgrid%x2l + (j-rp1)*lgrid%dx2
+  end do
+#endif
+#endif
+
    mgrid%dummy = rp1
 
  end subroutine create_geometry
@@ -15498,6 +16451,12 @@ contains
        lgrid%cm(i,j,k) = (rpl+rp2*rm)/(rp3*(rpl+rm))
      end do 
     end do
+   end do
+#endif
+
+#ifdef SAVE_RPROFS
+   do i=1,nx1+1
+    lgrid%rprofs_r(i) = lgrid%x1l + real(i-1.0,kind=rp)*lgrid%dx1
    end do
 #endif
 
@@ -15699,6 +16658,12 @@ contains
    end do
 #endif
 
+#ifdef SAVE_RPROFS
+   do i=1,nx1+1
+    lgrid%rprofs_r(i) = lgrid%x1l + real(i-1.0,kind=rp)*lgrid%dx1
+   end do
+#endif
+
    mgrid%dummy = rp1
 
  end subroutine create_geometry
@@ -15847,6 +16812,12 @@ contains
    end do
 #endif
 
+#ifdef SAVE_RPROFS
+   do i=1,nx1+1
+    lgrid%rprofs_r(i) = lgrid%x1l + real(i-1.0,kind=rp)*lgrid%dx1
+   end do
+#endif
+
    mgrid%dummy = rp1
 
  end subroutine create_geometry
@@ -15981,6 +16952,12 @@ contains
      end do
     end do
    end do
+
+#ifdef SAVE_RPROFS
+    do i=1,lgrid%rprofs_nr+1
+     lgrid%rprofs_r(i) = real(cs_r1/lgrid%rprofs_nr*(i-1),kind=rp)
+    end do
+#endif
 
    mgrid%dummy = rp1
 
@@ -16262,6 +17239,12 @@ contains
      end do
     end do
    end do
+
+#ifdef SAVE_RPROFS
+   do i=1,lgrid%rprofs_nr+1
+    lgrid%rprofs_r(i) = real(cs_r1/lgrid%rprofs_nr*(i-1),kind=rp)
+   end do
+#endif
 
    mgrid%dummy = rp1
 
@@ -22457,6 +23440,249 @@ contains
 
 #endif
 
+ subroutine helm_rhoT_given_entropy(rho,T,abar,zbar,stot)
+ real(kind=rp), intent(in) :: rho,T,abar,zbar
+ real(kind=rp), intent(inout) :: stot
+
+ real(kind=rp) :: &
+ loc_eos1, &
+ loc_eos2, &
+ loc_eos3, &
+ loc_eos4, &
+ loc_eos5, &
+ loc_eos6, &
+ loc_eos7, &
+ loc_eos8, &
+ loc_eos9, &
+ loc_eos10, &
+ loc_eos11, &
+ loc_eos12, &
+ loc_eos13, &
+ loc_eos14, &
+ loc_eos15, &
+ loc_eos16, &
+ loc_eos17, &
+ loc_eos18, &
+ loc_eos19, &
+ loc_eos20, &
+ loc_eos21, &
+ loc_eos22, &
+ loc_eos23, &
+ loc_eos24, &
+ loc_eos25, &
+ loc_eos26, &
+ loc_eos27, &
+ loc_eos28, &
+ loc_eos29, &
+ loc_eos30, &
+ loc_eos31, &
+ loc_eos32, &
+ loc_eos33, &
+ loc_eos34, &
+ loc_eos35, &
+ loc_eos36
+
+ integer :: ih,jh
+
+ real(kind=rp) :: df_dT
+ real(kind=rp) :: s,T4,Ye,rhos
+ real(kind=rp) :: z
+
+ real(kind=rp) :: x,y,drho,drho2,dT,tmp
+ real(kind=rp) :: p0r,p0mr,p1r,p1mr,p2r,p2mr,idT
+ real(kind=rp) :: dp0t,dp1t,dp2t,dp0mt,dp1mt,dp2mt
+ real(kind=rp) :: omx,omy
+ real(kind=rp) :: x2,x3,x4,x5,y2,y3,y4,omx2,omx3,omx4,omx5,omy2,omy3,omy4
+
+ real(kind=rp) :: Eid,Erad,lswot15,Pid,Prad,sep,sid,srad,ywot
+
+#ifdef USE_COULOMB_CORRECTIONS
+
+ real(kind=rp) :: &
+ xni, &
+ ktinv, &
+ lami, &
+ inv_lami, &
+ plasg
+
+#endif
+
+ s = rp0
+ z = rp0
+
+ Ye = zbar/abar
+ rhos = rho*Ye
+
+ ih = int((log10(rhos)-log10(helm_rho(1)))/helm_drho) + 1
+ jh = int((log10(T)-log10(helm_T(1)))/helm_dT) + 1
+
+ tmp = helm_rho(ih)
+ drho = helm_rho(ih+1)-tmp
+ x = (rhos-tmp)/drho
+ omx = rp1-x
+
+ tmp = helm_T(jh)
+ dT = helm_T(jh+1)-tmp
+ y = (T-tmp)/dT
+ omy = rp1-y
+
+ drho2 = drho*drho
+ idT = rp1/dT
+
+ loc_eos1 = helm_table_var(1,ih,jh)
+ loc_eos2 = helm_table_var(1,ih+1,jh)
+ loc_eos3 = helm_table_var(1,ih,jh+1)
+ loc_eos4 = helm_table_var(1,ih+1,jh+1)
+ loc_eos5 = helm_table_var(2,ih,jh)
+ loc_eos6 = helm_table_var(2,ih+1,jh)
+ loc_eos7 = helm_table_var(2,ih,jh+1)
+ loc_eos8 = helm_table_var(2,ih+1,jh+1)
+ loc_eos9 = helm_table_var(3,ih,jh)
+ loc_eos10 = helm_table_var(3,ih+1,jh)
+ loc_eos11 = helm_table_var(3,ih,jh+1)
+ loc_eos12 = helm_table_var(3,ih+1,jh+1)
+ loc_eos13 = helm_table_var(4,ih,jh)
+ loc_eos14 = helm_table_var(4,ih+1,jh)
+ loc_eos15 = helm_table_var(4,ih,jh+1)
+ loc_eos16 = helm_table_var(4,ih+1,jh+1)
+ loc_eos17 = helm_table_var(5,ih,jh)
+ loc_eos18 = helm_table_var(5,ih+1,jh)
+ loc_eos19 = helm_table_var(5,ih,jh+1)
+ loc_eos20 = helm_table_var(5,ih+1,jh+1)
+ loc_eos21 = helm_table_var(6,ih,jh)
+ loc_eos22 = helm_table_var(6,ih+1,jh)
+ loc_eos23 = helm_table_var(6,ih,jh+1)
+ loc_eos24 = helm_table_var(6,ih+1,jh+1)
+ loc_eos25 = helm_table_var(7,ih,jh)
+ loc_eos26 = helm_table_var(7,ih+1,jh)
+ loc_eos27 = helm_table_var(7,ih,jh+1)
+ loc_eos28 = helm_table_var(7,ih+1,jh+1)
+ loc_eos29 = helm_table_var(8,ih,jh)
+ loc_eos30 = helm_table_var(8,ih+1,jh)
+ loc_eos31 = helm_table_var(8,ih,jh+1)
+ loc_eos32 = helm_table_var(8,ih+1,jh+1)
+ loc_eos33 = helm_table_var(9,ih,jh)
+ loc_eos34 = helm_table_var(9,ih+1,jh)
+ loc_eos35 = helm_table_var(9,ih,jh+1)
+ loc_eos36 = helm_table_var(9,ih+1,jh+1)
+
+ x2 = x*x
+ x3 = x2*x
+ x4 = x3*x
+ x5 = x4*x
+ p0r = -rp6*x5 + rp15*x4 - rp10*x3 + rp1
+ p1r = (-rp3*x5 + rp8*x4 - rp6*x3 + x)*drho
+ p2r = (rph*(-x5 + rp3*x4 - rp3*x3 + x2))*drho2
+
+ omx2 = omx*omx
+ omx3 = omx2*omx
+ omx4 = omx3*omx
+ omx5 = omx4*omx
+ p0mr = -rp6*omx5 + rp15*omx4 - rp10*omx3 + rp1
+ p1mr =  (rp3*omx5 - rp8*omx4 + rp6*omx3 - omx)*drho
+ p2mr =  (rph*(-omx5 + rp3*omx4 - rp3*omx3 + omx2))*drho2
+
+ y2 = y*y
+ y3 = y2*y
+ y4 = y3*y
+
+ omy2 = omy*omy
+ omy3 = omy2*omy
+ omy4 = omy3*omy
+
+ dp0t =  (-rp30*y4 + rp60*y3 - rp30*y2)*idT
+ dp1t =  (-rp15*y4 + rp32*y3 - rp18*y2 + rp1)
+ dp2t =  (rph*(-rp5*y4 + rp12*y3 - rp9*y2 + rp2*y))*dT
+
+ dp0mt = -(-rp30*omy4 + rp60*omy3 - rp30*omy2)*idT
+ dp1mt =  (-rp15*omy4 + rp32*omy3 - rp18*omy2 + rp1)
+ dp2mt = -(rph*(-rp5*omy4 + rp12*omy3 - rp9*omy2 + rp2*omy))*dT
+
+ df_dT = &
+ loc_eos1*p0r*dp0t + &
+ loc_eos2*p0mr*dp0t + &
+ loc_eos3*p0r*dp0mt + &
+ loc_eos4*p0mr*dp0mt + &
+ loc_eos5*p0r*dp1t + &
+ loc_eos6*p0mr*dp1t + &
+ loc_eos7*p0r*dp1mt + &
+ loc_eos8*p0mr*dp1mt + &
+ loc_eos9*p0r*dp2t + &
+ loc_eos10*p0mr*dp2t + &
+ loc_eos11*p0r*dp2mt + &
+ loc_eos12*p0mr*dp2mt + &
+ loc_eos13*p1r*dp0t + &
+ loc_eos14*p1mr*dp0t + &
+ loc_eos15*p1r*dp0mt + &
+ loc_eos16*p1mr*dp0mt + &
+ loc_eos17*p2r*dp0t + &
+ loc_eos18*p2mr*dp0t + &
+ loc_eos19*p2r*dp0mt + &
+ loc_eos20*p2mr*dp0mt + &
+ loc_eos21*p1r*dp1t + &
+ loc_eos22*p1mr*dp1t + &
+ loc_eos23*p1r*dp1mt + &
+ loc_eos24*p1mr*dp1mt + &
+ loc_eos25*p2r*dp1t + &
+ loc_eos26*p2mr*dp1t + &
+ loc_eos27*p2r*dp1mt + &
+ loc_eos28*p2mr*dp1mt + &
+ loc_eos29*p1r*dp2t + &
+ loc_eos30*p1mr*dp2t + &
+ loc_eos31*p1r*dp2mt + &
+ loc_eos32*p1mr*dp2mt + &
+ loc_eos33*p2r*dp2t + &
+ loc_eos34*p2mr*dp2t + &
+ loc_eos35*p2r*dp2mt + &
+ loc_eos36*p2mr*dp2mt
+
+ sep = -Ye*df_dT
+
+ tmp = rp1/abar
+ Pid = CONST_RGAS*rho*T*tmp
+ Eid = rpoh*CONST_RGAS*T*tmp
+ lswot15 = rpoh*log((rp2*CONST_PI*CONST_MU*CONST_KB)/(CONST_H*CONST_H))
+ ywot = log(abar*abar*sqrt(abar)/(rho*CONST_AV))
+ y = ywot+lswot15+rpoh*log(T)
+ sid = (Pid/rho+Eid)/T + CONST_KB*CONST_AV*tmp*y
+
+ T4 = T*T*T*T
+ Prad = CONST_RAD*T4*othird
+ Erad = CONST_RAD*T4/rho
+ srad = (Prad/rho+Erad)/T
+
+ stot = sid + srad + sep
+
+#ifdef USE_COULOMB_CORRECTIONS
+
+ xni = CONST_AV*tmp*rho
+ ktinv = rp1/(CONST_KB*T)
+ z = fthirds*CONST_PI
+ s = z*xni
+ lami = rp1/s**othird
+ inv_lami = rp1/lami
+ plasg = zbar*zbar*CONST_QE*CONST_QE*ktinv*inv_lami
+
+ if (plasg>=rp1) then
+
+   x        = plasg**oquart
+   y        = CONST_AV*tmp*CONST_KB
+   stot = stot  &
+   -y * (rp3*cc_b1*x-rp5*cc_c1/x+cc_d1*(log(plasg)-rp1)-cc_e1)
+
+ else
+
+   x        = plasg*sqrt(plasg)
+   y        = plasg**cc_b2
+   stot = stot &
+   -CONST_AV*CONST_KB*tmp*(cc_c2*x-cc_a2*(cc_b2-rp1)/cc_b2*y)
+
+ endif 
+
+#endif
+
+ end subroutine helm_rhoT_given_entropy
+
  subroutine helm_rhoT_given_full(rho,T,abar,zbar,P,E,sound,cv)
  real(kind=rp), intent(in) :: rho,T,abar,zbar
  real(kind=rp), intent(inout) :: P,E,sound,cv
@@ -24672,6 +25898,198 @@ contains
  sound = CONST_C*sqrt(gam1/z)
 
  end subroutine pig_rhoT_given_full
+
+ subroutine pig_rhoT_given_entropy(rho,T,stot)
+ real(kind=rp), intent(in) :: rho,T
+ real(kind=rp), intent(inout) :: stot
+
+ real(kind=rp) :: &
+ loc_eos1, &
+ loc_eos2, &
+ loc_eos3, &
+ loc_eos4, &
+ loc_eos5, &
+ loc_eos6, &
+ loc_eos7, &
+ loc_eos8, &
+ loc_eos9, &
+ loc_eos10, &
+ loc_eos11, &
+ loc_eos12, &
+ loc_eos13, &
+ loc_eos14, &
+ loc_eos15, &
+ loc_eos16, &
+ loc_eos17, &
+ loc_eos18, &
+ loc_eos19, &
+ loc_eos20, &
+ loc_eos21, &
+ loc_eos22, &
+ loc_eos23, &
+ loc_eos24, &
+ loc_eos25, &
+ loc_eos26, &
+ loc_eos27, &
+ loc_eos28, &
+ loc_eos29, &
+ loc_eos30, &
+ loc_eos31, &
+ loc_eos32, &
+ loc_eos33, &
+ loc_eos34, &
+ loc_eos35, &
+ loc_eos36
+
+ integer :: ih,jh
+
+ real(kind=rp) :: df_dT
+ real(kind=rp) :: T4,Ye,rhos
+
+ real(kind=rp) :: x,y,drho,drho2,dT,tmp
+ real(kind=rp) :: p0r,p0mr,p1r,p1mr,p2r,p2mr,idT
+ real(kind=rp) :: dp0t,dp1t,dp2t,dp0mt,dp1mt,dp2mt
+ real(kind=rp) :: omx,omy
+ real(kind=rp) :: x2,x3,x4,x5,y2,y3,y4,omx2,omx3,omx4,omx5,omy2,omy3,omy4
+
+ real(kind=rp) :: Erad,Prad,sgas,srad
+
+ Ye = rp1
+ rhos = rho*Ye
+
+ ih = int((log10(rhos)-log10(pig_rho(1)))/pig_drho) + 1
+ jh = int((log10(T)-log10(pig_T(1)))/pig_dT) + 1
+
+ tmp = pig_rho(ih)
+ drho = pig_rho(ih+1)-tmp
+ x = (rhos-tmp)/drho
+ omx = rp1-x
+
+ tmp = pig_T(jh)
+ dT = pig_T(jh+1)-tmp
+ y = (T-tmp)/dT
+ omy = rp1-y
+
+ drho2 = drho*drho
+ idT = rp1/dT
+
+ loc_eos1 = pig_table_var(1,ih,jh)
+ loc_eos2 = pig_table_var(1,ih+1,jh)
+ loc_eos3 = pig_table_var(1,ih,jh+1)
+ loc_eos4 = pig_table_var(1,ih+1,jh+1)
+ loc_eos5 = pig_table_var(2,ih,jh)
+ loc_eos6 = pig_table_var(2,ih+1,jh)
+ loc_eos7 = pig_table_var(2,ih,jh+1)
+ loc_eos8 = pig_table_var(2,ih+1,jh+1)
+ loc_eos9 = pig_table_var(3,ih,jh)
+ loc_eos10 = pig_table_var(3,ih+1,jh)
+ loc_eos11 = pig_table_var(3,ih,jh+1)
+ loc_eos12 = pig_table_var(3,ih+1,jh+1)
+ loc_eos13 = pig_table_var(4,ih,jh)
+ loc_eos14 = pig_table_var(4,ih+1,jh)
+ loc_eos15 = pig_table_var(4,ih,jh+1)
+ loc_eos16 = pig_table_var(4,ih+1,jh+1)
+ loc_eos17 = pig_table_var(5,ih,jh)
+ loc_eos18 = pig_table_var(5,ih+1,jh)
+ loc_eos19 = pig_table_var(5,ih,jh+1)
+ loc_eos20 = pig_table_var(5,ih+1,jh+1)
+ loc_eos21 = pig_table_var(6,ih,jh)
+ loc_eos22 = pig_table_var(6,ih+1,jh)
+ loc_eos23 = pig_table_var(6,ih,jh+1)
+ loc_eos24 = pig_table_var(6,ih+1,jh+1)
+ loc_eos25 = pig_table_var(7,ih,jh)
+ loc_eos26 = pig_table_var(7,ih+1,jh)
+ loc_eos27 = pig_table_var(7,ih,jh+1)
+ loc_eos28 = pig_table_var(7,ih+1,jh+1)
+ loc_eos29 = pig_table_var(8,ih,jh)
+ loc_eos30 = pig_table_var(8,ih+1,jh)
+ loc_eos31 = pig_table_var(8,ih,jh+1)
+ loc_eos32 = pig_table_var(8,ih+1,jh+1)
+ loc_eos33 = pig_table_var(9,ih,jh)
+ loc_eos34 = pig_table_var(9,ih+1,jh)
+ loc_eos35 = pig_table_var(9,ih,jh+1)
+ loc_eos36 = pig_table_var(9,ih+1,jh+1)
+
+ x2 = x*x
+ x3 = x2*x
+ x4 = x3*x
+ x5 = x4*x
+ p0r = -rp6*x5 + rp15*x4 - rp10*x3 + rp1
+ p1r = (-rp3*x5 + rp8*x4 - rp6*x3 + x)*drho
+ p2r = (rph*(-x5 + rp3*x4 - rp3*x3 + x2))*drho2
+
+ omx2 = omx*omx
+ omx3 = omx2*omx
+ omx4 = omx3*omx
+ omx5 = omx4*omx
+ p0mr = -rp6*omx5 + rp15*omx4 - rp10*omx3 + rp1
+ p1mr =  (rp3*omx5 - rp8*omx4 + rp6*omx3 - omx)*drho
+ p2mr =  (rph*(-omx5 + rp3*omx4 - rp3*omx3 + omx2))*drho2
+
+ y2 = y*y
+ y3 = y2*y
+ y4 = y3*y
+
+ omy2 = omy*omy
+ omy3 = omy2*omy
+ omy4 = omy3*omy
+
+ dp0t =  (-rp30*y4 + rp60*y3 - rp30*y2)*idT
+ dp1t =  (-rp15*y4 + rp32*y3 - rp18*y2 + rp1)
+ dp2t =  (rph*(-rp5*y4 + rp12*y3 - rp9*y2 + rp2*y))*dT
+
+ dp0mt = -(-rp30*omy4 + rp60*omy3 - rp30*omy2)*idT
+ dp1mt =  (-rp15*omy4 + rp32*omy3 - rp18*omy2 + rp1)
+ dp2mt = -(rph*(-rp5*omy4 + rp12*omy3 - rp9*omy2 + rp2*omy))*dT
+
+ df_dT = &
+ loc_eos1*p0r*dp0t + &
+ loc_eos2*p0mr*dp0t + &
+ loc_eos3*p0r*dp0mt + &
+ loc_eos4*p0mr*dp0mt + &
+ loc_eos5*p0r*dp1t + &
+ loc_eos6*p0mr*dp1t + &
+ loc_eos7*p0r*dp1mt + &
+ loc_eos8*p0mr*dp1mt + &
+ loc_eos9*p0r*dp2t + &
+ loc_eos10*p0mr*dp2t + &
+ loc_eos11*p0r*dp2mt + &
+ loc_eos12*p0mr*dp2mt + &
+ loc_eos13*p1r*dp0t + &
+ loc_eos14*p1mr*dp0t + &
+ loc_eos15*p1r*dp0mt + &
+ loc_eos16*p1mr*dp0mt + &
+ loc_eos17*p2r*dp0t + &
+ loc_eos18*p2mr*dp0t + &
+ loc_eos19*p2r*dp0mt + &
+ loc_eos20*p2mr*dp0mt + &
+ loc_eos21*p1r*dp1t + &
+ loc_eos22*p1mr*dp1t + &
+ loc_eos23*p1r*dp1mt + &
+ loc_eos24*p1mr*dp1mt + &
+ loc_eos25*p2r*dp1t + &
+ loc_eos26*p2mr*dp1t + &
+ loc_eos27*p2r*dp1mt + &
+ loc_eos28*p2mr*dp1mt + &
+ loc_eos29*p1r*dp2t + &
+ loc_eos30*p1mr*dp2t + &
+ loc_eos31*p1r*dp2mt + &
+ loc_eos32*p1mr*dp2mt + &
+ loc_eos33*p2r*dp2t + &
+ loc_eos34*p2mr*dp2t + &
+ loc_eos35*p2r*dp2mt + &
+ loc_eos36*p2mr*dp2mt
+
+ sgas = -Ye*df_dT
+
+ T4 = T*T*T*T
+ Prad = CONST_RAD*T4*othird
+ Erad = CONST_RAD*T4/rho
+ srad = (Prad/rho+Erad)/T
+
+ stot = sgas + srad 
+
+ end subroutine pig_rhoT_given_entropy
 
  subroutine pig_rhoT_given1(rho,T,P,dP_dT,return_dP_dT)
  real(kind=rp), intent(in) :: rho,T

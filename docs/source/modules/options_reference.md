@@ -68,7 +68,7 @@ For `GEOMETRY_CUBED_SPHERE`, the following parameters must be defined at compile
 ### 3. Physics modules
 | Option | Meaning |
 | --- | --- |
-| `COROTATING_FRAME `| Solves the governing equations in the co-rotating frame defined by the angular frequency vector `lgrid%omega_rot(1:3)` specified in the user in `app.F90`. |
+| `COROTATING_FRAME` | Solves the governing equations in the co-rotating frame defined by the angular frequency vector `lgrid%omega_rot(1:3)` specified by the user in `app.F90`. |
 | `USE_CONSTANT_ACCELERATION` | Applies a constant-acceleration body force to the system. In `app.F90`, the grid components of the acceleration vector must be defined in `lgrid%acc(1:sdims_make)`. |
 | `USE_MHD` | Enables ideal magnetohydrodynamics (solved with the CT-contact algorithm of [Gardiner+05](https://ui.adsabs.harvard.edu/abs/2005JCoPh.205..509G/abstract)). In `app.F90`, the face-centered magnetic field components must be filled, e.g., `lgrid%b_x1(i,j,k)` etc. |
 | `Mach_ct_make=1e-6_rp` | Minimum local Mach number to enable the (upwind) contact version of constrained transport. |
@@ -83,6 +83,7 @@ For `GEOMETRY_CUBED_SPHERE`, the following parameters must be defined at compile
 | `THERMAL_DIFFUSION_STS` | Enables radiative diffusion solved with the RKL2 super time stepper of [Meyer+14](https://ui.adsabs.harvard.edu/abs/2014JCoPh.257..594M/abstract) (see, Sect. 2.10). The cell-centered opacity must be filled in `app.F90` as `lgrid%kappa(i,j,k)`. |
 | `USE_EDOT` | Enables time independent heating. The heating rate per unit volume (`lgrid%edot(i,j,k)`) must be provided in `app.F90` at every cell center. |
 | `USE_VARIABLE_EDOT` | Switches on a fixed heating source after `t=t_start_edot_make` |
+| `VARIABLE_EDOT` | Makes `USE_EDOT` time-dependent by applying `lgrid%edot` only for `t >= t_start_edot_make`. |
 | `t_start_edot_make=1.0_rp` | Time after which the heating source is activated. |
 | `USE_NEULOSS` | Enables nonnuclear neutrino cooling, computed according to [Itoh+1996](https://ui.adsabs.harvard.edu/abs/1996ApJS..102..411I/abstract) (adapted from Frank Timmes' [cococubed](https://cococubed.com/code_pages/nuloss.shtml)). |
 
@@ -111,7 +112,18 @@ For `GEOMETRY_CUBED_SPHERE`, the following parameters must be defined at compile
 | `X2U_DIODE` | Diode boundary conditions at the upper x2 boundary. |
 | `X3L_DIODE` | Diode boundary conditions at the lower x3 boundary. |
 | `X3U_DIODE` | Diode boundary conditions at the upper x3 boundary. |
+| `X1L_BFIELD_PMC` | For reflective MHD boundaries, applies pseudo-magnetic-conductor treatment at the lower x1 boundary. |
+| `X1U_BFIELD_PMC` | For reflective MHD boundaries, applies pseudo-magnetic-conductor treatment at the upper x1 boundary. |
+| `X2L_BFIELD_PMC` | For reflective MHD boundaries, applies pseudo-magnetic-conductor treatment at the lower x2 boundary. |
+| `X2U_BFIELD_PMC` | For reflective MHD boundaries, applies pseudo-magnetic-conductor treatment at the upper x2 boundary. |
+| `X3L_BFIELD_PMC` | For reflective MHD boundaries, applies pseudo-magnetic-conductor treatment at the lower x3 boundary. |
+| `X3U_BFIELD_PMC` | For reflective MHD boundaries, applies pseudo-magnetic-conductor treatment at the upper x3 boundary. |
 | `FIX_TEMPERATURE_AT_X1L` | Fixes the temperature (in this example) at the lower x1 boundary only for the thermal diffusion step. If `USE_WB` is enabled, the temperature at the boundaries is fixed using the equilibrium state, otherwise the temperature must be provided at each lower and upper domain boundary by filling the 3-element arrays (1 element per spatial dimension) `lgrid%Tl(:)` and `grid%Tu(:)`, respectively. |
+| `FIX_TEMPERATURE_AT_X1U` | Same as `FIX_TEMPERATURE_AT_X1L`, but for the upper x1 boundary. |
+| `FIX_TEMPERATURE_AT_X2L` | Same as `FIX_TEMPERATURE_AT_X1L`, but for the lower x2 boundary. |
+| `FIX_TEMPERATURE_AT_X2U` | Same as `FIX_TEMPERATURE_AT_X1L`, but for the upper x2 boundary. |
+| `FIX_TEMPERATURE_AT_X3L` | Same as `FIX_TEMPERATURE_AT_X1L`, but for the lower x3 boundary. |
+| `FIX_TEMPERATURE_AT_X3U` | Same as `FIX_TEMPERATURE_AT_X1L`, but for the upper x3 boundary. |
 |`USE_INTERNAL_BOUNDARIES` | Imposes reflecting boundary conditions at solid interfaces embedded in the numerical domain. This option only works for Cartesian grids and requires `lgrid%is_solid(i,j,k)` to be filled at every cell center in `app.F90`, including the ghost cells (`is_solid=1` for solid cells, `is_solid=0` otherwise). |
 
 With reflecting boundary conditions, the option, e.g., `X1L_BFIELD_PMC` imposes zero gradient for the normal component and zero for the transverse component of the field.
@@ -282,6 +294,8 @@ For `LHLL-type` solvers, if both low-Mach and supersonic flows need to be captur
 | `info_terminal_rate_make=100000` | Frequency at which the simulation time, cycle, and time step are written to terminal. Further information on the gravity solver or the thermal diffusion step (if used) is also shown. |
 | `dt_restart_make=100.0_rp` | Dumps a restart file every `dt_restart_make` of wall clock time (in seconds). |
 | `RESTART_LAST` | Restarts the simulation from the restart file indicated in the last line of `restart_info.txt` (by default, the last restart). The restart files are saved in the `restarts` directory, which is automatically created at compile time. |
+| `SAVE_RPROFS` | Dumps horizontal Reynolds averages as functions of radius to a separate hdf5 output channel (for all grids except `GRID_2D_CYLINDRICAL`). |
+| `rprofs_dt_dump_make=1.0_rp` | Output cadence of the horizontal averages in units of simulation time. |
 | `SAVE_PLANES` | Dumps 2D slices (planes) to a separate hdf5 output channel (only if `sdims_make=3`). In `app.F90`, the indices of the slices must be provided as `lgrid%planes_x1_index(<plane index>) = <x1 index>` and analogously for slices in the other directions. Planes are saved in the `planes` directory, which is automatically created at compile time. |
 | `nplanes_x1_make=2` | Number of `(x2,x3)` planes to be saved to output. |
 | `nplanes_x2_make=4` | Number of `(x1,x3)` planes to be saved to output. |

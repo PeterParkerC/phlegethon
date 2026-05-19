@@ -378,6 +378,7 @@ rp = h5rprof(
     0,
     path="./rprofs",
     path_to_grids="./grids",
+    eval_eos=True,
     mode='i',
     data_path="../../data/",
     helm_table='helm_table_timmes_x2.dat',
@@ -423,7 +424,12 @@ Minimal usage:
 ```python
 from phloutput import ra_iles
 
-dd = ra_iles(0, 50, delta=1, path="./rprofs", path_to_grids="./grids")
+dd = ra_iles(
+    0, 50, delta=1,
+    path="./rprofs",
+    path_to_grids="./grids",
+    filename="ra_iles_avg.npz",
+)
 ```
 
 Useful returned entries:

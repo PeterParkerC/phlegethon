@@ -3076,11 +3076,11 @@ contains
 
 #ifdef ADVECT_SPECIES
       call hdf5_annotate_array_rp(h5,id,"A",lgrid%A) 
-      call hdf5_annotate_array_rp(h5,id,"Z",lgrid%Z) 
+      call hdf5_annotate_array_rp(h5,id,"Z",lgrid%Z)
+      call hdf5_annotate_array_string(id,"name_species",lgrid%name_species,nspecies)
 #endif
 
 #ifdef USE_NUCLEAR_NETWORK
-      call hdf5_annotate_array_string(id,"name_species",lgrid%name_species,nspecies)
       call hdf5_annotate_array_string(id,"name_reacs",lgrid%name_reacs,nreacs)
 #endif 
 
@@ -19535,7 +19535,7 @@ contains
   ov     = 0.0_rp
   zbar   = 0.0_rp
   ytot1  = 0.0_rp
-  w      = 0.0_rp
+  w(:)   = 0.0_rp
 
 ! -------------------------------------------------------------------
 ! composition

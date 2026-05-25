@@ -1779,17 +1779,17 @@ class h5grid:
          self.A = np.array(self.grid0['A'][()])
          self.Z = np.array(self.grid0['Z'][()])
          self.nspecies = len(self.A)
+         self.name_species = [s.decode('utf-8') for s in self.grid0.attrs['name_species']]
         except:
          self.A = 'mass numbers not available'
          self.Z = 'charge numbers not available'
          self.nspecies = 'species not available'
+         self.name_species = 'species not avaialble'
 
         try:
-          self.name_species = [s.decode('utf-8') for s in self.grid0.attrs['name_species']]
           self.name_reacs = [s.decode('utf-8') for s in self.grid0.attrs['name_reacs']]
           self.nreacs = len(self.name_reacs)
         except:
-          self.name_species = 'species not available'
           self.name_reacs = 'nuclear reactions not available'
 
         try: 

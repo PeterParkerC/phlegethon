@@ -7960,6 +7960,8 @@ contains
      inv_dl = lgrid%inv_dx1
      lgrid%ru%dir=1
 
+#ifndef USE_1D
+
 #ifdef USE_INTERNAL_BOUNDARIES
 
      do iv=1,nvars
@@ -9103,6 +9105,20 @@ contains
 
       end do
      end do
+
+#else
+
+     do k=lx3,ux3  
+      do j=lx2,ux2
+       do i=lx1,ux1
+         do iv=1,nvars
+          lgrid%res(iv,i,j,k) = rp0
+         end do
+       end do 
+      end do 
+     end do 
+ 
+#endif
 
      inv_dl = lgrid%inv_dx2
      lgrid%ru%dir=2
@@ -13165,6 +13181,8 @@ contains
 
      inv_dl = lgrid%inv_dx1
 
+#ifndef USE_1D
+
      do k=lx3,ux3
       do j=lx2,ux2
 
@@ -13245,6 +13263,8 @@ contains
 
       end do
      end do
+
+#endif
 
 #ifdef USE_INTERNAL_BOUNDARIES
 
@@ -20482,6 +20502,8 @@ contains
 
 #endif
 
+#ifndef USE_1D
+
   do k=lx3,ux3
    do j=lx2,ux2
 
@@ -20560,6 +20582,8 @@ contains
    end do
   end do
  
+#endif
+
   inv_dl = lgrid%inv_dx2
 
 #ifdef USE_INTERNAL_BOUNDARIES
@@ -20674,6 +20698,10 @@ contains
 #ifdef NONUNIFORM_RADIAL_NODES
      inv_dl = rp1/(lgrid%coords_x2(2,i,j+1,k)-lgrid%coords_x2(2,i,j,k))
 #endif
+#endif
+
+#ifdef USE_1D
+     lgrid%Me_jm1(i,j,k) = rp0
 #endif
 
 #ifdef GEOMETRY_2D_POLAR

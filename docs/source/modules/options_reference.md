@@ -27,6 +27,7 @@ Some of the options refer to sections, equations, or tables of the [instrument p
 | Option | Meaning |
 | --- | --- |
 | `sdims_make=3` | Number of spatial dimensions (allowed values are `2` or `3`). |
+|  USE_1D | Skips computation of fluxes in the x1 direction (works only with sdims_make=2 and Cartesian grids). | 
 | `nx1_make=64`  | Global number of grid cells in the `x1` direction. |
 | `nx2_make=64`  | Global number of grid cells in the `x2` direction. |
 | `nx3_make=64`  | Global number of grid cells in the `x3` direction. |

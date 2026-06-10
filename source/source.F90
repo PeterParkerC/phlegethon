@@ -8000,6 +8000,10 @@ contains
           lgrid%gammaf(i_gammac,i-1,j,k) = lgrid%gammaf(i_gammac,i,j,k)
 #endif
 
+#ifdef HSE_BCS
+          lgrid%prim(i_p,i-1,j,k)=lgrid%prim(i_p,i,j,k)-lgrid%prim(i_rho,i,j,k)*lgrid%grav(1,i,j,k)*lgrid%dx1
+#endif
+
           if((lgrid%is_solid(i+1,j,k)==0) .and. (i>=lx1)) then
 
            do iv=1,nvars
@@ -8016,6 +8020,10 @@ contains
 #ifdef USE_FASTEOS
            lgrid%gammaf(i_gammae,i-2,j,k) = lgrid%gammaf(i_gammae,i+1,j,k)
            lgrid%gammaf(i_gammac,i-2,j,k) = lgrid%gammaf(i_gammac,i+1,j,k)
+#endif
+
+#ifdef HSE_BCS
+           lgrid%prim(i_p,i-2,j,k)=lgrid%prim(i_p,i,j,k)-rp2*lgrid%prim(i_rho,i,j,k)*lgrid%grav(1,i,j,k)*lgrid%dx1
 #endif
 
           endif
@@ -8040,6 +8048,10 @@ contains
           lgrid%gammaf(i_gammac,i+1,j,k) = lgrid%gammaf(i_gammac,i,j,k)
 #endif
 
+#ifdef HSE_BCS
+          lgrid%prim(i_p,i+1,j,k)=lgrid%prim(i_p,i,j,k)+lgrid%prim(i_rho,i,j,k)*lgrid%grav(1,i,j,k)*lgrid%dx1
+#endif
+
           if((lgrid%is_solid(i-1,j,k)==0) .and. (i<=ux1)) then
 
            do iv=1,nvars
@@ -8056,6 +8068,10 @@ contains
 #ifdef USE_FASTEOS
            lgrid%gammaf(i_gammae,i+2,j,k) = lgrid%gammaf(i_gammae,i-1,j,k)
            lgrid%gammaf(i_gammac,i+2,j,k) = lgrid%gammaf(i_gammac,i-1,j,k)
+#endif
+
+#ifdef HSE_BCS
+           lgrid%prim(i_p,i+2,j,k)=lgrid%prim(i_p,i,j,k)+rp2*lgrid%prim(i_rho,i,j,k)*lgrid%grav(1,i,j,k)*lgrid%dx1
 #endif
 
           endif
@@ -9147,6 +9163,10 @@ contains
           lgrid%gammaf(i_gammac,i,j-1,k) = lgrid%gammaf(i_gammac,i,j,k)
 #endif
 
+#ifdef HSE_BCS
+          lgrid%prim(i_p,i,j-1,k)=lgrid%prim(i_p,i,j,k)-lgrid%prim(i_rho,i,j,k)*lgrid%grav(2,i,j,k)*lgrid%dx2
+#endif
+
           if((lgrid%is_solid(i,j+1,k)==0) .and. (j>=lx2)) then
 
            do iv=1,nvars
@@ -9163,6 +9183,10 @@ contains
 #ifdef USE_FASTEOS
            lgrid%gammaf(i_gammae,i,j-2,k) = lgrid%gammaf(i_gammae,i,j+1,k)
            lgrid%gammaf(i_gammac,i,j-2,k) = lgrid%gammaf(i_gammac,i,j+1,k)
+#endif
+
+#ifdef HSE_BCS
+           lgrid%prim(i_p,i,j-2,k)=lgrid%prim(i_p,i,j,k)-rp2*lgrid%prim(i_rho,i,j,k)*lgrid%grav(2,i,j,k)*lgrid%dx2
 #endif
 
           endif
@@ -9187,6 +9211,10 @@ contains
           lgrid%gammaf(i_gammac,i,j+1,k) = lgrid%gammaf(i_gammac,i,j,k)
 #endif
 
+#ifdef HSE_BCS
+          lgrid%prim(i_p,i,j+1,k)=lgrid%prim(i_p,i,j,k)+lgrid%prim(i_rho,i,j,k)*lgrid%grav(2,i,j,k)*lgrid%dx2
+#endif
+
           if((lgrid%is_solid(i,j-1,k)==0) .and. (j<=ux2)) then
 
            do iv=1,nvars
@@ -9203,6 +9231,10 @@ contains
 #ifdef USE_FASTEOS
            lgrid%gammaf(i_gammae,i,j+2,k) = lgrid%gammaf(i_gammae,i,j-1,k)
            lgrid%gammaf(i_gammac,i,j+2,k) = lgrid%gammaf(i_gammac,i,j-1,k)
+#endif
+
+#ifdef HSE_BCS
+           lgrid%prim(i_p,i,j+2,k)=lgrid%prim(i_p,i,j,k)+rp2*lgrid%prim(i_rho,i,j,k)*lgrid%grav(2,i,j,k)*lgrid%dx2
 #endif
 
           endif
@@ -10345,6 +10377,10 @@ contains
           lgrid%gammaf(i_gammac,i,j,k-1) = lgrid%gammaf(i_gammac,i,j,k)
 #endif
 
+#ifdef HSE_BCS
+          lgrid%prim(i_p,i,j,k-1)=lgrid%prim(i_p,i,j,k)-lgrid%prim(i_rho,i,j,k)*lgrid%grav(3,i,j,k)*lgrid%dx3
+#endif
+
           if((lgrid%is_solid(i,j,k+1)==0) .and. (k>=lx3)) then
 
            do iv=1,nvars
@@ -10361,6 +10397,10 @@ contains
 #ifdef USE_FASTEOS
            lgrid%gammaf(i_gammae,i,j,k-2) = lgrid%gammaf(i_gammae,i,j,k+1)
            lgrid%gammaf(i_gammac,i,j,k-2) = lgrid%gammaf(i_gammac,i,j,k+1)
+#endif
+
+#ifdef HSE_BCS
+           lgrid%prim(i_p,i,j,k-2)=lgrid%prim(i_p,i,j,k)-rp2*lgrid%prim(i_rho,i,j,k)*lgrid%grav(3,i,j,k)*lgrid%dx3
 #endif
 
           endif
@@ -10385,6 +10425,10 @@ contains
           lgrid%gammaf(i_gammac,i,j,k+1) = lgrid%gammaf(i_gammac,i,j,k)
 #endif
 
+#ifdef HSE_BCS
+          lgrid%prim(i_p,i,j,k+1)=lgrid%prim(i_p,i,j,k)+lgrid%prim(i_rho,i,j,k)*lgrid%grav(3,i,j,k)*lgrid%dx3
+#endif
+
           if((lgrid%is_solid(i,j,k-1)==0) .and. (k<=ux3)) then
 
            do iv=1,nvars
@@ -10401,6 +10445,10 @@ contains
 #ifdef USE_FASTEOS
            lgrid%gammaf(i_gammae,i,j,k+2) = lgrid%gammaf(i_gammae,i,j,k-1)
            lgrid%gammaf(i_gammac,i,j,k+2) = lgrid%gammaf(i_gammac,i,j,k-1)
+#endif
+
+#ifdef HSE_BCS
+           lgrid%prim(i_p,i,j,k+2)=lgrid%prim(i_p,i,j,k)+rp2*lgrid%prim(i_rho,i,j,k)*lgrid%grav(3,i,j,k)*lgrid%dx3
 #endif
 
           endif
@@ -17401,7 +17449,7 @@ contains
   real(kind=rp) ::  rho, x, y, z, r, dV, dm, mass(1), mass_comm(1), dx, dy, dz
   real(kind=rp), dimension(3) :: rcom, rcom_comm, dr
 
-  real(kind=rp) :: res_L2(1),phicc,res_L2(1)_comm
+  real(kind=rp) :: res_L2(1),phicc,res_L2_comm(1)
 
   integer :: iter
 

@@ -8001,7 +8001,9 @@ contains
 #endif
 
 #ifdef HSE_BCS
-          lgrid%prim(i_p,i-1,j,k)=lgrid%prim(i_p,i,j,k)-lgrid%prim(i_rho,i,j,k)*lgrid%grav(1,i,j,k)*lgrid%dx1
+          rho = lgrid%prim(i_rho,i,j,k)
+          lgrid%prim(i_p,i-1,j,k)=lgrid%prim(i_p,i,j,k)-rho*lgrid%grav(1,i,j,k)*lgrid%dx1
+          lgrid%prim(i_rho,i-1,j,k) = rp2*rho-lgrid%prim(i_rho,i+1,j,k)
 #endif
 
           if((lgrid%is_solid(i+1,j,k)==0) .and. (i>=lx1)) then
@@ -8023,7 +8025,9 @@ contains
 #endif
 
 #ifdef HSE_BCS
-           lgrid%prim(i_p,i-2,j,k)=lgrid%prim(i_p,i,j,k)-rp2*lgrid%prim(i_rho,i,j,k)*lgrid%grav(1,i,j,k)*lgrid%dx1
+           rho = lgrid%prim(i_rho,i,j,k)
+           lgrid%prim(i_p,i-2,j,k)=lgrid%prim(i_p,i,j,k)-rp2*rho*lgrid%grav(1,i,j,k)*lgrid%dx1
+           lgrid%prim(i_rho,i-2,j,k) = rp3*rho-rp2*lgrid%prim(i_rho,i+1,j,k)
 #endif
 
           endif
@@ -8049,7 +8053,9 @@ contains
 #endif
 
 #ifdef HSE_BCS
-          lgrid%prim(i_p,i+1,j,k)=lgrid%prim(i_p,i,j,k)+lgrid%prim(i_rho,i,j,k)*lgrid%grav(1,i,j,k)*lgrid%dx1
+          rho = lgrid%prim(i_rho,i,j,k)
+          lgrid%prim(i_p,i+1,j,k)=lgrid%prim(i_p,i,j,k)+rho*lgrid%grav(1,i,j,k)*lgrid%dx1
+          lgrid%prim(i_rho,i+1,j,k) = rp2*rho-lgrid%prim(i_rho,i-1,j,k)
 #endif
 
           if((lgrid%is_solid(i-1,j,k)==0) .and. (i<=ux1)) then
@@ -8071,7 +8077,9 @@ contains
 #endif
 
 #ifdef HSE_BCS
-           lgrid%prim(i_p,i+2,j,k)=lgrid%prim(i_p,i,j,k)+rp2*lgrid%prim(i_rho,i,j,k)*lgrid%grav(1,i,j,k)*lgrid%dx1
+           rho = lgrid%prim(i_rho,i,j,k)
+           lgrid%prim(i_p,i+2,j,k)=lgrid%prim(i_p,i,j,k)+rp2*rho*lgrid%grav(1,i,j,k)*lgrid%dx1
+           lgrid%prim(i_rho,i+2,j,k) = rp3*rho-rp2*lgrid%prim(i_rho,i-1,j,k)
 #endif
 
           endif
@@ -9164,7 +9172,9 @@ contains
 #endif
 
 #ifdef HSE_BCS
-          lgrid%prim(i_p,i,j-1,k)=lgrid%prim(i_p,i,j,k)-lgrid%prim(i_rho,i,j,k)*lgrid%grav(2,i,j,k)*lgrid%dx2
+          rho = lgrid%prim(i_rho,i,j,k)
+          lgrid%prim(i_p,i,j-1,k)=lgrid%prim(i_p,i,j,k)-rho*lgrid%grav(2,i,j,k)*lgrid%dx2
+          lgrid%prim(i_rho,i,j-1,k)=rp2*rho-lgrid%prim(i_rho,i,j+1,k)
 #endif
 
           if((lgrid%is_solid(i,j+1,k)==0) .and. (j>=lx2)) then
@@ -9186,7 +9196,9 @@ contains
 #endif
 
 #ifdef HSE_BCS
-           lgrid%prim(i_p,i,j-2,k)=lgrid%prim(i_p,i,j,k)-rp2*lgrid%prim(i_rho,i,j,k)*lgrid%grav(2,i,j,k)*lgrid%dx2
+           rho = lgrid%prim(i_rho,i,j,k)
+           lgrid%prim(i_p,i,j-2,k)=lgrid%prim(i_p,i,j,k)-rp2*rho*lgrid%grav(2,i,j,k)*lgrid%dx2
+           lgrid%prim(i_rho,i,j-2,k)=rp3*rho-rp2*lgrid%prim(i_rho,i,j+1,k)
 #endif
 
           endif
@@ -9212,7 +9224,9 @@ contains
 #endif
 
 #ifdef HSE_BCS
-          lgrid%prim(i_p,i,j+1,k)=lgrid%prim(i_p,i,j,k)+lgrid%prim(i_rho,i,j,k)*lgrid%grav(2,i,j,k)*lgrid%dx2
+          rho = lgrid%prim(i_rho,i,j,k)
+          lgrid%prim(i_p,i,j+1,k)=lgrid%prim(i_p,i,j,k)+rho*lgrid%grav(2,i,j,k)*lgrid%dx2
+          lgrid%prim(i_rho,i,j+1,k)=rp2*rho-lgrid%prim(i_rho,i,j-1,k)
 #endif
 
           if((lgrid%is_solid(i,j-1,k)==0) .and. (j<=ux2)) then
@@ -9234,7 +9248,9 @@ contains
 #endif
 
 #ifdef HSE_BCS
-           lgrid%prim(i_p,i,j+2,k)=lgrid%prim(i_p,i,j,k)+rp2*lgrid%prim(i_rho,i,j,k)*lgrid%grav(2,i,j,k)*lgrid%dx2
+           rho = lgrid%prim(i_rho,i,j,k)
+           lgrid%prim(i_p,i,j+2,k)=lgrid%prim(i_p,i,j,k)+rp2*rho*lgrid%grav(2,i,j,k)*lgrid%dx2
+           lgrid%prim(i_rho,i,j+2,k)=rp3*rho-rp2*lgrid%prim(i_rho,i,j-1,k)
 #endif
 
           endif
@@ -10378,7 +10394,9 @@ contains
 #endif
 
 #ifdef HSE_BCS
-          lgrid%prim(i_p,i,j,k-1)=lgrid%prim(i_p,i,j,k)-lgrid%prim(i_rho,i,j,k)*lgrid%grav(3,i,j,k)*lgrid%dx3
+          rho = lgrid%prim(i_rho,i,j,k)
+          lgrid%prim(i_p,i,j,k-1)=lgrid%prim(i_p,i,j,k)-rho*lgrid%grav(3,i,j,k)*lgrid%dx3
+          lgrid%prim(i_rho,i,j,k-1)=rp2*rho-lgrid%prim(i_rho,i,j,k+1)
 #endif
 
           if((lgrid%is_solid(i,j,k+1)==0) .and. (k>=lx3)) then
@@ -10400,7 +10418,9 @@ contains
 #endif
 
 #ifdef HSE_BCS
-           lgrid%prim(i_p,i,j,k-2)=lgrid%prim(i_p,i,j,k)-rp2*lgrid%prim(i_rho,i,j,k)*lgrid%grav(3,i,j,k)*lgrid%dx3
+           rho = lgrid%prim(i_rho,i,j,k)
+           lgrid%prim(i_p,i,j,k-2)=lgrid%prim(i_p,i,j,k)-rp2*rho*lgrid%grav(3,i,j,k)*lgrid%dx3
+           lgrid%prim(i_rho,i,j,k-2)=rp3*rho-rp2*lgrid%prim(i_rho,i,j,k+1)
 #endif
 
           endif
@@ -10426,7 +10446,9 @@ contains
 #endif
 
 #ifdef HSE_BCS
-          lgrid%prim(i_p,i,j,k+1)=lgrid%prim(i_p,i,j,k)+lgrid%prim(i_rho,i,j,k)*lgrid%grav(3,i,j,k)*lgrid%dx3
+          rho = lgrid%prim(i_rho,i,j,k)
+          lgrid%prim(i_p,i,j,k+1)=lgrid%prim(i_p,i,j,k)+rho*lgrid%grav(3,i,j,k)*lgrid%dx3
+          lgrid%prim(i_rho,i,j,k+1)=rp2*rho-lgrid%prim(i_rho,i,j,k-1)
 #endif
 
           if((lgrid%is_solid(i,j,k-1)==0) .and. (k<=ux3)) then
@@ -10448,7 +10470,9 @@ contains
 #endif
 
 #ifdef HSE_BCS
-           lgrid%prim(i_p,i,j,k+2)=lgrid%prim(i_p,i,j,k)+rp2*lgrid%prim(i_rho,i,j,k)*lgrid%grav(3,i,j,k)*lgrid%dx3
+           rho = lgrid%prim(i_rho,i,j,k)
+           lgrid%prim(i_p,i,j,k+2)=lgrid%prim(i_p,i,j,k)+rp2*rho*lgrid%grav(3,i,j,k)*lgrid%dx3
+           lgrid%prim(i_rho,i,j,k+2)=rp3*rho-rp2*lgrid%prim(i_rho,i,j,k-1)
 #endif
 
           endif

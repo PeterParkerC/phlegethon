@@ -609,7 +609,7 @@ class h5rprof:
     def __init__(self,filename,eval_eos=False,path='./rprofs',path_to_grids='./grids',mode='i',data_path=data,helm_table='helm_table_timmes_x2.dat',pig_table='401x401_pig_table_h2_offset.dat',
     NRHO=541,NT=201,LOGRHOMIN=-12.0,LOGRHOMAX=15.0,LOGTMIN=3.0,LOGTMAX=13.0):
         if(mode=='n'):
-            filename = os.path.join(path, 'planes_n{:05}.h5'.format(filename))
+            filename = os.path.join(path, 'rprofs_n{:05}.h5'.format(filename))
         elif(mode=='i'):
             filename = rprof_list(path=path)[filename][1]
         else:
@@ -778,6 +778,10 @@ class h5rprof:
 
          self.dd['Schwarzschild'] = self.dd['nabla']-self.dd['nabla_ad']
          self.dd['Ledoux'] = self.dd['nabla']-self.dd['nabla_ad']-self.dd['phi']/self.dd['delta']*self.dd['nabla_mu']
+ 
+         self.dd['game'] = self.dd['P']/self.dd['rho_eint']+1
+         self.dd['gamc'] = self.dd['rho']*self.dd['sound']**2/self.dd['P']
+
 
 def ra_iles(i1,i2,delta=1,path='./rprofs',filename=None,
 path_to_grids='./grids',mode='i',data_path=data,helm_table='helm_table_timmes_x2.dat',pig_table='401x401_pig_table_h2_offset.dat',

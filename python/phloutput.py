@@ -1593,9 +1593,9 @@ class h5plane:
      fig, axs = subplots(figsize=(ichx,ichy))
 
      try:
-      coords = self.coords(ix=self.ix,iy=self.iy,iz=self.iz)
+      coords = np.copy(self.coords(ix=self.ix,iy=self.iy,iz=self.iz))
      except:
-      coords = self.grid0.coords(ix=self.ix,iy=self.iy,iz=self.iz)
+      coords = np.copy(self.grid0.coords(ix=self.ix,iy=self.iy,iz=self.iz))
 
      if(self.grid0.geometry=='cartesian'):
       if(self.ix>=0):

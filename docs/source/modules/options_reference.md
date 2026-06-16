@@ -124,7 +124,7 @@ For `GEOMETRY_CUBED_SPHERE`, the following parameters must be defined at compile
 | `FIX_TEMPERATURE_AT_X3L` | Same as `FIX_TEMPERATURE_AT_X1L`, but for the lower x3 boundary. |
 | `FIX_TEMPERATURE_AT_X3U` | Same as `FIX_TEMPERATURE_AT_X1L`, but for the upper x3 boundary. |
 |`USE_INTERNAL_BOUNDARIES` | Imposes reflecting boundary conditions at solid interfaces embedded in the numerical domain. This option only works for Cartesian grids and requires `lgrid%is_solid(i,j,k)` to be filled at every cell center in `app.F90`, including the ghost cells (`is_solid=1` for solid cells, `is_solid=0` otherwise). |
-| `HSE_BCS` | Linearly extrapolates the value of the pressure from the last layer of cells in the computational domain to ghost-cell locations assuming hydrostatic equilibrium. This option works only in combination with `USE_INTERNAL_BOUNDARIES`. |
+| `HSE_BCS` | Extrapolates the value of the pressure from the last layer of cells in the computational domain to ghost-cell locations assuming hydrostatic equilibrium. Gas density, temperature, and the gammae/c coefficients (when used) are extrapolated to the ghost cells with 2nd-order accuracy. This option works only in combination with `USE_INTERNAL_BOUNDARIES`. |
 
 With reflecting boundary conditions, the option, e.g., `X1L_BFIELD_PMC` imposes zero gradient for the normal component and zero for the transverse component of the field.
 

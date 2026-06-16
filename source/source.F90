@@ -5696,11 +5696,11 @@ contains
     type(locgrid), intent(inout) :: lgrid
 
     real(kind=rp) :: wct_hydro,wcti_hydro,wctf_hydro, &
-    wctoi,wctof,wctg,step0,temp_max,temp_max_comm
+    wctoi,wctof,wctg,temp_max,temp_max_comm
 #ifdef RESTART_LAST
     integer :: step_tmp(1)
 #endif
-    integer :: ierr,iv,res_nr,iflush,max_T_met
+    integer :: ierr,iv,res_nr,iflush,max_T_met,step0
     integer :: i,j,k,ipr,iter
     integer :: lx1,ux1,lx2,ux2,lx3,ux3
     real(kind=rp) :: abar,eint,gm,gmm1,igmm1,p,rho,sound,sound2,T,ye,zbar,dp_drho,dp_deps
@@ -6830,7 +6830,7 @@ contains
       write(*,'("| step=",I8.8," | time=",E9.3," | dt=",E9.3,"| t/tmax=",E9.3," |")') &
       lgrid%step,lgrid%time,lgrid%dt,lgrid%time/tmax
       write(*,'("wct/cell/cycle/core = ",E9.3," mus")') & 
-      wct_hydro/(lgrid%step-step0)/(mgrid%nx1l*mgrid%nx2l*mgrid%nx3l)*1.0e6_rp
+      wct_hydro/real(lgrid%step-step0,kind=rp)/real(mgrid%nx1l*mgrid%nx2l*mgrid%nx3l,kind=rp)*1.0e6_rp
       write(*,'("updated cells/s = ",E9.3)') & 
       (lgrid%step-step0)*(real(nx1,kind=rp)*real(nx2,kind=rp)*real(nx3,kind=rp))/wct_hydro 
       write(*,'("total wct (no output) = ",E9.3," s")') wct_hydro
@@ -7992,6 +7992,8 @@ contains
            lgrid%b_cc(iv,i-1,j,k) = bc_facb(iv)*lgrid%b_cc(iv,i,j,k)
           end do
 #endif
+
+#ifndef HSE_BCS
 #if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
           lgrid%temp(i-1,j,k) = lgrid%temp(i,j,k)
 #endif
@@ -7999,11 +8001,19 @@ contains
           lgrid%gammaf(i_gammae,i-1,j,k) = lgrid%gammaf(i_gammae,i,j,k)
           lgrid%gammaf(i_gammac,i-1,j,k) = lgrid%gammaf(i_gammac,i,j,k)
 #endif
+#endif
 
 #ifdef HSE_BCS
           rho = lgrid%prim(i_rho,i,j,k)
-          lgrid%prim(i_p,i-1,j,k)=lgrid%prim(i_p,i,j,k)-rho*lgrid%grav(1,i,j,k)*lgrid%dx1
+          lgrid%prim(i_p,i-1,j,k) = lgrid%prim(i_p,i,j,k)-rho*lgrid%grav(1,i,j,k)*lgrid%dx1
           lgrid%prim(i_rho,i-1,j,k) = rp2*rho-lgrid%prim(i_rho,i+1,j,k)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+          lgrid%temp(i-1,j,k) = rp2*lgrid%temp(i,j,k)-lgrid%temp(i+1,j,k)
+#endif
+#ifdef USE_FASTEOS
+          lgrid%gammaf(i_gammae,i-1,j,k) = rp2*lgrid%gammaf(i_gammae,i,j,k)-lgrid%gammaf(i_gammae,i+1,j,k)
+          lgrid%gammaf(i_gammac,i-1,j,k) = rp2*lgrid%gammaf(i_gammac,i,j,k)-lgrid%gammaf(i_gammac,i+1,j,k)
+#endif
 #endif
 
           if((lgrid%is_solid(i+1,j,k)==0) .and. (i>=lx1)) then
@@ -8016,6 +8026,8 @@ contains
             lgrid%b_cc(iv,i-2,j,k) = bc_facb(iv)*lgrid%b_cc(iv,i+1,j,k)
            end do
 #endif
+
+#ifndef HSE_BCS
 #if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
            lgrid%temp(i-2,j,k) = lgrid%temp(i+1,j,k)
 #endif
@@ -8023,11 +8035,19 @@ contains
            lgrid%gammaf(i_gammae,i-2,j,k) = lgrid%gammaf(i_gammae,i+1,j,k)
            lgrid%gammaf(i_gammac,i-2,j,k) = lgrid%gammaf(i_gammac,i+1,j,k)
 #endif
+#endif
 
 #ifdef HSE_BCS
            rho = lgrid%prim(i_rho,i,j,k)
-           lgrid%prim(i_p,i-2,j,k)=lgrid%prim(i_p,i,j,k)-rp2*rho*lgrid%grav(1,i,j,k)*lgrid%dx1
+           lgrid%prim(i_p,i-2,j,k) = lgrid%prim(i_p,i,j,k)-rp2*rho*lgrid%grav(1,i,j,k)*lgrid%dx1
            lgrid%prim(i_rho,i-2,j,k) = rp3*rho-rp2*lgrid%prim(i_rho,i+1,j,k)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+           lgrid%temp(i-2,j,k) = rp3*lgrid%temp(i,j,k)-rp2*lgrid%temp(i+1,j,k)
+#endif
+#ifdef USE_FASTEOS
+           lgrid%gammaf(i_gammae,i-2,j,k) = rp3*lgrid%gammaf(i_gammae,i,j,k)-rp2*lgrid%gammaf(i_gammae,i+1,j,k)
+           lgrid%gammaf(i_gammac,i-2,j,k) = rp3*lgrid%gammaf(i_gammac,i,j,k)-rp2*lgrid%gammaf(i_gammac,i+1,j,k)
+#endif
 #endif
 
           endif
@@ -8044,6 +8064,8 @@ contains
            lgrid%b_cc(iv,i+1,j,k) = bc_facb(iv)*lgrid%b_cc(iv,i,j,k)
           end do
 #endif
+
+#ifndef HSE_BCS
 #if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
           lgrid%temp(i+1,j,k) = lgrid%temp(i,j,k)
 #endif
@@ -8051,11 +8073,19 @@ contains
           lgrid%gammaf(i_gammae,i+1,j,k) = lgrid%gammaf(i_gammae,i,j,k)
           lgrid%gammaf(i_gammac,i+1,j,k) = lgrid%gammaf(i_gammac,i,j,k)
 #endif
+#endif
 
 #ifdef HSE_BCS
           rho = lgrid%prim(i_rho,i,j,k)
-          lgrid%prim(i_p,i+1,j,k)=lgrid%prim(i_p,i,j,k)+rho*lgrid%grav(1,i,j,k)*lgrid%dx1
+          lgrid%prim(i_p,i+1,j,k) = lgrid%prim(i_p,i,j,k)+rho*lgrid%grav(1,i,j,k)*lgrid%dx1
           lgrid%prim(i_rho,i+1,j,k) = rp2*rho-lgrid%prim(i_rho,i-1,j,k)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+          lgrid%temp(i+1,j,k) = rp2*lgrid%temp(i,j,k)-lgrid%temp(i-1,j,k)
+#endif
+#ifdef USE_FASTEOS
+          lgrid%gammaf(i_gammae,i+1,j,k) = rp2*lgrid%gammaf(i_gammae,i,j,k)-lgrid%gammaf(i_gammae,i-1,j,k)
+          lgrid%gammaf(i_gammac,i+1,j,k) = rp2*lgrid%gammaf(i_gammac,i,j,k)-lgrid%gammaf(i_gammac,i-1,j,k)
+#endif
 #endif
 
           if((lgrid%is_solid(i-1,j,k)==0) .and. (i<=ux1)) then
@@ -8068,6 +8098,8 @@ contains
             lgrid%b_cc(iv,i+2,j,k) = bc_facb(iv)*lgrid%b_cc(iv,i-1,j,k)
            end do
 #endif
+
+#ifndef HSE_BCS
 #if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
            lgrid%temp(i+2,j,k) = lgrid%temp(i-1,j,k)
 #endif
@@ -8075,11 +8107,19 @@ contains
            lgrid%gammaf(i_gammae,i+2,j,k) = lgrid%gammaf(i_gammae,i-1,j,k)
            lgrid%gammaf(i_gammac,i+2,j,k) = lgrid%gammaf(i_gammac,i-1,j,k)
 #endif
+#endif
 
 #ifdef HSE_BCS
            rho = lgrid%prim(i_rho,i,j,k)
-           lgrid%prim(i_p,i+2,j,k)=lgrid%prim(i_p,i,j,k)+rp2*rho*lgrid%grav(1,i,j,k)*lgrid%dx1
+           lgrid%prim(i_p,i+2,j,k) = lgrid%prim(i_p,i,j,k)+rp2*rho*lgrid%grav(1,i,j,k)*lgrid%dx1
            lgrid%prim(i_rho,i+2,j,k) = rp3*rho-rp2*lgrid%prim(i_rho,i-1,j,k)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+           lgrid%temp(i+2,j,k) = rp3*lgrid%temp(i,j,k)-rp2*lgrid%temp(i-1,j,k)
+#endif
+#ifdef USE_FASTEOS
+           lgrid%gammaf(i_gammae,i+2,j,k) = rp3*lgrid%gammaf(i_gammae,i,j,k)-rp2*lgrid%gammaf(i_gammae,i-1,j,k)
+           lgrid%gammaf(i_gammac,i+2,j,k) = rp3*lgrid%gammaf(i_gammac,i,j,k)-rp2*lgrid%gammaf(i_gammac,i-1,j,k)
+#endif
 #endif
 
           endif
@@ -9163,6 +9203,8 @@ contains
            lgrid%b_cc(iv,i,j-1,k) = bc_facb(iv)*lgrid%b_cc(iv,i,j,k)
           end do
 #endif
+
+#ifndef HSE_BCS
 #if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
           lgrid%temp(i,j-1,k) = lgrid%temp(i,j,k)
 #endif
@@ -9170,11 +9212,19 @@ contains
           lgrid%gammaf(i_gammae,i,j-1,k) = lgrid%gammaf(i_gammae,i,j,k)
           lgrid%gammaf(i_gammac,i,j-1,k) = lgrid%gammaf(i_gammac,i,j,k)
 #endif
+#endif
 
 #ifdef HSE_BCS
           rho = lgrid%prim(i_rho,i,j,k)
-          lgrid%prim(i_p,i,j-1,k)=lgrid%prim(i_p,i,j,k)-rho*lgrid%grav(2,i,j,k)*lgrid%dx2
-          lgrid%prim(i_rho,i,j-1,k)=rp2*rho-lgrid%prim(i_rho,i,j+1,k)
+          lgrid%prim(i_p,i,j-1,k) = lgrid%prim(i_p,i,j,k)-rho*lgrid%grav(2,i,j,k)*lgrid%dx2
+          lgrid%prim(i_rho,i,j-1,k) = rp2*rho-lgrid%prim(i_rho,i,j+1,k)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+          lgrid%temp(i,j-1,k) = rp2*lgrid%temp(i,j,k)-lgrid%temp(i,j+1,k)
+#endif
+#ifdef USE_FASTEOS
+          lgrid%gammaf(i_gammae,i,j-1,k) = rp2*lgrid%gammaf(i_gammae,i,j,k)-lgrid%gammaf(i_gammae,i,j+1,k)
+          lgrid%gammaf(i_gammac,i,j-1,k) = rp2*lgrid%gammaf(i_gammac,i,j,k)-lgrid%gammaf(i_gammac,i,j+1,k)
+#endif
 #endif
 
           if((lgrid%is_solid(i,j+1,k)==0) .and. (j>=lx2)) then
@@ -9187,6 +9237,8 @@ contains
             lgrid%b_cc(iv,i,j-2,k) = bc_facb(iv)*lgrid%b_cc(iv,i,j+1,k)
            end do
 #endif
+
+#ifndef HSE_BCS
 #if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
            lgrid%temp(i,j-2,k) = lgrid%temp(i,j+1,k)
 #endif
@@ -9194,11 +9246,19 @@ contains
            lgrid%gammaf(i_gammae,i,j-2,k) = lgrid%gammaf(i_gammae,i,j+1,k)
            lgrid%gammaf(i_gammac,i,j-2,k) = lgrid%gammaf(i_gammac,i,j+1,k)
 #endif
+#endif
 
 #ifdef HSE_BCS
            rho = lgrid%prim(i_rho,i,j,k)
-           lgrid%prim(i_p,i,j-2,k)=lgrid%prim(i_p,i,j,k)-rp2*rho*lgrid%grav(2,i,j,k)*lgrid%dx2
-           lgrid%prim(i_rho,i,j-2,k)=rp3*rho-rp2*lgrid%prim(i_rho,i,j+1,k)
+           lgrid%prim(i_p,i,j-2,k) = lgrid%prim(i_p,i,j,k)-rp2*rho*lgrid%grav(2,i,j,k)*lgrid%dx2
+           lgrid%prim(i_rho,i,j-2,k) = rp3*rho-rp2*lgrid%prim(i_rho,i,j+1,k)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+           lgrid%temp(i,j-2,k) = rp3*lgrid%temp(i,j,k)-lgrid%temp(i,j+1,k)
+#endif
+#ifdef USE_FASTEOS
+           lgrid%gammaf(i_gammae,i,j-2,k) = rp3*lgrid%gammaf(i_gammae,i,j,k)-rp2*lgrid%gammaf(i_gammae,i,j+1,k)
+           lgrid%gammaf(i_gammac,i,j-2,k) = rp3*lgrid%gammaf(i_gammac,i,j,k)-rp2*lgrid%gammaf(i_gammac,i,j+1,k)
+#endif
 #endif
 
           endif
@@ -9215,6 +9275,8 @@ contains
            lgrid%b_cc(iv,i,j+1,k) = bc_facb(iv)*lgrid%b_cc(iv,i,j,k)
           end do
 #endif
+
+#ifndef HSE_BCS
 #if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
           lgrid%temp(i,j+1,k) = lgrid%temp(i,j,k)
 #endif
@@ -9222,11 +9284,19 @@ contains
           lgrid%gammaf(i_gammae,i,j+1,k) = lgrid%gammaf(i_gammae,i,j,k)
           lgrid%gammaf(i_gammac,i,j+1,k) = lgrid%gammaf(i_gammac,i,j,k)
 #endif
+#endif
 
 #ifdef HSE_BCS
           rho = lgrid%prim(i_rho,i,j,k)
-          lgrid%prim(i_p,i,j+1,k)=lgrid%prim(i_p,i,j,k)+rho*lgrid%grav(2,i,j,k)*lgrid%dx2
-          lgrid%prim(i_rho,i,j+1,k)=rp2*rho-lgrid%prim(i_rho,i,j-1,k)
+          lgrid%prim(i_p,i,j+1,k) = lgrid%prim(i_p,i,j,k)+rho*lgrid%grav(2,i,j,k)*lgrid%dx2
+          lgrid%prim(i_rho,i,j+1,k) = rp2*rho-lgrid%prim(i_rho,i,j-1,k)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+          lgrid%temp(i,j+1,k) = rp2*lgrid%temp(i,j,k)-lgrid%temp(i,j-1,k)
+#endif
+#ifdef USE_FASTEOS
+          lgrid%gammaf(i_gammae,i,j+1,k) = rp2*lgrid%gammaf(i_gammae,i,j,k)-lgrid%gammaf(i_gammae,i,j-1,k)
+          lgrid%gammaf(i_gammac,i,j+1,k) = rp2*lgrid%gammaf(i_gammac,i,j,k)-lgrid%gammaf(i_gammac,i,j-1,k)
+#endif
 #endif
 
           if((lgrid%is_solid(i,j-1,k)==0) .and. (j<=ux2)) then
@@ -9239,6 +9309,8 @@ contains
             lgrid%b_cc(iv,i,j+2,k) = bc_facb(iv)*lgrid%b_cc(iv,i,j-1,k)
            end do
 #endif
+
+#ifndef HSE_BCS
 #if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
            lgrid%temp(i,j+2,k) = lgrid%temp(i,j-1,k)
 #endif
@@ -9246,11 +9318,19 @@ contains
            lgrid%gammaf(i_gammae,i,j+2,k) = lgrid%gammaf(i_gammae,i,j-1,k)
            lgrid%gammaf(i_gammac,i,j+2,k) = lgrid%gammaf(i_gammac,i,j-1,k)
 #endif
+#endif
 
 #ifdef HSE_BCS
            rho = lgrid%prim(i_rho,i,j,k)
-           lgrid%prim(i_p,i,j+2,k)=lgrid%prim(i_p,i,j,k)+rp2*rho*lgrid%grav(2,i,j,k)*lgrid%dx2
-           lgrid%prim(i_rho,i,j+2,k)=rp3*rho-rp2*lgrid%prim(i_rho,i,j-1,k)
+           lgrid%prim(i_p,i,j+2,k) = lgrid%prim(i_p,i,j,k)+rp2*rho*lgrid%grav(2,i,j,k)*lgrid%dx2
+           lgrid%prim(i_rho,i,j+2,k) = rp3*rho-rp2*lgrid%prim(i_rho,i,j-1,k)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+           lgrid%temp(i,j+2,k) = rp3*lgrid%temp(i,j,k)-rp2*lgrid%temp(i,j-1,k)
+#endif
+#ifdef USE_FASTEOS
+           lgrid%gammaf(i_gammae,i,j+2,k) = rp3*lgrid%gammaf(i_gammae,i,j,k)-rp2*lgrid%gammaf(i_gammae,i,j-1,k)
+           lgrid%gammaf(i_gammac,i,j+2,k) = rp3*lgrid%gammaf(i_gammac,i,j,k)-rp2*lgrid%gammaf(i_gammac,i,j-1,k)
+#endif
 #endif
 
           endif
@@ -10385,6 +10465,8 @@ contains
            lgrid%b_cc(iv,i,j,k-1) = bc_facb(iv)*lgrid%b_cc(iv,i,j,k)
           end do
 #endif
+
+#ifndef HSE_BCS
 #if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
           lgrid%temp(i,j,k-1) = lgrid%temp(i,j,k)
 #endif
@@ -10392,11 +10474,19 @@ contains
           lgrid%gammaf(i_gammae,i,j,k-1) = lgrid%gammaf(i_gammae,i,j,k)
           lgrid%gammaf(i_gammac,i,j,k-1) = lgrid%gammaf(i_gammac,i,j,k)
 #endif
+#endif
 
 #ifdef HSE_BCS
           rho = lgrid%prim(i_rho,i,j,k)
-          lgrid%prim(i_p,i,j,k-1)=lgrid%prim(i_p,i,j,k)-rho*lgrid%grav(3,i,j,k)*lgrid%dx3
-          lgrid%prim(i_rho,i,j,k-1)=rp2*rho-lgrid%prim(i_rho,i,j,k+1)
+          lgrid%prim(i_p,i,j,k-1) = lgrid%prim(i_p,i,j,k)-rho*lgrid%grav(3,i,j,k)*lgrid%dx3
+          lgrid%prim(i_rho,i,j,k-1) = rp2*rho-lgrid%prim(i_rho,i,j,k+1)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+          lgrid%temp(i,j,k-1) = rp2*lgrid%temp(i,j,k)-lgrid%temp(i,j,k+1)
+#endif
+#ifdef USE_FASTEOS
+          lgrid%gammaf(i_gammae,i,j,k-1) = rp2*lgrid%gammaf(i_gammae,i,j,k)-lgrid%gammaf(i_gammae,i,j,k+1)
+          lgrid%gammaf(i_gammac,i,j,k-1) = rp2*lgrid%gammaf(i_gammac,i,j,k)-lgrid%gammaf(i_gammac,i,j,k+1)
+#endif
 #endif
 
           if((lgrid%is_solid(i,j,k+1)==0) .and. (k>=lx3)) then
@@ -10409,6 +10499,8 @@ contains
             lgrid%b_cc(iv,i,j,k-2) = bc_facb(iv)*lgrid%b_cc(iv,i,j,k+1)
            end do
 #endif
+
+#ifndef HSE_BCS
 #if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
            lgrid%temp(i,j,k-2) = lgrid%temp(i,j,k+1)
 #endif
@@ -10416,11 +10508,19 @@ contains
            lgrid%gammaf(i_gammae,i,j,k-2) = lgrid%gammaf(i_gammae,i,j,k+1)
            lgrid%gammaf(i_gammac,i,j,k-2) = lgrid%gammaf(i_gammac,i,j,k+1)
 #endif
+#endif
 
 #ifdef HSE_BCS
            rho = lgrid%prim(i_rho,i,j,k)
-           lgrid%prim(i_p,i,j,k-2)=lgrid%prim(i_p,i,j,k)-rp2*rho*lgrid%grav(3,i,j,k)*lgrid%dx3
-           lgrid%prim(i_rho,i,j,k-2)=rp3*rho-rp2*lgrid%prim(i_rho,i,j,k+1)
+           lgrid%prim(i_p,i,j,k-2) = lgrid%prim(i_p,i,j,k)-rp2*rho*lgrid%grav(3,i,j,k)*lgrid%dx3
+           lgrid%prim(i_rho,i,j,k-2) = rp3*rho-rp2*lgrid%prim(i_rho,i,j,k+1)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+           lgrid%temp(i,j,k-2) = rp3*lgrid%temp(i,j,k)-rp2*lgrid%temp(i,j,k+1)
+#endif
+#ifdef USE_FASTEOS
+           lgrid%gammaf(i_gammae,i,j,k-2) = rp3*lgrid%gammaf(i_gammae,i,j,k)-rp2*lgrid%gammaf(i_gammae,i,j,k+1)
+           lgrid%gammaf(i_gammac,i,j,k-2) = rp3*lgrid%gammaf(i_gammac,i,j,k)-rp2*lgrid%gammaf(i_gammac,i,j,k+1)
+#endif        
 #endif
 
           endif
@@ -10437,6 +10537,8 @@ contains
            lgrid%b_cc(iv,i,j,k+1) = bc_facb(iv)*lgrid%b_cc(iv,i,j,k)
           end do
 #endif
+
+#ifndef HSE_BCS
 #if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
           lgrid%temp(i,j,k+1) = lgrid%temp(i,j,k)
 #endif
@@ -10444,11 +10546,19 @@ contains
           lgrid%gammaf(i_gammae,i,j,k+1) = lgrid%gammaf(i_gammae,i,j,k)
           lgrid%gammaf(i_gammac,i,j,k+1) = lgrid%gammaf(i_gammac,i,j,k)
 #endif
+#endif
 
 #ifdef HSE_BCS
           rho = lgrid%prim(i_rho,i,j,k)
-          lgrid%prim(i_p,i,j,k+1)=lgrid%prim(i_p,i,j,k)+rho*lgrid%grav(3,i,j,k)*lgrid%dx3
-          lgrid%prim(i_rho,i,j,k+1)=rp2*rho-lgrid%prim(i_rho,i,j,k-1)
+          lgrid%prim(i_p,i,j,k+1) = lgrid%prim(i_p,i,j,k)+rho*lgrid%grav(3,i,j,k)*lgrid%dx3
+          lgrid%prim(i_rho,i,j,k+1) = rp2*rho-lgrid%prim(i_rho,i,j,k-1)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+          lgrid%temp(i,j,k+1) = rp2*lgrid%temp(i,j,k)-lgrid%temp(i,j,k-1)
+#endif
+#ifdef USE_FASTEOS
+          lgrid%gammaf(i_gammae,i,j,k+1) = rp2*lgrid%gammaf(i_gammae,i,j,k)-lgrid%gammaf(i_gammae,i,j,k-1)
+          lgrid%gammaf(i_gammac,i,j,k+1) = rp2*lgrid%gammaf(i_gammac,i,j,k)-lgrid%gammaf(i_gammac,i,j,k-1)
+#endif          
 #endif
 
           if((lgrid%is_solid(i,j,k-1)==0) .and. (k<=ux3)) then
@@ -10461,6 +10571,8 @@ contains
             lgrid%b_cc(iv,i,j,k+2) = bc_facb(iv)*lgrid%b_cc(iv,i,j,k-1)
            end do
 #endif
+
+#ifndef HSE_BCS
 #if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
            lgrid%temp(i,j,k+2) = lgrid%temp(i,j,k-1)
 #endif
@@ -10468,11 +10580,19 @@ contains
            lgrid%gammaf(i_gammae,i,j,k+2) = lgrid%gammaf(i_gammae,i,j,k-1)
            lgrid%gammaf(i_gammac,i,j,k+2) = lgrid%gammaf(i_gammac,i,j,k-1)
 #endif
+#endif
 
 #ifdef HSE_BCS
            rho = lgrid%prim(i_rho,i,j,k)
-           lgrid%prim(i_p,i,j,k+2)=lgrid%prim(i_p,i,j,k)+rp2*rho*lgrid%grav(3,i,j,k)*lgrid%dx3
-           lgrid%prim(i_rho,i,j,k+2)=rp3*rho-rp2*lgrid%prim(i_rho,i,j,k-1)
+           lgrid%prim(i_p,i,j,k+2) = lgrid%prim(i_p,i,j,k)+rp2*rho*lgrid%grav(3,i,j,k)*lgrid%dx3
+           lgrid%prim(i_rho,i,j,k+2) = rp3*rho-rp2*lgrid%prim(i_rho,i,j,k-1)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+           lgrid%temp(i,j,k+2) = rp3*lgrid%temp(i,j,k)-rp2*lgrid%temp(i,j,k-1)
+#endif
+#ifdef USE_FASTEOS
+           lgrid%gammaf(i_gammae,i,j,k+2) = rp3*lgrid%gammaf(i_gammae,i,j,k)-rp2*lgrid%gammaf(i_gammae,i,j,k-1)
+           lgrid%gammaf(i_gammac,i,j,k+2) = rp3*lgrid%gammaf(i_gammac,i,j,k)-rp2*lgrid%gammaf(i_gammac,i,j,k-1)
+#endif           
 #endif
 
           endif

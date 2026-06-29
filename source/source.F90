@@ -8222,7 +8222,7 @@ contains
           slope=prod/(slopef+slopeb)
          endif
          
-         tmp = rph*slope
+         tmp = slope
          qLbuf(iv) = qc - tmp
          qRbuf(iv) = qc + tmp
          
@@ -8408,7 +8408,7 @@ contains
           slope=prod/(slopef+slopeb)
          endif
          
-         tmp = rph*slope
+         tmp = slope
          bLbuf(iv) = qc - tmp
          bRbuf(iv) = qc + tmp
          
@@ -8578,7 +8578,7 @@ contains
          slope=prod/(slopef+slopeb)
         endif
         
-        tmp = rph*slope
+        tmp = slope
         eosLbuf = qc - tmp
         eosRbuf = qc + tmp
  
@@ -8608,7 +8608,7 @@ contains
          slope=prod/(slopef+slopeb)
         endif
         
-        tmp = rph*slope
+        tmp = slope
         eosLbuf = qc - tmp
         eosRbuf = qc + tmp
 
@@ -8822,7 +8822,7 @@ contains
             slope=prod/(slopef+slopeb)
            endif
 
-           tmp = rph*slope
+           tmp = slope
            qLbuf(iv) = qc - tmp
            qRbuf(iv) = qc + tmp
 
@@ -8870,7 +8870,7 @@ contains
             slope=prod/(slopef+slopeb)
            endif
 
-           tmp = rph*slope
+           tmp = slope
            bLbuf(iv) = qc - tmp
            bRbuf(iv) = qc + tmp
 
@@ -8907,7 +8907,7 @@ contains
             slope=prod/(slopef+slopeb)
            endif
 
-           tmp = rph*slope
+           tmp = slope
            qLbuf(iv) = qc - tmp
            qRbuf(iv) = qc + tmp
           
@@ -9368,7 +9368,7 @@ contains
           slope=prod/(slopef+slopeb)
          endif
          
-         tmp = rph*slope
+         tmp = slope
          qLbuf(iv) = qc - tmp
          qRbuf(iv) = qc + tmp
 
@@ -9552,7 +9552,7 @@ contains
          slope=prod/(slopef+slopeb)
         endif
          
-        tmp = rph*slope
+        tmp = slope
         bLbuf(1) = qc - tmp
         bRbuf(1) = qc + tmp
 
@@ -9571,7 +9571,7 @@ contains
          slope=prod/(slopef+slopeb)
         endif
          
-        tmp = rph*slope
+        tmp = slope
         bLbuf(3) = qc - tmp
         bRbuf(3) = qc + tmp
 #endif
@@ -9778,7 +9778,7 @@ contains
             slope=prod/(slopef+slopeb)
            endif
 
-           tmp = rph*slope
+           tmp = slope
            qLbuf(iv) = qc - tmp
            qRbuf(iv) = qc + tmp
 
@@ -9814,7 +9814,7 @@ contains
             slope=prod/(slopef+slopeb)
            endif
 
-           tmp = rph*slope
+           tmp = slope
            bLbuf(iv) = qc - tmp
            bRbuf(iv) = qc + tmp
 
@@ -9920,7 +9920,7 @@ contains
          slope=prod/(slopef+slopeb)
         endif
         
-        tmp = rph*slope
+        tmp = slope
         eosLbuf = qc - tmp
         eosRbuf = qc + tmp
 
@@ -9950,7 +9950,7 @@ contains
          slope=prod/(slopef+slopeb)
         endif
         
-        tmp = rph*slope
+        tmp = slope
         eosLbuf = qc - tmp
         eosRbuf = qc + tmp
 
@@ -10138,7 +10138,7 @@ contains
             slope=prod/(slopef+slopeb)
            endif
 
-           tmp = rph*slope
+           tmp = slope
            qLbuf(iv) = qc - tmp
            qRbuf(iv) = qc + tmp
 
@@ -10630,7 +10630,7 @@ contains
           slope=prod/(slopef+slopeb)
          endif
          
-         tmp = rph*slope
+         tmp = slope
          qLbuf(iv) = qc - tmp
          qRbuf(iv) = qc + tmp
 
@@ -10816,7 +10816,7 @@ contains
           slope=prod/(slopef+slopeb)
          endif
          
-         tmp = rph*slope
+         tmp = slope
          bLbuf(iv) = qc - tmp
          bRbuf(iv) = qc + tmp
 
@@ -10972,7 +10972,7 @@ contains
             slope=prod/(slopef+slopeb)
            endif
 
-           tmp = rph*slope
+           tmp = slope
            qLbuf(iv) = qc - tmp
            qRbuf(iv) = qc + tmp
 
@@ -11008,7 +11008,7 @@ contains
             slope=prod/(slopef+slopeb)
            endif
 
-           tmp = rph*slope
+           tmp = slope
            bLbuf(iv) = qc - tmp
            bRbuf(iv) = qc + tmp
 
@@ -11126,7 +11126,7 @@ contains
          slope=prod/(slopef+slopeb)
         endif
         
-        tmp = rph*slope
+        tmp = slope
         eosLbuf = qc - tmp
         eosRbuf = qc + tmp
 
@@ -11156,7 +11156,7 @@ contains
          slope=prod/(slopef+slopeb)
         endif
         
-        tmp = rph*slope
+        tmp = slope
         eosLbuf = qc - tmp
         eosRbuf = qc + tmp
 
@@ -11344,10 +11344,9 @@ contains
             slope=prod/(slopef+slopeb)
            endif
 
-           tmp = rph*slope
+           tmp = slope
            qLbuf(iv) = qc - tmp
            qRbuf(iv) = qc + tmp
-
 
           end do
 

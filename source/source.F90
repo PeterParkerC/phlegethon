@@ -276,11 +276,47 @@ module source
 #endif
 #endif
 
+#ifdef USE_GRAVITY_SOLVER
+
  real(kind=rp), parameter :: gs_tol = &
 #ifdef gs_tol_make
   gs_tol_make
 #else
   1.0e-4_rp
+#endif
+
+#ifdef GMG_PRECONDITIONER
+
+ integer, parameter :: gmg_max_level = &
+#ifdef gmg_max_level_make
+  gmg_max_level_make
+#else
+  1
+#endif
+
+ integer, parameter :: gmg_niter_coarse = &
+#ifdef gmg_niter_coarse_make
+  gmg_niter_coarse_make
+#else
+  1
+#endif
+
+ integer, parameter :: gmg_niter_presmooth = &
+#ifdef gmg_niter_presmooth_make
+  gmg_niter_presmooth_make
+#else
+  1
+#endif
+
+ integer, parameter :: gmg_niter_postsmooth = &
+#ifdef gmg_niter_postsmooth_make
+  gmg_niter_postsmooth_make
+#else
+  1
+#endif
+
+#endif
+
 #endif
 
 #ifdef USE_NUCLEAR_NETWORK
@@ -755,6 +791,29 @@ module source
 #endif
 
  !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+ ! GRAVITY SOLVER UTILS
+ !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+#ifdef GMG_PRECONDITIONER
+
+ type gmg_vecs
+
+    real(kind=rp), allocatable, dimension(:,:,:) :: eh
+    real(kind=rp), allocatable, dimension(:,:,:) :: rh
+    real(kind=rp), allocatable, dimension(:,:,:) :: tmp
+    real(kind=rp), allocatable, dimension(:,:,:,:) :: coords
+    real(kind=rp), allocatable, dimension(:,:,:,:) :: nodes
+    real(kind=rp), allocatable, dimension(:,:,:) :: coords_x1
+    real(kind=rp), allocatable, dimension(:,:,:) :: coords_x2
+    real(kind=rp), allocatable, dimension(:,:,:) :: coords_x3
+    real(kind=rp), allocatable, dimension(:,:,:) :: vol
+    integer, dimension(3) :: i1,i2
+
+ end type
+
+#endif
+
+ !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
  ! RIEMANN SOLVER UTILS
  !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
@@ -917,6 +976,10 @@ module source
 
     type(r_utils) :: ru
 
+#ifdef GMG_PRECONDITIONER
+    type(gmg_vecs) :: gmgv(1:gmg_max_level)
+#endif
+
 #ifdef USE_GRAVITY
 
     real(kind=rp), allocatable, dimension(:,:,:,:) :: grav
@@ -949,7 +1012,7 @@ module source
 
 #ifdef USE_GRAVITY_SOLVER
     real(kind=rp), allocatable, dimension(:,:,:) :: &
-    r0hat,rgs,v,t,p,s
+    r0hat,rgs,v,t,p,s,y,z
 #endif
 
 #endif
@@ -1504,6 +1567,82 @@ contains
     lx3-1:ux3+1))
 #endif 
 
+    allocate(lgrid%y(lx1-1:ux1+1,lx2-1:ux2+1, &
+#if sdims_make==2
+    lx3:ux3))
+#endif
+#if sdims_make==3
+    lx3-1:ux3+1))
+#endif 
+
+    allocate(lgrid%z(lx1-1:ux1+1,lx2-1:ux2+1, &
+#if sdims_make==2
+    lx3:ux3))
+#endif
+#if sdims_make==3
+    lx3-1:ux3+1))
+#endif 
+
+#ifdef GMG_PRECONDITIONER
+
+    do ierr=1,gmg_max_level
+
+     lgrid%gmgv(ierr)%i1(1) = int((lx1-1)/2**(ierr-1))+1
+     lgrid%gmgv(ierr)%i1(2) = int((lx2-1)/2**(ierr-1))+1
+     lgrid%gmgv(ierr)%i1(3) = int((lx3-1)/2**(ierr-1))+1
+     lgrid%gmgv(ierr)%i2(1) = int(ux1/2**(ierr-1))
+     lgrid%gmgv(ierr)%i2(2) = int(ux2/2**(ierr-1))
+     lgrid%gmgv(ierr)%i2(3) = int(ux3/2**(ierr-1))
+
+     allocate(lgrid%gmgv(ierr)%eh( &
+     lgrid%gmgv(ierr)%i1(1)-1:lgrid%gmgv(ierr)%i2(1)+1, &
+     lgrid%gmgv(ierr)%i1(2)-1:lgrid%gmgv(ierr)%i2(2)+1, &
+     lgrid%gmgv(ierr)%i1(3)-1:lgrid%gmgv(ierr)%i2(3)+1 ) )
+
+     allocate(lgrid%gmgv(ierr)%rh( &
+     lgrid%gmgv(ierr)%i1(1)-1:lgrid%gmgv(ierr)%i2(1)+1, &
+     lgrid%gmgv(ierr)%i1(2)-1:lgrid%gmgv(ierr)%i2(2)+1, &
+     lgrid%gmgv(ierr)%i1(3)-1:lgrid%gmgv(ierr)%i2(3)+1 ) )
+
+     allocate(lgrid%gmgv(ierr)%tmp( &
+     lgrid%gmgv(ierr)%i1(1)-1:lgrid%gmgv(ierr)%i2(1)+1, &
+     lgrid%gmgv(ierr)%i1(2)-1:lgrid%gmgv(ierr)%i2(2)+1, &
+     lgrid%gmgv(ierr)%i1(3)-1:lgrid%gmgv(ierr)%i2(3)+1 ) )
+
+     allocate(lgrid%gmgv(ierr)%coords(1:3, &
+     lgrid%gmgv(ierr)%i1(1)-1:lgrid%gmgv(ierr)%i2(1)+1, &
+     lgrid%gmgv(ierr)%i1(2)-1:lgrid%gmgv(ierr)%i2(2)+1, &
+     lgrid%gmgv(ierr)%i1(3)-1:lgrid%gmgv(ierr)%i2(3)+1 ) )
+
+     allocate(lgrid%gmgv(ierr)%nodes(1:3, &
+     lgrid%gmgv(ierr)%i1(1)-1:lgrid%gmgv(ierr)%i2(1)+1+1, &
+     lgrid%gmgv(ierr)%i1(2)-1:lgrid%gmgv(ierr)%i2(2)+1+1, &
+     lgrid%gmgv(ierr)%i1(3)-1:lgrid%gmgv(ierr)%i2(3)+1+1 ) )
+
+     allocate(lgrid%gmgv(ierr)%coords_x1( &
+     lgrid%gmgv(ierr)%i1(1)-1:lgrid%gmgv(ierr)%i2(1)+1+1, &
+     lgrid%gmgv(ierr)%i1(2)-1:lgrid%gmgv(ierr)%i2(2)+1, &
+     lgrid%gmgv(ierr)%i1(3)-1:lgrid%gmgv(ierr)%i2(3)+1 ) )
+
+     allocate(lgrid%gmgv(ierr)%coords_x2( &
+     lgrid%gmgv(ierr)%i1(1)-1:lgrid%gmgv(ierr)%i2(1)+1, &
+     lgrid%gmgv(ierr)%i1(2)-1:lgrid%gmgv(ierr)%i2(2)+1+1, &
+     lgrid%gmgv(ierr)%i1(3)-1:lgrid%gmgv(ierr)%i2(3)+1 ) )
+
+     allocate(lgrid%gmgv(ierr)%coords_x3( &
+     lgrid%gmgv(ierr)%i1(1)-1:lgrid%gmgv(ierr)%i2(1)+1, &
+     lgrid%gmgv(ierr)%i1(2)-1:lgrid%gmgv(ierr)%i2(2)+1, &
+     lgrid%gmgv(ierr)%i1(3)-1:lgrid%gmgv(ierr)%i2(3)+1+1 ) )
+
+     allocate(lgrid%gmgv(ierr)%vol( &
+     lgrid%gmgv(ierr)%i1(1)-1:lgrid%gmgv(ierr)%i2(1)+1, &
+     lgrid%gmgv(ierr)%i1(2)-1:lgrid%gmgv(ierr)%i2(2)+1, &
+     lgrid%gmgv(ierr)%i1(3)-1:lgrid%gmgv(ierr)%i2(3)+1 ) )
+
+    end do
+
+#endif
+
 #endif
 
 #endif
@@ -1957,6 +2096,21 @@ contains
     deallocate(lgrid%t)
     deallocate(lgrid%p)
     deallocate(lgrid%s)
+    deallocate(lgrid%y)
+    deallocate(lgrid%z)
+#ifdef GMG_PRECONDITIONER
+    do ierr=1,gmg_max_level
+     deallocate(lgrid%gmgv(ierr)%eh)
+     deallocate(lgrid%gmgv(ierr)%rh)
+     deallocate(lgrid%gmgv(ierr)%tmp)
+     deallocate(lgrid%gmgv(ierr)%coords)
+     deallocate(lgrid%gmgv(ierr)%nodes)
+     deallocate(lgrid%gmgv(ierr)%coords_x1)
+     deallocate(lgrid%gmgv(ierr)%coords_x2)
+     deallocate(lgrid%gmgv(ierr)%coords_x3)
+     deallocate(lgrid%gmgv(ierr)%vol)
+    end do
+#endif
 #endif
 
 #endif
@@ -5863,6 +6017,10 @@ contains
      end do
     end do
 
+#ifdef GMG_PRECONDITIONER
+    call fill_gmg_grids(mgrid,lgrid)
+#endif
+
 #ifdef USE_POINT_PROBES
     
     do ipr=1,nprobes
@@ -6833,7 +6991,8 @@ contains
       wct_hydro/real(lgrid%step-step0,kind=rp)/real(mgrid%nx1l*mgrid%nx2l*mgrid%nx3l,kind=rp)*1.0e6_rp
       write(*,'("updated cells/s = ",E9.3)') & 
       (lgrid%step-step0)*(real(nx1,kind=rp)*real(nx2,kind=rp)*real(nx3,kind=rp))/wct_hydro 
-      write(*,'("total wct (no output) = ",E9.3," s")') wct_hydro
+      write(*,'("total wct time step (no output) = ",E9.3," s")') wct_hydro
+      write(*,'("total wct = ",E9.3," s")') wctg 
       write(*,'("wct single output = ",E9.3," s")') wctof-wctoi
 
     endif
@@ -17646,7 +17805,7 @@ contains
   dz = rp1
 #endif
 
-  dV = dz*dy*dz
+  dV = dx*dy*dz
 
 #ifdef GS_QUADRUPOLE_BCS
 
@@ -18021,7 +18180,7 @@ contains
       c3z = rp2/(h2z*(h1z+h2z))
 #endif
 
-      tmp = rp1/(c2x+c2y+c2z)*(rp1-real(lgrid%is_solid(i,j,k),kind=rp))
+      tmp = rp1-real(lgrid%is_solid(i,j,k),kind=rp)
 
       phicc = lgrid%phi_cc(i,j,k)
 
@@ -18074,10 +18233,8 @@ contains
       c2z = -rp2/(h1z*h2z)
 #endif
 
-      tmp = rp1/(c2x+c2y+c2z)
-
       res_L2(1) = res_L2(1) + ( lgrid%r0hat(i,j,k) /  &
-      (tmp*rp4*CONST_PI*CONST_GRAV*max(abs(lgrid%prim(i_rho,i,j,k)-lgrid%gs_rho_bg),lgrid%gs_rho_bg)))**2
+      (rp4*CONST_PI*CONST_GRAV*max(abs(lgrid%prim(i_rho,i,j,k)-lgrid%gs_rho_bg),lgrid%gs_rho_bg)))**2
 
     end do
    end do
@@ -18179,7 +18336,7 @@ contains
        c3z = rp2/(h2z*(h1z+h2z))
 #endif
 
-       tmp = rp1/(c2x+c2y+c2z)*(rp1-real(lgrid%is_solid(i,j,k),kind=rp))
+       tmp = rp1-real(lgrid%is_solid(i,j,k),kind=rp)
 
        phicc = lgrid%p(i,j,k)
 
@@ -18291,7 +18448,7 @@ contains
        c3z = rp2/(h2z*(h1z+h2z))
 #endif
 
-       tmp = rp1/(c2x+c2y+c2z)*(rp1-real(lgrid%is_solid(i,j,k),kind=rp))
+       tmp = rp1-real(lgrid%is_solid(i,j,k),kind=rp)
 
        phicc = lgrid%s(i,j,k)
 
@@ -18383,10 +18540,8 @@ contains
        c2z = -rp2/(h1z*h2z)
 #endif
 
-       tmp = rp1/(c2x+c2y+c2z)
-
        res_L2(1) = res_L2(1) + ( lgrid%rgs(i,j,k) /  &
-       (tmp*rp4*CONST_PI*CONST_GRAV*max(abs(lgrid%prim(i_rho,i,j,k)-lgrid%gs_rho_bg),lgrid%gs_rho_bg)))**2
+       (rp4*CONST_PI*CONST_GRAV*max(abs(lgrid%prim(i_rho,i,j,k)-lgrid%gs_rho_bg),lgrid%gs_rho_bg)))**2
 
       end do
      end do
@@ -18568,7 +18723,7 @@ contains
   dz = rp1
 #endif
 
-  dV = dz*dy*dz
+  dV = dx*dy*dz
 
 #ifdef GS_QUADRUPOLE_BCS
 
@@ -19036,11 +19191,9 @@ contains
       c3z = rp2/(h2z*(h1z+h2z))
 #endif
 
-      tmp = rp1/(c2x+c2y+c2z)
-
       phicc = lgrid%phi_cc(i,j,k)
 
-      lgrid%rgs(i,j,k) = tmp*(rp4*CONST_PI*CONST_GRAV*(lgrid%prim(i_rho,i,j,k) - lgrid%gs_rho_bg) - ( &
+      lgrid%rgs(i,j,k) = (rp4*CONST_PI*CONST_GRAV*(lgrid%prim(i_rho,i,j,k) - lgrid%gs_rho_bg) - ( &
 #if sdims_make==3
       c3z*lgrid%phi_cc(i,j,k+1)+c2z*phicc+c1z*lgrid%phi_cc(i,j,k-1) + &
 #endif
@@ -19089,10 +19242,12 @@ contains
       c2z = -rp2/(h1z*h2z)
 #endif
 
-      tmp = rp1/(c2x+c2y+c2z)
-
+#ifdef CONST_GRAV_UNITY
+      res_L2(1) = res_L2(1) + lgrid%r0hat(i,j,k)**2 
+#else
       res_L2(1) = res_L2(1) + ( lgrid%r0hat(i,j,k) /  &
-      (tmp*rp4*CONST_PI*CONST_GRAV*max(abs(lgrid%prim(i_rho,i,j,k)-lgrid%gs_rho_bg),lgrid%gs_rho_bg)))**2
+      (rp4*CONST_PI*CONST_GRAV*max(abs(lgrid%prim(i_rho,i,j,k)-lgrid%gs_rho_bg),lgrid%gs_rho_bg)))**2
+#endif
 
     end do
    end do
@@ -19122,15 +19277,55 @@ contains
   iter = 0
 
   do while(res_L2_comm(1) > gs_tol)
+
+#ifdef GMG_PRECONDITIONER
+
+    do k=lx3,ux3
+     do j=lx2,ux2
+      do i=lx1,ux1
+
+       lgrid%gmgv(1)%eh(i,j,k) = rp0
+       lgrid%gmgv(1)%rh(i,j,k) = lgrid%p(i,j,k)
+
+      end do
+     end do
+    end do
+
+    call gmg_Vcycle(mgrid,lgrid,1)
+
+    do k=lx3,ux3
+     do j=lx2,ux2
+      do i=lx1,ux1
+
+       lgrid%y(i,j,k) = lgrid%gmgv(1)%eh(i,j,k) 
+
+      end do
+     end do
+    end do
+
+#else
+
+    do k=lx3,ux3
+     do j=lx2,ux2
+      do i=lx1,ux1
+
+       lgrid%y(i,j,k) = lgrid%p(i,j,k)
+
+      end do
+     end do
+    end do
+
+#endif
+
 #ifdef ENFORCE_BARRIERS
     call mpi_barrier(mgrid%comm_cart,ierr)
 #endif
-    call communicate_array(mgrid,lx1,ux1,lx2,ux2,lx3,ux3,1,lgrid%p,.false.)
+    call communicate_array(mgrid,lx1,ux1,lx2,ux2,lx3,ux3,1,lgrid%y,.false.)
     
     if(mgrid%coords_dd(1)==0) then
       do k=lx3,ux3
        do j=lx2,ux2
-         lgrid%p(lx1-1,j,k) = -lgrid%p(lx1,j,k)
+         lgrid%y(lx1-1,j,k) = -lgrid%y(lx1,j,k)
        end do
       end do
     end if
@@ -19138,7 +19333,7 @@ contains
     if(mgrid%coords_dd(1)==mgrid%bricks(1)-1) then
       do k=lx3,ux3
        do j=lx2,ux2
-         lgrid%p(ux1+1,j,k) = -lgrid%p(ux1,j,k)
+         lgrid%y(ux1+1,j,k) = -lgrid%y(ux1,j,k)
        end do
       end do
     end if
@@ -19146,7 +19341,7 @@ contains
     if(mgrid%coords_dd(2)==0) then
       do k=lx3,ux3
        do i=lx1,ux1
-         lgrid%p(i,lx2-1,k) = -lgrid%p(i,lx2,k)
+         lgrid%y(i,lx2-1,k) = -lgrid%y(i,lx2,k)
        end do
       end do
     end if
@@ -19154,7 +19349,7 @@ contains
     if(mgrid%coords_dd(2)==mgrid%bricks(2)-1) then
       do k=lx3,ux3
        do i=lx1,ux1
-         lgrid%p(i,ux2+1,k) = -lgrid%p(i,ux2,k)
+         lgrid%y(i,ux2+1,k) = -lgrid%y(i,ux2,k)
        end do
       end do
     end if
@@ -19164,7 +19359,7 @@ contains
     if(mgrid%coords_dd(3)==0) then
       do j=lx2,ux2
        do i=lx1,ux1
-         lgrid%p(i,j,lx3-1) = -lgrid%p(i,j,lx3)
+         lgrid%y(i,j,lx3-1) = -lgrid%y(i,j,lx3)
        end do
       end do
     end if
@@ -19172,7 +19367,7 @@ contains
     if(mgrid%coords_dd(3)==mgrid%bricks(3)-1) then
       do j=lx2,ux2
        do i=lx1,ux1
-         lgrid%p(i,j,ux3+1) = -lgrid%p(i,j,ux3)
+         lgrid%y(i,j,ux3+1) = -lgrid%y(i,j,ux3)
        end do
       end do
     end if
@@ -19211,16 +19406,14 @@ contains
        c3z = rp2/(h2z*(h1z+h2z))
 #endif
 
-       tmp = rp1/(c2x+c2y+c2z)
+       phicc = lgrid%y(i,j,k)
 
-       phicc = lgrid%p(i,j,k)
-
-       lgrid%v(i,j,k) = tmp*( &
+       lgrid%v(i,j,k) = ( &
 #if sdims_make==3
-       c3z*lgrid%p(i,j,k+1)+c2z*phicc+c1z*lgrid%p(i,j,k-1) + &
+       c3z*lgrid%y(i,j,k+1)+c2z*phicc+c1z*lgrid%y(i,j,k-1) + &
 #endif
-       c3x*lgrid%p(i+1,j,k)+c2x*phicc+c1x*lgrid%p(i-1,j,k) + &
-       c3y*lgrid%p(i,j+1,k)+c2y*phicc+c1y*lgrid%p(i,j-1,k) )
+       c3x*lgrid%y(i+1,j,k)+c2x*phicc+c1x*lgrid%y(i-1,j,k) + &
+       c3y*lgrid%y(i,j+1,k)+c2y*phicc+c1y*lgrid%y(i,j-1,k) )
 
       end do
      end do
@@ -19251,15 +19444,55 @@ contains
       end do
      end do
     end do
+
+#ifdef GMG_PRECONDITIONER
+
+    do k=lx3,ux3
+     do j=lx2,ux2
+      do i=lx1,ux1
+
+       lgrid%gmgv(1)%eh(i,j,k) = rp0
+       lgrid%gmgv(1)%rh(i,j,k) = lgrid%s(i,j,k)
+
+      end do
+     end do
+    end do
+
+    call gmg_Vcycle(mgrid,lgrid,1)
+
+    do k=lx3,ux3
+     do j=lx2,ux2
+      do i=lx1,ux1
+
+       lgrid%z(i,j,k) = lgrid%gmgv(1)%eh(i,j,k) 
+
+      end do
+     end do
+    end do
+
+#else
+
+    do k=lx3,ux3
+     do j=lx2,ux2
+      do i=lx1,ux1
+
+       lgrid%z(i,j,k) = lgrid%s(i,j,k)
+
+      end do
+     end do
+    end do
+
+#endif
+
 #ifdef ENFORCE_BARRIERS
     call mpi_barrier(mgrid%comm_cart,ierr)
 #endif
-    call communicate_array(mgrid,lx1,ux1,lx2,ux2,lx3,ux3,1,lgrid%s,.false.)
+    call communicate_array(mgrid,lx1,ux1,lx2,ux2,lx3,ux3,1,lgrid%z,.false.)
     
     if(mgrid%coords_dd(1)==0) then
       do k=lx3,ux3
        do j=lx2,ux2
-         lgrid%s(lx1-1,j,k) = -lgrid%s(lx1,j,k)
+         lgrid%z(lx1-1,j,k) = -lgrid%z(lx1,j,k)
        end do
       end do
     end if
@@ -19267,7 +19500,7 @@ contains
     if(mgrid%coords_dd(1)==mgrid%bricks(1)-1) then
       do k=lx3,ux3
        do j=lx2,ux2
-         lgrid%s(ux1+1,j,k) = -lgrid%s(ux1,j,k)
+         lgrid%z(ux1+1,j,k) = -lgrid%z(ux1,j,k)
        end do
       end do
     end if
@@ -19275,7 +19508,7 @@ contains
     if(mgrid%coords_dd(2)==0) then
       do k=lx3,ux3
        do i=lx1,ux1
-         lgrid%s(i,lx2-1,k) = -lgrid%s(i,lx2,k)
+         lgrid%z(i,lx2-1,k) = -lgrid%z(i,lx2,k)
        end do
       end do
     end if
@@ -19283,7 +19516,7 @@ contains
     if(mgrid%coords_dd(2)==mgrid%bricks(2)-1) then
       do k=lx3,ux3
        do i=lx1,ux1
-         lgrid%s(i,ux2+1,k) = -lgrid%s(i,ux2,k)
+         lgrid%z(i,ux2+1,k) = -lgrid%z(i,ux2,k)
        end do
       end do
     end if
@@ -19293,7 +19526,7 @@ contains
     if(mgrid%coords_dd(3)==0) then
       do j=lx2,ux2
        do i=lx1,ux1
-         lgrid%s(i,j,lx3-1) = -lgrid%s(i,j,lx3)
+         lgrid%z(i,j,lx3-1) = -lgrid%z(i,j,lx3)
        end do
       end do
     end if
@@ -19301,7 +19534,7 @@ contains
     if(mgrid%coords_dd(3)==mgrid%bricks(3)-1) then
       do j=lx2,ux2
        do i=lx1,ux1
-         lgrid%s(i,j,ux3+1) = -lgrid%s(i,j,ux3)
+         lgrid%z(i,j,ux3+1) = -lgrid%z(i,j,ux3)
        end do
       end do
     end if
@@ -19340,16 +19573,14 @@ contains
        c3z = rp2/(h2z*(h1z+h2z))
 #endif
 
-       tmp = rp1/(c2x+c2y+c2z)
+       phicc = lgrid%z(i,j,k)
 
-       phicc = lgrid%s(i,j,k)
-
-       lgrid%t(i,j,k) = tmp*( &
+       lgrid%t(i,j,k) = ( &
 #if sdims_make==3
-       c3z*lgrid%s(i,j,k+1)+c2z*phicc+c1z*lgrid%s(i,j,k-1) + &
+       c3z*lgrid%z(i,j,k+1)+c2z*phicc+c1z*lgrid%z(i,j,k-1) + &
 #endif
-       c3x*lgrid%s(i+1,j,k)+c2x*phicc+c1x*lgrid%s(i-1,j,k) + &
-       c3y*lgrid%s(i,j+1,k)+c2y*phicc+c1y*lgrid%s(i,j-1,k) )
+       c3x*lgrid%z(i+1,j,k)+c2x*phicc+c1x*lgrid%z(i-1,j,k) + &
+       c3y*lgrid%z(i,j+1,k)+c2y*phicc+c1y*lgrid%z(i,j-1,k) )
 
       end do
      end do
@@ -19381,7 +19612,7 @@ contains
      do j=lx2,ux2
       do i=lx1,ux1
        
-       lgrid%phi_cc(i,j,k) = lgrid%phi_cc(i,j,k) + alpha*lgrid%p(i,j,k) + wi*lgrid%s(i,j,k)
+       lgrid%phi_cc(i,j,k) = lgrid%phi_cc(i,j,k) + alpha*lgrid%y(i,j,k) + wi*lgrid%z(i,j,k)
        
        lgrid%rgs(i,j,k) = lgrid%s(i,j,k) -  wi*lgrid%t(i,j,k)
 
@@ -19432,10 +19663,12 @@ contains
        c2z = -rp2/(h1z*h2z)
 #endif
 
-       tmp = rp1/(c2x+c2y+c2z)
-
+#ifdef CONST_GRAV_UNITY
+       res_L2(1) = res_L2(1) + lgrid%rgs(i,j,k)**2
+#else
        res_L2(1) = res_L2(1) + ( lgrid%rgs(i,j,k) /  &
-       (tmp*rp4*CONST_PI*CONST_GRAV*max(abs(lgrid%prim(i_rho,i,j,k)-lgrid%gs_rho_bg),lgrid%gs_rho_bg)))**2
+       (rp4*CONST_PI*CONST_GRAV*max(abs(lgrid%prim(i_rho,i,j,k)-lgrid%gs_rho_bg),lgrid%gs_rho_bg)))**2
+#endif
 
       end do
      end do
@@ -19575,6 +19808,590 @@ contains
 #endif
 
  end subroutine fill_ghost_potential
+
+#ifdef GMG_PRECONDITIONER
+
+ recursive subroutine gmg_Vcycle(mgrid,lgrid,level)
+  type(mpigrid), intent(in) :: mgrid
+  type(locgrid), intent(inout) :: lgrid
+  integer, intent(in) :: level
+
+  integer :: i,j,k,ia,ja,ka,iaa,jaa,kaa
+  integer :: lx1,ux1,lx2,ux2,lx3,ux3
+  integer :: lx1l,ux1l,lx2l,ux2l,lx3l,ux3l
+
+  integer :: iter
+
+  real(kind=rp) :: h1x,h2x,h1y,h2y,xc,yc,c1x,c2x,c3x, &
+  c1y,c2y,c3y,h1z,h2z,zc,c1z,c2z,c3z,tmp, &
+  v1,v2,v3,v4,v5,v6,v7,v8,ivol,omega
+
+  lx1 = lgrid%gmgv(level)%i1(1)
+  lx2 = lgrid%gmgv(level)%i1(2)
+  lx3 = lgrid%gmgv(level)%i1(3)
+  ux1 = lgrid%gmgv(level)%i2(1)
+  ux2 = lgrid%gmgv(level)%i2(2)
+  ux3 = lgrid%gmgv(level)%i2(3)
+
+  lx1l = lgrid%gmgv(level+1)%i1(1)
+  lx2l = lgrid%gmgv(level+1)%i1(2)
+  lx3l = lgrid%gmgv(level+1)%i1(3)
+  ux1l = lgrid%gmgv(level+1)%i2(1)
+  ux2l = lgrid%gmgv(level+1)%i2(2)
+  ux3l = lgrid%gmgv(level+1)%i2(3)
+
+  omega = 0.8_rp
+
+  if(level==gmg_max_level) then
+
+    do iter=1,gmg_niter_coarse
+
+#ifdef ENFORCE_BARRIERS
+     call mpi_barrier(mgrid%comm_cart,ierr)
+#endif
+     call communicate_array(mgrid,lx1,ux1,lx2,ux2,lx3,ux3,1,lgrid%gmgv(level)%eh,.false.)
+
+     if(mgrid%coords_dd(1)==0) then
+       do k=lx3,ux3
+        do j=lx2,ux2
+          lgrid%gmgv(level)%eh(lx1-1,j,k) = -lgrid%gmgv(level)%eh(lx1,j,k)
+        end do
+       end do
+     end if
+
+     if(mgrid%coords_dd(1)==mgrid%bricks(1)-1) then
+       do k=lx3,ux3
+        do j=lx2,ux2
+          lgrid%gmgv(level)%eh(ux1+1,j,k) = -lgrid%gmgv(level)%eh(ux1,j,k)
+        end do
+       end do
+     end if
+
+     if(mgrid%coords_dd(2)==0) then
+       do k=lx3,ux3
+        do i=lx1,ux1
+          lgrid%gmgv(level)%eh(i,lx2-1,k) = -lgrid%gmgv(level)%eh(i,lx2,k)
+        end do
+       end do
+     end if
+
+     if(mgrid%coords_dd(2)==mgrid%bricks(2)-1) then
+       do k=lx3,ux3
+        do i=lx1,ux1
+          lgrid%gmgv(level)%eh(i,ux2+1,k) = -lgrid%gmgv(level)%eh(i,ux2,k)
+        end do
+       end do
+     end if
+
+     if(mgrid%coords_dd(3)==0) then
+       do j=lx2,ux2
+        do i=lx1,ux1
+          lgrid%gmgv(level)%eh(i,j,lx3-1) = -lgrid%gmgv(level)%eh(i,j,lx3)
+        end do
+       end do
+     end if
+
+     if(mgrid%coords_dd(3)==mgrid%bricks(3)-1) then
+       do j=lx2,ux2
+        do i=lx1,ux1
+          lgrid%gmgv(level)%eh(i,j,ux3+1) = -lgrid%gmgv(level)%eh(i,j,ux3)
+        end do
+       end do
+     end if
+
+     do k=lx3,ux3
+      do j=lx2,ux2
+       do i=lx1,ux1
+
+        xc = lgrid%gmgv(level)%coords(1,i,j,k)
+        yc = lgrid%gmgv(level)%coords(2,i,j,k)
+        zc = lgrid%gmgv(level)%coords(3,i,j,k)
+
+        h1x = xc - lgrid%gmgv(level)%coords(1,i-1,j,k)
+        h2x = lgrid%gmgv(level)%coords(1,i+1,j,k) - xc
+
+        c1x = rp2/(h1x*(h1x+h2x))
+        c2x = -rp2/(h1x*h2x)
+        c3x = rp2/(h2x*(h1x+h2x))
+
+        h1y = yc - lgrid%gmgv(level)%coords(2,i,j-1,k)
+        h2y = lgrid%gmgv(level)%coords(2,i,j+1,k) - yc
+
+        c1y = rp2/(h1y*(h1y+h2y))
+        c2y = -rp2/(h1y*h2y)
+        c3y = rp2/(h2y*(h1y+h2y))
+
+        h1z = zc - lgrid%gmgv(level)%coords(3,i,j,k-1)
+        h2z = lgrid%gmgv(level)%coords(3,i,j,k+1) - zc
+
+        c1z = rp2/(h1z*(h1z+h2z))
+        c2z = -rp2/(h1z*h2z)
+        c3z = rp2/(h2z*(h1z+h2z))
+
+        tmp = omega/(c2x+c2y+c2z)
+
+        lgrid%gmgv(level)%tmp(i,j,k) = (rp1-omega)*lgrid%gmgv(level)%eh(i,j,k) + &
+        tmp*( lgrid%gmgv(level)%rh(i,j,k) - ( &
+        c3z*lgrid%gmgv(level)%eh(i,j,k+1) + c1z*lgrid%gmgv(level)%eh(i,j,k-1) + &
+        c3x*lgrid%gmgv(level)%eh(i+1,j,k) + c1x*lgrid%gmgv(level)%eh(i-1,j,k) + &
+        c3y*lgrid%gmgv(level)%eh(i,j+1,k) + c1y*lgrid%gmgv(level)%eh(i,j-1,k) ) )
+
+       end do
+      end do
+     end do
+
+     do k=lx3,ux3
+      do j=lx2,ux2
+       do i=lx1,ux1
+        lgrid%gmgv(level)%eh(i,j,k) = lgrid%gmgv(level)%tmp(i,j,k)
+       end do
+      end do
+     end do
+
+    end do
+
+  else
+
+    !PRE-SMOOTH
+
+    do iter=1,gmg_niter_presmooth
+
+#ifdef ENFORCE_BARRIERS
+     call mpi_barrier(mgrid%comm_cart,ia)
+#endif
+     call communicate_array(mgrid,lx1,ux1,lx2,ux2,lx3,ux3,1,lgrid%gmgv(level)%eh,.false.)
+
+     if(mgrid%coords_dd(1)==0) then
+       do k=lx3,ux3
+        do j=lx2,ux2
+          lgrid%gmgv(level)%eh(lx1-1,j,k) = -lgrid%gmgv(level)%eh(lx1,j,k)
+        end do
+       end do
+     end if
+
+     if(mgrid%coords_dd(1)==mgrid%bricks(1)-1) then
+       do k=lx3,ux3
+        do j=lx2,ux2
+          lgrid%gmgv(level)%eh(ux1+1,j,k) = -lgrid%gmgv(level)%eh(ux1,j,k)
+        end do
+       end do
+     end if
+
+     if(mgrid%coords_dd(2)==0) then
+       do k=lx3,ux3
+        do i=lx1,ux1
+          lgrid%gmgv(level)%eh(i,lx2-1,k) = -lgrid%gmgv(level)%eh(i,lx2,k)
+        end do
+       end do
+     end if
+
+     if(mgrid%coords_dd(2)==mgrid%bricks(2)-1) then
+       do k=lx3,ux3
+        do i=lx1,ux1
+          lgrid%gmgv(level)%eh(i,ux2+1,k) = -lgrid%gmgv(level)%eh(i,ux2,k)
+        end do
+       end do
+     end if
+
+     if(mgrid%coords_dd(3)==0) then
+       do j=lx2,ux2
+        do i=lx1,ux1
+          lgrid%gmgv(level)%eh(i,j,lx3-1) = -lgrid%gmgv(level)%eh(i,j,lx3)
+        end do
+       end do
+     end if
+
+     if(mgrid%coords_dd(3)==mgrid%bricks(3)-1) then
+       do j=lx2,ux2
+        do i=lx1,ux1
+          lgrid%gmgv(level)%eh(i,j,ux3+1) = -lgrid%gmgv(level)%eh(i,j,ux3)
+        end do
+       end do
+     end if
+
+     do k=lx3,ux3
+      do j=lx2,ux2
+       do i=lx1,ux1
+
+        xc = lgrid%gmgv(level)%coords(1,i,j,k)
+        yc = lgrid%gmgv(level)%coords(2,i,j,k)
+        zc = lgrid%gmgv(level)%coords(3,i,j,k)
+
+        h1x = xc - lgrid%gmgv(level)%coords(1,i-1,j,k)
+        h2x = lgrid%gmgv(level)%coords(1,i+1,j,k) - xc
+
+        c1x = rp2/(h1x*(h1x+h2x))
+        c2x = -rp2/(h1x*h2x)
+        c3x = rp2/(h2x*(h1x+h2x))
+
+        h1y = yc - lgrid%gmgv(level)%coords(2,i,j-1,k)
+        h2y = lgrid%gmgv(level)%coords(2,i,j+1,k) - yc
+
+        c1y = rp2/(h1y*(h1y+h2y))
+        c2y = -rp2/(h1y*h2y)
+        c3y = rp2/(h2y*(h1y+h2y))
+
+        h1z = zc - lgrid%gmgv(level)%coords(3,i,j,k-1)
+        h2z = lgrid%gmgv(level)%coords(3,i,j,k+1) - zc
+
+        c1z = rp2/(h1z*(h1z+h2z))
+        c2z = -rp2/(h1z*h2z)
+        c3z = rp2/(h2z*(h1z+h2z))
+
+        tmp = omega/(c2x+c2y+c2z)
+
+        lgrid%gmgv(level)%tmp(i,j,k) = (rp1-omega)*lgrid%gmgv(level)%eh(i,j,k) + &
+        tmp*( lgrid%gmgv(level)%rh(i,j,k) - ( &
+        c3z*lgrid%gmgv(level)%eh(i,j,k+1) + c1z*lgrid%gmgv(level)%eh(i,j,k-1) + &
+        c3x*lgrid%gmgv(level)%eh(i+1,j,k) + c1x*lgrid%gmgv(level)%eh(i-1,j,k) + &
+        c3y*lgrid%gmgv(level)%eh(i,j+1,k) + c1y*lgrid%gmgv(level)%eh(i,j-1,k) ) )
+
+       end do
+      end do
+     end do
+
+     do k=lx3,ux3
+      do j=lx2,ux2
+       do i=lx1,ux1
+        lgrid%gmgv(level)%eh(i,j,k) = lgrid%gmgv(level)%tmp(i,j,k)
+       end do
+      end do
+     end do
+
+    end do
+
+    ! COMPUTE RESIDUAL
+
+#ifdef ENFORCE_BARRIERS
+    call mpi_barrier(mgrid%comm_cart,ierr)
+#endif
+    call communicate_array(mgrid,lx1,ux1,lx2,ux2,lx3,ux3,1,lgrid%gmgv(level)%eh,.false.)
+
+    if(mgrid%coords_dd(1)==0) then
+      do k=lx3,ux3
+       do j=lx2,ux2
+         lgrid%gmgv(level)%eh(lx1-1,j,k) = -lgrid%gmgv(level)%eh(lx1,j,k)
+       end do
+      end do
+    end if
+
+    if(mgrid%coords_dd(1)==mgrid%bricks(1)-1) then
+      do k=lx3,ux3
+       do j=lx2,ux2
+         lgrid%gmgv(level)%eh(ux1+1,j,k) = -lgrid%gmgv(level)%eh(ux1,j,k)
+       end do
+      end do
+    end if
+
+    if(mgrid%coords_dd(2)==0) then
+      do k=lx3,ux3
+       do i=lx1,ux1
+         lgrid%gmgv(level)%eh(i,lx2-1,k) = -lgrid%gmgv(level)%eh(i,lx2,k)
+       end do
+      end do
+    end if
+
+    if(mgrid%coords_dd(2)==mgrid%bricks(2)-1) then
+      do k=lx3,ux3
+       do i=lx1,ux1
+         lgrid%gmgv(level)%eh(i,ux2+1,k) = -lgrid%gmgv(level)%eh(i,ux2,k)
+       end do
+      end do
+    end if
+
+    if(mgrid%coords_dd(3)==0) then
+      do j=lx2,ux2
+       do i=lx1,ux1
+         lgrid%gmgv(level)%eh(i,j,lx3-1) = -lgrid%gmgv(level)%eh(i,j,lx3)
+       end do
+      end do
+    end if
+
+    if(mgrid%coords_dd(3)==mgrid%bricks(3)-1) then
+      do j=lx2,ux2
+       do i=lx1,ux1
+         lgrid%gmgv(level)%eh(i,j,ux3+1) = -lgrid%gmgv(level)%eh(i,j,ux3)
+       end do
+      end do
+    end if
+
+    do k=lx3,ux3
+     do j=lx2,ux2
+      do i=lx1,ux1
+
+        xc = lgrid%gmgv(level)%coords(1,i,j,k)
+        yc = lgrid%gmgv(level)%coords(2,i,j,k)
+        zc = lgrid%gmgv(level)%coords(3,i,j,k)
+
+        h1x = xc - lgrid%gmgv(level)%coords(1,i-1,j,k)
+        h2x = lgrid%gmgv(level)%coords(1,i+1,j,k) - xc
+
+        c1x = rp2/(h1x*(h1x+h2x))
+        c2x = -rp2/(h1x*h2x)
+        c3x = rp2/(h2x*(h1x+h2x))
+
+        h1y = yc - lgrid%gmgv(level)%coords(2,i,j-1,k)
+        h2y = lgrid%gmgv(level)%coords(2,i,j+1,k) - yc
+
+        c1y = rp2/(h1y*(h1y+h2y))
+        c2y = -rp2/(h1y*h2y)
+        c3y = rp2/(h2y*(h1y+h2y))
+
+        h1z = zc - lgrid%gmgv(level)%coords(3,i,j,k-1)
+        h2z = lgrid%gmgv(level)%coords(3,i,j,k+1) - zc
+
+        c1z = rp2/(h1z*(h1z+h2z))
+        c2z = -rp2/(h1z*h2z)
+        c3z = rp2/(h2z*(h1z+h2z))
+
+        tmp = lgrid%gmgv(level)%eh(i,j,k)*(c2x+c2y+c2z)
+
+        lgrid%gmgv(level)%tmp(i,j,k) = lgrid%gmgv(level)%rh(i,j,k) - ( &
+        c3z*lgrid%gmgv(level)%eh(i,j,k+1) + c1z*lgrid%gmgv(level)%eh(i,j,k-1) + &
+        c3x*lgrid%gmgv(level)%eh(i+1,j,k) + c1x*lgrid%gmgv(level)%eh(i-1,j,k) + &
+        c3y*lgrid%gmgv(level)%eh(i,j+1,k) + c1y*lgrid%gmgv(level)%eh(i,j-1,k) + tmp )
+
+      end do
+     end do
+    end do
+
+    ! RESTRICT rh
+
+    do k=lgrid%gmgv(level+1)%i1(3),lgrid%gmgv(level+1)%i2(3)
+     do j=lgrid%gmgv(level+1)%i1(2),lgrid%gmgv(level+1)%i2(2)
+      do i=lgrid%gmgv(level+1)%i1(1),lgrid%gmgv(level+1)%i2(1)
+
+       ia = 2*(i-1)+1
+       ja = 2*(j-1)+1
+       ka = 2*(k-1)+1
+
+       v1 = lgrid%gmgv(level)%vol(ia,ja,ka)
+       v2 = lgrid%gmgv(level)%vol(ia+1,ja,ka)
+       v3 = lgrid%gmgv(level)%vol(ia,ja+1,ka)
+       v4 = lgrid%gmgv(level)%vol(ia,ja,ka+1)
+       v5 = lgrid%gmgv(level)%vol(ia+1,ja+1,ka)
+       v6 = lgrid%gmgv(level)%vol(ia+1,ja,ka+1)
+       v7 = lgrid%gmgv(level)%vol(ia,ja+1,ka+1)
+       v8 = lgrid%gmgv(level)%vol(ia+1,ja+1,ka+1)
+
+       ivol = rp1/(v1+v2+v3+v4+v5+v6+v7+v8)
+
+       lgrid%gmgv(level+1)%rh(i,j,k) = ( &
+       lgrid%gmgv(level)%tmp(ia,ja,ka)*v1 + &
+       lgrid%gmgv(level)%tmp(ia+1,ja,ka)*v2 + &
+       lgrid%gmgv(level)%tmp(ia,ja+1,ka)*v3 + &
+       lgrid%gmgv(level)%tmp(ia,ja,ka+1)*v4 + &
+       lgrid%gmgv(level)%tmp(ia+1,ja+1,ka)*v5 + &
+       lgrid%gmgv(level)%tmp(ia+1,ja,ka+1)*v6 + &
+       lgrid%gmgv(level)%tmp(ia,ja+1,ka+1)*v7 + &
+       lgrid%gmgv(level)%tmp(ia+1,ja+1,ka+1)*v8 )*ivol
+
+       lgrid%gmgv(level+1)%eh(i,j,k) = rp0
+
+      end do
+     end do
+    end do
+
+    ! RECURSIVE CALL
+
+#ifdef ENFORCE_BARRIERS
+     call mpi_barrier(mgrid%comm_cart,ierr)
+#endif
+    call gmg_Vcycle(mgrid,lgrid,level+1)
+ 
+    ! PROLONG
+
+#ifdef ENFORCE_BARRIERS
+    call mpi_barrier(mgrid%comm_cart,ierr)
+#endif
+    call communicate_array(mgrid,lx1l,ux1l,lx2l,ux2l,lx3l,ux3l,1,lgrid%gmgv(level+1)%eh,.false.)
+
+    if(mgrid%coords_dd(1)==0) then
+      do k=lx3l,ux3l
+       do j=lx2l,ux2l
+         lgrid%gmgv(level+1)%eh(lx1l-1,j,k) = -lgrid%gmgv(level+1)%eh(lx1l+1,j,k)
+       end do
+      end do
+    end if
+
+    if(mgrid%coords_dd(1)==mgrid%bricks(1)-1) then
+      do k=lx3l,ux3l
+       do j=lx2l,ux2l
+         lgrid%gmgv(level+1)%eh(ux1l+1,j,k) = -lgrid%gmgv(level+1)%eh(ux1l,j,k)
+       end do
+      end do
+    end if
+
+    if(mgrid%coords_dd(2)==0) then
+      do k=lx3l,ux3l
+       do i=lx1l,ux1l
+         lgrid%gmgv(level+1)%eh(i,lx2l-1,k) = -lgrid%gmgv(level+1)%eh(i,lx2l,k)
+       end do
+      end do
+    end if
+
+    if(mgrid%coords_dd(2)==mgrid%bricks(2)-1) then
+      do k=lx3l,ux3l
+       do i=lx1l,ux1l
+         lgrid%gmgv(level+1)%eh(i,ux2l+1,k) = -lgrid%gmgv(level+1)%eh(i,ux2l,k)
+       end do
+      end do
+    end if
+
+    if(mgrid%coords_dd(3)==0) then
+      do j=lx2l,ux2l
+       do i=lx1l,ux1l
+         lgrid%gmgv(level+1)%eh(i,j,lx3l-1) = -lgrid%gmgv(level+1)%eh(i,j,lx3l)
+       end do
+      end do
+    end if
+
+    if(mgrid%coords_dd(3)==mgrid%bricks(3)-1) then
+      do j=lx2l,ux2l
+       do i=lx1l,ux1l
+         lgrid%gmgv(level+1)%eh(i,j,ux3l+1) = -lgrid%gmgv(level+1)%eh(i,j,ux3l)
+       end do
+      end do
+    end if
+
+    do k=lx3l,ux3l
+     do j=lx2l,ux2l
+      do i=lx1l,ux1l
+
+       ia = 2*(i-1)+1
+       ja = 2*(j-1)+1
+       ka = 2*(k-1)+1
+ 
+       tmp = lgrid%gmgv(level+1)%eh(i,j,k)
+
+       do kaa=0,1
+        do jaa=0,1
+         do iaa=0,1
+ 
+          lgrid%gmgv(level)%eh(ia+iaa,ja+jaa,ka+kaa) = lgrid%gmgv(level)%eh(ia+iaa,ja+jaa,ka+kaa) + &
+          tmp  
+
+         end do
+        end do
+       end do
+
+      end do
+     end do
+    end do
+
+    ! POSTSMOOTH
+
+    do iter=1,gmg_niter_postsmooth
+
+#ifdef ENFORCE_BARRIERS
+     call mpi_barrier(mgrid%comm_cart,ierr)
+#endif
+     call communicate_array(mgrid,lx1,ux1,lx2,ux2,lx3,ux3,1,lgrid%gmgv(level)%eh,.false.)
+
+     if(mgrid%coords_dd(1)==0) then
+       do k=lx3,ux3
+        do j=lx2,ux2
+          lgrid%gmgv(level)%eh(lx1-1,j,k) = -lgrid%gmgv(level)%eh(lx1,j,k)
+        end do
+       end do
+     end if
+
+     if(mgrid%coords_dd(1)==mgrid%bricks(1)-1) then
+       do k=lx3,ux3
+        do j=lx2,ux2
+          lgrid%gmgv(level)%eh(ux1+1,j,k) = -lgrid%gmgv(level)%eh(ux1,j,k)
+        end do
+       end do
+     end if
+
+     if(mgrid%coords_dd(2)==0) then
+       do k=lx3,ux3
+        do i=lx1,ux1
+          lgrid%gmgv(level)%eh(i,lx2-1,k) = -lgrid%gmgv(level)%eh(i,lx2,k)
+        end do
+       end do
+     end if
+
+     if(mgrid%coords_dd(2)==mgrid%bricks(2)-1) then
+       do k=lx3,ux3
+        do i=lx1,ux1
+          lgrid%gmgv(level)%eh(i,ux2+1,k) = -lgrid%gmgv(level)%eh(i,ux2,k)
+        end do
+       end do
+     end if
+
+     if(mgrid%coords_dd(3)==0) then
+       do j=lx2,ux2
+        do i=lx1,ux1
+          lgrid%gmgv(level)%eh(i,j,lx3-1) = -lgrid%gmgv(level)%eh(i,j,lx3)
+        end do
+       end do
+     end if
+
+     if(mgrid%coords_dd(3)==mgrid%bricks(3)-1) then
+       do j=lx2,ux2
+        do i=lx1,ux1
+          lgrid%gmgv(level)%eh(i,j,ux3+1) = -lgrid%gmgv(level)%eh(i,j,ux3)
+        end do
+       end do
+     end if
+
+     do k=lx3,ux3
+      do j=lx2,ux2
+       do i=lx1,ux1
+
+        xc = lgrid%gmgv(level)%coords(1,i,j,k)
+        yc = lgrid%gmgv(level)%coords(2,i,j,k)
+        zc = lgrid%gmgv(level)%coords(3,i,j,k)
+
+        h1x = xc - lgrid%gmgv(level)%coords(1,i-1,j,k)
+        h2x = lgrid%gmgv(level)%coords(1,i+1,j,k) - xc
+
+        c1x = rp2/(h1x*(h1x+h2x))
+        c2x = -rp2/(h1x*h2x)
+        c3x = rp2/(h2x*(h1x+h2x))
+
+        h1y = yc - lgrid%gmgv(level)%coords(2,i,j-1,k)
+        h2y = lgrid%gmgv(level)%coords(2,i,j+1,k) - yc
+
+        c1y = rp2/(h1y*(h1y+h2y))
+        c2y = -rp2/(h1y*h2y)
+        c3y = rp2/(h2y*(h1y+h2y))
+
+        h1z = zc - lgrid%gmgv(level)%coords(3,i,j,k-1)
+        h2z = lgrid%gmgv(level)%coords(3,i,j,k+1) - zc
+
+        c1z = rp2/(h1z*(h1z+h2z))
+        c2z = -rp2/(h1z*h2z)
+        c3z = rp2/(h2z*(h1z+h2z))
+
+        tmp = omega/(c2x+c2y+c2z)
+
+        lgrid%gmgv(level)%tmp(i,j,k) = (rp1-omega)*lgrid%gmgv(level)%eh(i,j,k) + &
+        tmp*( lgrid%gmgv(level)%rh(i,j,k) - ( &
+        c3z*lgrid%gmgv(level)%eh(i,j,k+1) + c1z*lgrid%gmgv(level)%eh(i,j,k-1) + &
+        c3x*lgrid%gmgv(level)%eh(i+1,j,k) + c1x*lgrid%gmgv(level)%eh(i-1,j,k) + &
+        c3y*lgrid%gmgv(level)%eh(i,j+1,k) + c1y*lgrid%gmgv(level)%eh(i,j-1,k) ) )
+
+       end do
+      end do
+     end do
+
+     do k=lx3,ux3
+      do j=lx2,ux2
+       do i=lx1,ux1
+        lgrid%gmgv(level)%eh(i,j,k) = lgrid%gmgv(level)%tmp(i,j,k)
+       end do
+      end do
+     end do
+
+    end do
+
+  endif
+
+ end subroutine gmg_Vcycle
+
+#endif
 
 #endif
 #endif

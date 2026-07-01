@@ -316,7 +316,7 @@ module source
 #endif
 
  real(kind=rp) :: gmg_omega = &
-#ifdef gmg_omega
+#ifdef gmg_omega_make
   gmg_omega_make
 #else
   0.85_rp

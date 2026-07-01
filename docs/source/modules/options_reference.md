@@ -228,9 +228,10 @@ For `LHLL-type` solvers, if both low-Mach and supersonic flows need to be captur
 | `USE_GRAVITY_SOLVER` | Enables time-dependent gravity by solving Poisson's equation (see Sect. 2.12), in Godunov-splitting fashion unless `GRAVITY_SOLVER_RK` is enabled. Boundary conditions are imposed on the gravitational potential by computing the monopole expansion of the mass distribution on the grid. This option only works for uniform or nonuniform Cartesian grids and can be used in combination with internal boundaries. |
 | `GMG_PRECONDITIONER` | Uses geometric multigrid as preconditioning for the gravity solver. This option is not supported if internal boundaries are used and only works for 3D grids. When this option is enabled, the user must provide the subroutine `fill_gmg_grids` in app.F90 (see e.g., tests/gravity-solver). |
 | `gmg_max_level_make` | Maximum number of grids used by the GMG preconditioner.|
-| `gmg_niter_coarse` | Number of weighted Jacobi iterations on the coarsest grid. |
-| `gmg_niter_presmooth` | Number of weighted Jacobi iterations during the pre-smoothing step. |
-| `gmg_niter_postsmooth` | Number of weighted Jacobi iterations during the post-smoothing step. |
+| `gmg_niter_coarse_make` | Number of weighted Jacobi iterations on the coarsest grid. |
+| `gmg_niter_presmooth_make` | Number of weighted Jacobi iterations during the pre-smoothing step. |
+| `gmg_niter_postsmooth_make` | Number of weighted Jacobi iterations during the post-smoothing step. |
+| `gmg_omeag_make=0.85_rp` | Damping coefficient in weighted Jacobi. |
 | `GRAVITY_SOLVER_RK` | Solves Poisson's equation for the gravitational potential in every substage of the Runge--Kutta time stepper. |
 | `GS_QUADRUPOLE_BCS` | Adds the quadrupole expansion term of the mass distribution to compute boundary conditions for the gravitational potential. |
 | `GS_OCTUPOLE_BCS` | Adds the octupole expansion term of the mass distribution to compute boundary conditions for the gravitational potential (must be used in combination with `GS_QUADRUPOLE_BCS`). |

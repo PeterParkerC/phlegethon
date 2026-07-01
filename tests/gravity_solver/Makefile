@@ -38,9 +38,10 @@ OPTS += CONST_GRAV_UNITY
 
 OPTS += GMG_PRECONDITIONER
 OPTS += gmg_niter_coarse_make=5
-OPTS += gmg_niter_presmooth_make=5
+OPTS += gmg_niter_presmooth_make=3
 OPTS += gmg_niter_postsmooth_make=5
 OPTS += gmg_max_level_make=7
+OPTS += gmg_omega_make=0.85_rp
 
 OPTS += OUTPUT_DT
 OPTS += dt_dump_make=100.0_rp

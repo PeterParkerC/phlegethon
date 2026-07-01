@@ -315,6 +315,13 @@ module source
   1
 #endif
 
+ real(kind=rp) :: gmg_omega = &
+#ifdef gmg_omega
+  gmg_omega_make
+#else
+  0.85_rp
+#endif
+
 #endif
 
 #endif
@@ -19824,7 +19831,7 @@ contains
 
   real(kind=rp) :: h1x,h2x,h1y,h2y,xc,yc,c1x,c2x,c3x, &
   c1y,c2y,c3y,h1z,h2z,zc,c1z,c2z,c3z,tmp, &
-  v1,v2,v3,v4,v5,v6,v7,v8,ivol,omega
+  v1,v2,v3,v4,v5,v6,v7,v8,ivol
 
   lx1 = lgrid%gmgv(level)%i1(1)
   lx2 = lgrid%gmgv(level)%i1(2)
@@ -19839,8 +19846,6 @@ contains
   ux1l = lgrid%gmgv(level+1)%i2(1)
   ux2l = lgrid%gmgv(level+1)%i2(2)
   ux3l = lgrid%gmgv(level+1)%i2(3)
-
-  omega = 0.8_rp
 
   if(level==gmg_max_level) then
 
@@ -19928,9 +19933,9 @@ contains
         c2z = -rp2/(h1z*h2z)
         c3z = rp2/(h2z*(h1z+h2z))
 
-        tmp = omega/(c2x+c2y+c2z)
+        tmp = gmg_omega/(c2x+c2y+c2z)
 
-        lgrid%gmgv(level)%tmp(i,j,k) = (rp1-omega)*lgrid%gmgv(level)%eh(i,j,k) + &
+        lgrid%gmgv(level)%tmp(i,j,k) = (rp1-gmg_omega)*lgrid%gmgv(level)%eh(i,j,k) + &
         tmp*( lgrid%gmgv(level)%rh(i,j,k) - ( &
         c3z*lgrid%gmgv(level)%eh(i,j,k+1) + c1z*lgrid%gmgv(level)%eh(i,j,k-1) + &
         c3x*lgrid%gmgv(level)%eh(i+1,j,k) + c1x*lgrid%gmgv(level)%eh(i-1,j,k) + &
@@ -20038,9 +20043,9 @@ contains
         c2z = -rp2/(h1z*h2z)
         c3z = rp2/(h2z*(h1z+h2z))
 
-        tmp = omega/(c2x+c2y+c2z)
+        tmp = gmg_omega/(c2x+c2y+c2z)
 
-        lgrid%gmgv(level)%tmp(i,j,k) = (rp1-omega)*lgrid%gmgv(level)%eh(i,j,k) + &
+        lgrid%gmgv(level)%tmp(i,j,k) = (rp1-gmg_omega)*lgrid%gmgv(level)%eh(i,j,k) + &
         tmp*( lgrid%gmgv(level)%rh(i,j,k) - ( &
         c3z*lgrid%gmgv(level)%eh(i,j,k+1) + c1z*lgrid%gmgv(level)%eh(i,j,k-1) + &
         c3x*lgrid%gmgv(level)%eh(i+1,j,k) + c1x*lgrid%gmgv(level)%eh(i-1,j,k) + &
@@ -20209,7 +20214,7 @@ contains
     if(mgrid%coords_dd(1)==0) then
       do k=lx3l,ux3l
        do j=lx2l,ux2l
-         lgrid%gmgv(level+1)%eh(lx1l-1,j,k) = -lgrid%gmgv(level+1)%eh(lx1l+1,j,k)
+         lgrid%gmgv(level+1)%eh(lx1l-1,j,k) = -lgrid%gmgv(level+1)%eh(lx1l,j,k)
        end do
       end do
     end if
@@ -20365,9 +20370,9 @@ contains
         c2z = -rp2/(h1z*h2z)
         c3z = rp2/(h2z*(h1z+h2z))
 
-        tmp = omega/(c2x+c2y+c2z)
+        tmp = gmg_omega/(c2x+c2y+c2z)
 
-        lgrid%gmgv(level)%tmp(i,j,k) = (rp1-omega)*lgrid%gmgv(level)%eh(i,j,k) + &
+        lgrid%gmgv(level)%tmp(i,j,k) = (rp1-gmg_omega)*lgrid%gmgv(level)%eh(i,j,k) + &
         tmp*( lgrid%gmgv(level)%rh(i,j,k) - ( &
         c3z*lgrid%gmgv(level)%eh(i,j,k+1) + c1z*lgrid%gmgv(level)%eh(i,j,k-1) + &
         c3x*lgrid%gmgv(level)%eh(i+1,j,k) + c1x*lgrid%gmgv(level)%eh(i-1,j,k) + &

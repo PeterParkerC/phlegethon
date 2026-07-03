@@ -469,6 +469,15 @@ module source
 #endif
 #endif
 
+#ifdef USERDEF_OUTPUT
+ integer, parameter :: nudvars = &
+#ifdef nudvars_make
+  nudvars_make
+#else
+  1
+#endif
+#endif
+
  integer, parameter :: nvars = &
 #ifdef nvars_make
   nvars_make
@@ -1085,6 +1094,10 @@ module source
     integer, dimension(1:nprobes,1:3) :: pp_index
     logical, dimension(1:nprobes) :: pp_inside_domain
     real(kind=rp), dimension(1:nprobes,10000,i_rho:i_p+n_probe_vars) :: pp_state
+#endif
+
+#ifdef USERDEF_OUTPUT
+    real(kind=rp), dimension(10000,nudvars) :: ud_state
 #endif
 
 #ifdef SAVE_RPROFS
@@ -5700,7 +5713,7 @@ contains
 #ifdef RESTART_LAST
     integer :: step_tmp(1)
 #endif
-    integer :: ierr,iv,res_nr,iflush,max_T_met,step0
+    integer :: ierr,iv,res_nr,iflush,max_T_met,step0,iudflush
     integer :: i,j,k,ipr,iter
     integer :: lx1,ux1,lx2,ux2,lx3,ux3
     real(kind=rp) :: abar,eint,gm,gmm1,igmm1,p,rho,sound,sound2,T,ye,zbar,dp_drho,dp_deps
@@ -5753,7 +5766,7 @@ contains
     iv = idummy
     res_nr = idummy
     iflush = idummy
-
+    iudflush = idummy
     ipr = idummy
     iter = idummy
 
@@ -6524,6 +6537,33 @@ contains
 
     do while((lgrid%time<tmax).and.(lgrid%step<stepmax).and.(wctg<wctmax).and.(max_T_met<1))
 
+#ifdef USERDEF_OUTPUT
+
+       iudflush = iudflush + 1
+ 
+       call extract_userdef_quantities(mgrid,lgrid,iudflush)
+ 
+       if(mgrid%rankl==master_rank) then
+
+          if(iudflush==10000) then
+
+           open(newunit=iv,file='./udos/udo_'//trim(str(lgrid%step))//'.dat', &
+           status='replace',action='write',form='unformatted',access='stream')
+
+           do i=1,10000
+            write(iv) (lgrid%ud_state(i,ipr),ipr=1,nudvars)
+           end do
+ 
+           close(iv)
+
+          end if
+
+       end if
+
+       if(iudflush==10000) iudflush=0
+
+#endif
+
 #ifdef USE_POINT_PROBES
  
        iflush = iflush + 1
@@ -6794,6 +6834,27 @@ contains
     end if
 #endif
 
+#ifdef USERDEF_OUTPUT
+
+    if(iudflush>0) then    
+
+     if(mgrid%rankl==master_rank) then
+
+      open(newunit=iv,file='./udos/udo_'//trim(str(lgrid%step-1))//'.dat', &
+      status='replace',action='write',form='unformatted',access='stream')
+
+      do i=1,iudflush
+       write(iv) (lgrid%ud_state(i,ipr),ipr=1,nudvars)
+      end do
+ 
+      close(iv)
+
+     end if
+
+    end if
+
+#endif
+ 
 #ifdef USE_POINT_PROBES
 
     if(iflush>0) then    
@@ -6818,6 +6879,7 @@ contains
     end if
 
 #endif
+
     call mpi_barrier(mgrid%comm_cart,ierr)
     call write_restart(mgrid,lgrid)
 

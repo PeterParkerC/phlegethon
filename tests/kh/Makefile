@@ -43,15 +43,20 @@ OPTS += OUTPUT_DT
 OPTS += dt_dump_make=1.0_rp
 OPTS += info_terminal_rate_make=100
 OPTS += dt_restart_make=1.0e5_rp
+OPTS += USERDEF_OUTPUT
+OPTS += nudvars_make=6
 
 #stopping criteria
-OPTS += stepmax_make=2000000
+OPTS += stepmax_make=1000000
 OPTS += tmax_make=8.0_rp
 OPTS += wctmax_make=10000.0_rp
 
 #precision and endianity
 OPTS += USE_DOUBLE_PRECISION
 OPTS += LITTLE_ENDIAN
+
+OPTS += USE_POINT_PROBES
+OPTS += nprobes_make=1
 
 #--------------------------------#
 

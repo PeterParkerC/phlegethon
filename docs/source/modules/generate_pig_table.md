@@ -17,7 +17,7 @@ To generate a customized table for a partially-ionized-gas (PIG) EoS, you must f
 | `ddx2=8` | Number of briquettes in the temperature axis used for MPI parallelization |
 | `USE_QUAD_PRECISION` | To enable 128-bit precision (recommended), otherwise use `USE_DOUBLE_PRECISION` |
 | `USE_H2` | If enabled, adds h2 to the mixture |
-| `USE_OPR_EQM` | If enabled, assume p-h2 to o-h2 at equilibrium ratio; if disabled, assume 3 to 1 ratio. Requires `USE_H2` |
+| `USE_OPR_EQM` | If enabled, assumes para-h2 to orth-h2 at equilibrium ratio; if disabled, assumes 3 to 1 ratio. |
 
 The provided Makefile will use `mpifort` to compile the source code, but you can explicitly set the fortran compiler at `FC = mpifort`.
 

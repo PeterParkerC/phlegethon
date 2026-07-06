@@ -2151,7 +2151,10 @@ class h5grid:
 
     def T(self,ix=-1,iy=-1,iz=-1):
         return self.vec3d(self.grid['temp'],ix=ix,iy=iy,iz=iz)
- 
+
+    def Pmax(self,ix=-1,iy=-1,iz=-1):
+        return self.vec3d(self.grid['Pmax'],ix=ix,iy=iy,iz=iz)
+
     def asc(self,ix=-1,iy=-1,iz=-1):
         return self.vec4d(self.grid['prim'][:,:,:,self.i_as1:],ix=ix,iy=iy,iz=iz)
 

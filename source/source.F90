@@ -1306,6 +1306,10 @@ module source
     real(kind=rp), dimension(10000,nudvars) :: ud_state
 #endif
 
+#ifdef COMPUTE_PMAX
+    real(kind=rp), allocatable, dimension(:,:,:) :: Pmax
+#endif
+
 #ifdef SAVE_RPROFS
     integer :: rprofs_dstep_dump, rprofs_inextoutput
     integer :: rprofs_nr
@@ -2166,6 +2170,7 @@ contains
 #endif
 #endif
 
+<<<<<<< HEAD
 #ifdef SAVE_RAYS
 
     mgrid%rays_nx1 = int((ux1-lx1+1)/rays_nx1_comp)
@@ -2191,6 +2196,10 @@ contains
     mgrid%rays_i1(2):mgrid%rays_i2(2), &
     mgrid%rays_i1(3):mgrid%rays_i2(3))) 
 
+=======
+#ifdef COMPUTE_PMAX
+    allocate(lgrid%Pmax(lx1:ux1,lx2:ux2,lx3:ux3))
+>>>>>>> 5266ab9 (add option for computing cell-wise maximum pressure over time)
 #endif
 
     call h5open_f(ierr)
@@ -2540,9 +2549,14 @@ contains
     deallocate(lgrid%rprofs_r)
 #endif
 
+<<<<<<< HEAD
 #ifdef SAVE_RAYS
     deallocate(lgrid%rays)
     deallocate(lgrid%rays_conv)
+=======
+#ifdef COMPUTE_PMAX
+    deallocate(lgrid%Pmax)
+>>>>>>> 5266ab9 (add option for computing cell-wise maximum pressure over time)
 #endif
 
  end subroutine finalize_simulation
@@ -2946,6 +2960,11 @@ contains
     call hdf5_write_array(h5,id,"temp",mgrid,&
     mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%temp,1)
 
+#ifdef COMPUTE_PMAX
+    call hdf5_write_array(h5,id,"Pmax",mgrid,&
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),0,lgrid%ivol,lgrid%Pmax,1)
+#endif
+
     call h5gclose_f(id, error)
     call h5fclose_f(h5%file_id, error)
 
@@ -3202,6 +3221,14 @@ contains
     mgrid%i1(2),mgrid%i2(2),&
     mgrid%i1(3),mgrid%i2(3),&
     ngc,lgrid%temp)
+
+#ifdef COMPUTE_PMAX
+    call  read_array(h5,group_id,"Pmax",mgrid,&
+    mgrid%i1(1),mgrid%i2(1),&
+    mgrid%i1(2),mgrid%i2(2),&
+    mgrid%i1(3),mgrid%i2(3),&
+    0,lgrid%Pmax)
+#endif
 
     call read_rp(h5,group_id,"time",lgrid%time)
 
@@ -3529,6 +3556,11 @@ contains
 #endif
 #endif
 
+#endif
+
+#ifdef COMPUTE_PMAX
+    call hdf5_write_array(h5,id,"Pmax",mgrid, &
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),0,lgrid%ivol,lgrid%Pmax,0)
 #endif
 
     call h5gclose_f(id,error)
@@ -7099,6 +7131,10 @@ contains
         lgrid%eint(i,j,k) = eint
         lgrid%temp(i,j,k) = T
 
+#ifdef COMPUTE_PMAX
+        lgrid%Pmax(i,j,k) = p
+#endif
+
        end do
       end do
      end do 
@@ -7491,6 +7527,18 @@ contains
        wctf_hydro = get_wtime(mgrid)
        wct_hydro = wct_hydro + wctf_hydro - wcti_hydro
        wctg = wctf_hydro-mgrid%wctgi
+
+#ifdef COMPUTE_PMAX
+       do k=lx3,ux3
+        do j=lx2,ux2
+         do i=lx1,ux1
+
+          lgrid%Pmax(i,j,k) = max(lgrid%Pmax(i,j,k),lgrid%prim(i_p,i,j,k))
+
+         end do 
+        end do
+       end do   
+#endif
 
 #ifdef CHECK_MAX_TEMP
 

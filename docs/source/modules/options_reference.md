@@ -307,6 +307,8 @@ For `LHLL-type` solvers, if both low-Mach and supersonic flows need to be captur
 | `USE_POINT_PROBES` | This option allows the value of state variables in certain cells to be saved to file at very timestep. The number of probes (`nprobes_make`) alongside their coordinates must be provided by the user. The coordinates are the indexes of the probe on the computational grid and must be specified in `app.F90` as `lgrid%pp_index(<probe index>,1)=<index along the x1 axis>` etc. The point probes are saved in the `pps` directory, which is automatically created at compile time. |
 | `nprobes_make=2` | The number of point probes used in the run. |
 |`compression_factor_make=4` | If >1, the code performs rebinning to save a grid snapshot to the output at reduced resolution according to the provided compression factor (CF), without modifying the restart files (only for `sdims_make=3`). The reduced output is computed via volume-weighted averaging of neighboring blocks of CFxCFxCF cells. |
+| `USERDEF_OUTPUT` | Allows the user to store the value of `nudvars_make` scalar quantities at every time step, along the lines of the `USE_POINT_PROBES` option. These scalar quantities must be computed by the user in the provided `extract_userdef_quantities` subroutine in `app.F90`, and stored into `lgrid%ud_state` (see `tests/kh` for an example). The output is available in the repository `/udos`. |
+| `nudvars_make=6` | Number of scalar quantities to be recorded at every time step. |
 
 ### 13. Specs
 

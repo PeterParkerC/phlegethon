@@ -93,6 +93,53 @@ except KeyError:
 _EOS_TABLE_CACHE = {}
 
 #######################################################################################
+# userdef-output class
+#######################################################################################
+
+def ud_read_data(file,n1):
+    
+    f = open(file,'rb')
+    data = np.fromfile(file=f,dtype='f8')
+    nvars = round(data.shape[0]/n1)
+    shape = (n1,nvars)
+    data = data.reshape(shape)
+    f.close()
+    u = data[:, :]
+    del data
+    data = u.astype(np.float64, copy=False)
+    return data
+
+class Udo:
+
+    def __init__(self,dire='./udos'):
+
+        self.dir = dire
+
+        list_dir = os.listdir(dire)
+        probes = [entry for entry in list_dir if entry.startswith("udo")]
+
+        idx_probes = []
+        for probe in probes:
+         nb = re.findall(r'\d+',probe)
+         idx_probes.append(int(nb[0]))
+
+        self.idx_probes = np.array(sorted(idx_probes))
+
+    def time_series(self,idx_var):
+
+        signal = []
+
+        idx_pvs = 0
+        for index in self.idx_probes:
+          nelmts = index+1-idx_pvs
+          idx_pvs = index+1
+          pp_path = os.path.join(self.dir, 'udo_%d.dat'%(index))
+          pp = read_data(pp_path,nelmts)
+          signal.extend(pp[:,idx_var])
+
+        return np.array(signal)
+
+#######################################################################################
 # point-probe class
 #######################################################################################
 

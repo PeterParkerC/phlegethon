@@ -46,13 +46,16 @@ To set a grid geometry, you need to define one of the following options:
 | `GEOMETRY_CARTESIAN_UNIFORM` | Cartesian geometry (uniform). |
 | `GEOMETRY_CARTESIAN_NONUNIFORM` | Cartesian geometry (nonuniform). |
 | `GEOMETRY_2D_POLAR` | 2D polar geometry (requires `sdims_make=2`). |
+| `GEOMETRY_2D_CYLINDRICAL` | 2D cylindrical geometry (requires `sdims_make=2`) |
 | `GEOMETRY_2D_SPHERICAL` | 2D spherical geometry (requires `sdims_make=2`). |
 | `GEOMETRY_3D_SPHERICAL` | 3D spherical geometry (requires `sdims_make=3`). |
 | `GEOMETRY_CUBED_SPHERE` | 2D/3D cubed-sphere geometry of [Calhoun+08](https://ui.adsabs.harvard.edu/abs/2008SIAMR..50..723C/abstract). |
 
-For polar or spherical grids, the user can enable arbitrarily nonuniform radial grid spacing with `NONUNIFORM_RADIAL_NODES`.
+For polar, cylindrical, or spherical grids, the user can enable arbitrarily nonuniform radial grid spacing with `NONUNIFORM_RADIAL_NODES`.
 In this case, the subroutine `create_geometry` must be defined by the user in `app.F90` (see, e.g., `tests/logarithmic-grid/app.F90`)
 The same applies when non-uniform Cartesian grids are enabled with `GEOMETRY_CARTESIAN_NONUNIFORM`.
+
+For `GEOMETRY_2D_CYLINDRICAL`, `NONUNIFORM_RADIAL_NODES` will also enable non-uniform vertical spacing. 
 
 For `GEOMETRY_CUBED_SPHERE`, the following parameters must be defined at compile time:
 
@@ -65,7 +68,7 @@ For `GEOMETRY_CUBED_SPHERE`, the following parameters must be defined at compile
 ### 3. Physics modules
 | Option | Meaning |
 | --- | --- |
-| `COROTATING_FRAME `| Solves the governing equations in the co-rotating frame defined by the angular frequency vector `lgrid%omega_rot(1:3)` specified in the user in `app.F90`. |
+| `COROTATING_FRAME` | Solves the governing equations in the co-rotating frame defined by the angular frequency vector `lgrid%omega_rot(1:3)` specified by the user in `app.F90`. |
 | `USE_CONSTANT_ACCELERATION` | Applies a constant-acceleration body force to the system. In `app.F90`, the grid components of the acceleration vector must be defined in `lgrid%acc(1:sdims_make)`. |
 | `USE_MHD` | Enables ideal magnetohydrodynamics (solved with the CT-contact algorithm of [Gardiner+05](https://ui.adsabs.harvard.edu/abs/2005JCoPh.205..509G/abstract)). In `app.F90`, the face-centered magnetic field components must be filled, e.g., `lgrid%b_x1(i,j,k)` etc. |
 | `Mach_ct_make=1e-6_rp` | Minimum local Mach number to enable the (upwind) contact version of constrained transport. |
@@ -79,7 +82,7 @@ For `GEOMETRY_CUBED_SPHERE`, the following parameters must be defined at compile
 | `THERMAL_DIFFUSION_EXPLICIT` | Enables thermal diffusion solved explicitly in time-unsplit fashion (unstable if the time step is longer than the parabolic CFL criterion, see Sect. 2.10). The cell-centered opacity must be filled in `app.F90` as `lgrid%kappa(i,j,k)`. |
 | `THERMAL_DIFFUSION_STS` | Enables radiative diffusion solved with the RKL2 super time stepper of [Meyer+14](https://ui.adsabs.harvard.edu/abs/2014JCoPh.257..594M/abstract) (see, Sect. 2.10). The cell-centered opacity must be filled in `app.F90` as `lgrid%kappa(i,j,k)`. |
 | `USE_EDOT` | Enables time independent heating. The heating rate per unit volume (`lgrid%edot(i,j,k)`) must be provided in `app.F90` at every cell center. |
-| `USE_VARIABLE_EDOT` | Switches on a fixed heating source after `t=t_start_edot_make` |
+| `VARIABLE_EDOT` | Makes `USE_EDOT` time-dependent by applying `lgrid%edot` only for `t >= t_start_edot_make`. |
 | `t_start_edot_make=1.0_rp` | Time after which the heating source is activated. |
 | `USE_NEULOSS` | Enables nonnuclear neutrino cooling, computed according to [Itoh+1996](https://ui.adsabs.harvard.edu/abs/1996ApJS..102..411I/abstract) (adapted from Frank Timmes' [cococubed](https://cococubed.com/code_pages/nuloss.shtml)). |
 
@@ -108,8 +111,20 @@ For `GEOMETRY_CUBED_SPHERE`, the following parameters must be defined at compile
 | `X2U_DIODE` | Diode boundary conditions at the upper x2 boundary. |
 | `X3L_DIODE` | Diode boundary conditions at the lower x3 boundary. |
 | `X3U_DIODE` | Diode boundary conditions at the upper x3 boundary. |
+| `X1L_BFIELD_PMC` | For reflective MHD boundaries, applies pseudo-magnetic-conductor treatment at the lower x1 boundary. |
+| `X1U_BFIELD_PMC` | For reflective MHD boundaries, applies pseudo-magnetic-conductor treatment at the upper x1 boundary. |
+| `X2L_BFIELD_PMC` | For reflective MHD boundaries, applies pseudo-magnetic-conductor treatment at the lower x2 boundary. |
+| `X2U_BFIELD_PMC` | For reflective MHD boundaries, applies pseudo-magnetic-conductor treatment at the upper x2 boundary. |
+| `X3L_BFIELD_PMC` | For reflective MHD boundaries, applies pseudo-magnetic-conductor treatment at the lower x3 boundary. |
+| `X3U_BFIELD_PMC` | For reflective MHD boundaries, applies pseudo-magnetic-conductor treatment at the upper x3 boundary. |
 | `FIX_TEMPERATURE_AT_X1L` | Fixes the temperature (in this example) at the lower x1 boundary only for the thermal diffusion step. If `USE_WB` is enabled, the temperature at the boundaries is fixed using the equilibrium state, otherwise the temperature must be provided at each lower and upper domain boundary by filling the 3-element arrays (1 element per spatial dimension) `lgrid%Tl(:)` and `grid%Tu(:)`, respectively. |
+| `FIX_TEMPERATURE_AT_X1U` | Same as `FIX_TEMPERATURE_AT_X1L`, but for the upper x1 boundary. |
+| `FIX_TEMPERATURE_AT_X2L` | Same as `FIX_TEMPERATURE_AT_X1L`, but for the lower x2 boundary. |
+| `FIX_TEMPERATURE_AT_X2U` | Same as `FIX_TEMPERATURE_AT_X1L`, but for the upper x2 boundary. |
+| `FIX_TEMPERATURE_AT_X3L` | Same as `FIX_TEMPERATURE_AT_X1L`, but for the lower x3 boundary. |
+| `FIX_TEMPERATURE_AT_X3U` | Same as `FIX_TEMPERATURE_AT_X1L`, but for the upper x3 boundary. |
 |`USE_INTERNAL_BOUNDARIES` | Imposes reflecting boundary conditions at solid interfaces embedded in the numerical domain. This option only works for Cartesian grids and requires `lgrid%is_solid(i,j,k)` to be filled at every cell center in `app.F90`, including the ghost cells (`is_solid=1` for solid cells, `is_solid=0` otherwise). |
+| `HSE_BCS` | Extrapolates the value of the pressure from the last layer of cells in the computational domain to ghost-cell locations assuming hydrostatic equilibrium. Gas density, temperature, and the gammae/c coefficients (when used) are extrapolated to the ghost cells with 2nd-order accuracy. This option works only in combination with `USE_INTERNAL_BOUNDARIES`. |
 
 With reflecting boundary conditions, the option, e.g., `X1L_BFIELD_PMC` imposes zero gradient for the normal component and zero for the transverse component of the field.
 
@@ -244,7 +259,7 @@ For `LHLL-type` solvers, if both low-Mach and supersonic flows need to be captur
 | `boost_reacs_make=100.0_rp` | Boost factor for the nuclear reactions rates. |
 | `BOOST_NEULOSS` | Activates boosting of non-nuclear neutrino losses. |
 | `boost_neuloss_make=10.0_rp` | Boost factor for non-nuclear neutrino losses. |
-| `SAVE_SPECIES_FLUXES` | Saves rate of change of each species due to each reaction. |
+| `SAVE_SPECIES_FLUXES` | Saves rate of change of each species due to each reaction (only for `sdims_make=2`). |
 
 ### 12. Velocity damping
 
@@ -272,28 +287,31 @@ For `LHLL-type` solvers, if both low-Mach and supersonic flows need to be captur
 
 | Option | Meaning |
 | --- | --- |
-|`OUTPUT_NSTEPS` | Enables output dumping every `nsteps_dump` integration steps. |
+|`OUTPUT_NSTEPS` | Enables output dumping every `nsteps_dump` integration steps. Grid snapshots are saved in the `grids` directory, which is automatically created at compile time. |
 |`nsteps_dump_make=10` | Dumping frequency (only if `OUTPUT_NSTEPS` is declared). |
-| `OUTPUT_DT` | Enables output dumping every (approximately) `dt_dump` of simulation time (in seconds). |
+| `OUTPUT_DT` | Enables output dumping every (approximately) `dt_dump` of simulation time (in seconds). Grid snapshots are saved in the `grids` directory, which is automatically created at compile time. |
 | `dt_dump_make=1.5_rp` | Dumping frequency (only if `OUTPUT_DT` is declared). |
 | `info_terminal_rate_make=100000` | Frequency at which the simulation time, cycle, and time step are written to terminal. Further information on the gravity solver or the thermal diffusion step (if used) is also shown. |
 | `dt_restart_make=100.0_rp` | Dumps a restart file every `dt_restart_make` of wall clock time (in seconds). |
-| `RESTART_LAST` | Restarts the simulation from the restart file indicated in the last line of `restart_info.txt` (by default, the last restart). |
-| `SAVE_PLANES` | Dumps 2D slices (planes) to a separate hdf5 output channel (only if `sdims_make=3`). In `app.F90`, the indices of the slices must be provided as `lgrid%planes_x1_index(<plane index>) = <x1 index>` and analogously for slices in the other directions. |
+| `RESTART_LAST` | Restarts the simulation from the restart file indicated in the last line of `restart_info.txt` (by default, the last restart). The restart files are saved in the `restarts` directory, which is automatically created at compile time. |
+| `SAVE_RPROFS` | Dumps horizontal Reynolds averages as functions of radius to a separate hdf5 output channel (for all grids except `GRID_2D_CYLINDRICAL`). |
+| `rprofs_dt_dump_make=1.0_rp` | Output cadence of the horizontal averages in units of simulation time. |
+| `SAVE_PLANES` | Dumps 2D slices (planes) to a separate hdf5 output channel (only if `sdims_make=3`). In `app.F90`, the indices of the slices must be provided as `lgrid%planes_x1_index(<plane index>) = <x1 index>` and analogously for slices in the other directions. Planes are saved in the `planes` directory, which is automatically created at compile time. |
 | `nplanes_x1_make=2` | Number of `(x2,x3)` planes to be saved to output. |
 | `nplanes_x2_make=4` | Number of `(x1,x3)` planes to be saved to output. |
 | `nplanes_x3_make=1` | Number of `(x1,x2)` planes to be saved to output. |
 | `planes_dt_dump_make=1.0_rp` | Output cadence of the planes in units of simulation time. |
-| `SAVE_SPHERICAL_PROJECTIONS` | Dumps spherical projections onto given radii (only if `sdims_make=3` and if `USE_INTERNAL_BOUNDARIES` is declared). |
+| `SAVE_SPHERICAL_PROJECTIONS` | Dumps spherical projections onto given radii (only if `sdims_make=3` and if `USE_INTERNAL_BOUNDARIES` is declared). Spherical projections are saved in the `spj` directory, which is automatically created at compile time. |
 | `nspj_make=5` | number of spherical projections |
 | `spj_dt_dump_make=1.5_rp` | Output cadence of the spherical projections in units of simulation time. In `app.F90`, the radii of the projections must be provided as `lgrid%spj_r(<projection index>) = <radius of projection>`. |
-| `USE_POINT_PROBES` | This option allows the value of state variables in certain cells to be saved to file at very timestep. The number of probes (`nprobes_make`) alongside their coordinates must be provided by the user. The coordinates are the indexes of the probe on the computational grid and must be specified in `app.F90` as `lgrid%pp_index(<probe index>,1)=<index along the x1 axis>` etc. |
+| `USE_POINT_PROBES` | This option allows the value of state variables in certain cells to be saved to file at very timestep. The number of probes (`nprobes_make`) alongside their coordinates must be provided by the user. The coordinates are the indexes of the probe on the computational grid and must be specified in `app.F90` as `lgrid%pp_index(<probe index>,1)=<index along the x1 axis>` etc. The point probes are saved in the `pps` directory, which is automatically created at compile time. |
 | `nprobes_make=2` | The number of point probes used in the run. |
-|`RESIZE_OUTPUT` | Performs rebinning to save a grid snapshot to the output at half the original resolution, without modifying the restart files. |
+|`compression_factor_make=4` | If >1, the code performs rebinning to save a grid snapshot to the output at reduced resolution according to the provided compression factor (CF), without modifying the restart files (only for `sdims_make=3`). The reduced output is computed via volume-weighted averaging of neighboring blocks of CFxCFxCF cells. |
 
-### 13. Precision and endianity
+### 13. Specs
 
 | Option| Meaning |
 | --- | --- |
 | `USE_SINGLE_PRECISION` / `USE_DOUBLE_PRECISION` | floating-point precision mode |
 | `LITTLE_ENDIAN`  / `BIG_ENDIAN`|  endianness setting for binary I/O paths |
+| `ENFORCE_BARRIERS` | enforces mpi-barrier calls before communication calls |

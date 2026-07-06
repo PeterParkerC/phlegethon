@@ -32,7 +32,7 @@ module source
 #ifdef sdims_make
   sdims_make
 #else
-  1
+  2
 #endif
 
   integer, parameter :: nx1 = &
@@ -96,7 +96,7 @@ module source
 #ifdef nspecies_make
   nspecies_make
 #else
-  1
+  0
 #endif
 #endif
 
@@ -105,7 +105,7 @@ module source
 #ifdef nreacs_make
   nreacs_make
 #else
-  1
+  0
 #endif
 #endif
 
@@ -357,7 +357,7 @@ module source
 #endif
 #endif
 
-#ifdef USE_VARIABLE_EDOT
+#ifdef VARIABLE_EDOT
  real(kind=rp), parameter :: t_start_edot = &
 #ifdef t_start_edot_make
   t_start_edot_make
@@ -396,6 +396,22 @@ module source
   dt_restart_make
 #else
   100.0_rp
+#endif
+
+ integer, parameter :: compression_factor = &
+#ifdef compression_factor_make
+  compression_factor_make
+#else
+  1
+#endif
+
+#ifdef SAVE_RPROFS
+ real(kind=rp), parameter :: rprofs_dt_dump = &
+#ifdef rprofs_dt_dump_make
+  rprofs_dt_dump_make
+#else
+  1.0_rp
+#endif
 #endif
 
 #ifdef SAVE_PLANES
@@ -608,7 +624,9 @@ module source
  CONST_AV = 6.02214076e23_rp, &
  CONST_QE = 4.8032042712e-10_rp, &
  CONST_KB = 1.380650424e-16_rp, & 
- CONST_NAV_MEV_TO_ERG = 9.648533007578216e+17_rp
+ CONST_NAV_MEV_TO_ERG = 9.648533007578216e+17_rp, &
+ CONST_H = 6.62606896e-27_rp, &
+ CONST_MU = 1.660538782e-24_rp
 
 #ifdef USE_COULOMB_CORRECTIONS
  real(kind=rp), parameter :: &
@@ -851,6 +869,13 @@ module source
 #endif
 #endif
 
+#ifdef GEOMETRY_2D_CYLINDRICAL
+    real(kind=rp), allocatable, dimension(:,:,:) :: r,r_x1,r_cor
+#ifdef USE_MHD
+    real(kind=rp), allocatable, dimension(:,:,:) :: cm
+#endif
+#endif
+
 #ifdef GEOMETRY_2D_SPHERICAL
     real(kind=rp), allocatable, dimension(:,:,:) :: &
     r,sin_theta,r_x1,r_x2,sin_theta_x2,sin_theta_cor,r_cor
@@ -1062,6 +1087,14 @@ module source
     real(kind=rp), dimension(1:nprobes,10000,i_rho:i_p+n_probe_vars) :: pp_state
 #endif
 
+#ifdef SAVE_RPROFS
+    integer :: rprofs_dstep_dump, rprofs_inextoutput
+    integer :: rprofs_nr
+    integer, allocatable, dimension(:,:,:) :: rprofs_ir
+    integer, allocatable, dimension(:) :: rprofs_counts
+    real(kind=rp), allocatable, dimension(:) :: rprofs_r
+#endif
+
 #ifdef SAVE_PLANES
     integer, dimension(1:nplanes_x1) :: planes_x1_index
     integer, dimension(1:nplanes_x2) :: planes_x2_index
@@ -1085,7 +1118,9 @@ module source
 
 #ifdef USE_INTERNAL_BOUNDARIES
     integer, allocatable, dimension(:,:,:) :: is_solid
+#ifndef GEOMETRY_2D_CYLINDRICAL
     real(kind=rp), allocatable, dimension(:,:,:) :: r
+#endif
 #endif
 
 #ifdef USE_SHOCK_FLATTENING
@@ -1162,7 +1197,6 @@ contains
     mgrid%coords_dd(:) = 0
 
     call mpi_cart_coords(mgrid%comm_cart,mgrid%rankl,sdims,mgrid%coords_dd,ierr)
- 
     call mpi_barrier(mgrid%comm_cart,ierr)
     mgrid%wctgi = get_wtime(mgrid)
 
@@ -1276,6 +1310,15 @@ contains
     allocate(lgrid%r(lx1-ngc:ux1+ngc,lx2-ngc:ux2+ngc,lx3:ux3))
     allocate(lgrid%r_x1(lx1-ngc:ux1+1+ngc,lx2-ngc:ux2+ngc,lx3:ux3))
     allocate(lgrid%r_x2(lx1-ngc:ux1+ngc,lx2-ngc:ux2+1+ngc,lx3:ux3))
+    allocate(lgrid%r_cor(lx1-ngc:ux1+1+ngc,lx2-ngc:ux2+1+ngc,lx3:ux3))
+#ifdef USE_MHD
+    allocate(lgrid%cm(lx1:ux1,lx2:ux2,lx3:ux3))
+#endif
+#endif
+
+#ifdef GEOMETRY_2D_CYLINDRICAL
+    allocate(lgrid%r(lx1-ngc:ux1+ngc,lx2-ngc:ux2+ngc,lx3:ux3))
+    allocate(lgrid%r_x1(lx1-ngc:ux1+1+ngc,lx2-ngc:ux2+ngc,lx3:ux3))
     allocate(lgrid%r_cor(lx1-ngc:ux1+1+ngc,lx2-ngc:ux2+1+ngc,lx3:ux3))
 #ifdef USE_MHD
     allocate(lgrid%cm(lx1:ux1,lx2:ux2,lx3:ux3))
@@ -1693,6 +1736,7 @@ contains
 
 #ifdef USE_INTERNAL_BOUNDARIES
 
+#ifndef GEOMETRY_2D_CYLINDRICAL
     allocate(lgrid%r(lx1-ngc:ux1+ngc,lx2-ngc:ux2+ngc, &
 #if sdims_make==2
     lx3:ux3))
@@ -1700,7 +1744,27 @@ contains
 #if sdims_make==3
     lx3-ngc:ux3+ngc))
 #endif
+#endif
 
+#endif
+
+#ifdef SAVE_RPROFS
+    lgrid%rprofs_dstep_dump = 0
+    lgrid%rprofs_inextoutput = 0
+#ifdef USE_INTERNAL_BOUNDARIES
+    lgrid%rprofs_nr = int(nx1/2)
+#else
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+    lgrid%rprofs_nr = nx1
+#elif defined(GEOMETRY_CUBED_SPHERE)
+    lgrid%rprofs_nr = int(nx1/2)
+#else
+    lgrid%rprofs_nr = nx2
+#endif
+#endif
+    allocate(lgrid%rprofs_ir(lx1:ux1,lx2:ux2,lx3:ux3))
+    allocate(lgrid%rprofs_counts(1:lgrid%rprofs_nr))
+    allocate(lgrid%rprofs_r(1:lgrid%rprofs_nr+1))
 #endif
 
     call create_geometry(lgrid,mgrid)
@@ -1910,6 +1974,15 @@ contains
     deallocate(lgrid%r)
     deallocate(lgrid%r_x1)
     deallocate(lgrid%r_x2)
+    deallocate(lgrid%r_cor)
+#ifdef USE_MHD
+    deallocate(lgrid%cm)
+#endif
+#endif
+
+#ifdef GEOMETRY_2D_CYLINDRICAL
+    deallocate(lgrid%r)
+    deallocate(lgrid%r_x1)
     deallocate(lgrid%r_cor)
 #ifdef USE_MHD
     deallocate(lgrid%cm)
@@ -2130,7 +2203,15 @@ contains
 
 #ifdef USE_INTERNAL_BOUNDARIES
      deallocate(lgrid%is_solid)
+#ifndef GEOMETRY_2D_CYLINDRICAL
      deallocate(lgrid%r)
+#endif
+#endif
+
+#ifdef SAVE_RPROFS
+    deallocate(lgrid%rprofs_ir)
+    deallocate(lgrid%rprofs_counts)
+    deallocate(lgrid%rprofs_r)
 #endif
 
  end subroutine finalize_simulation
@@ -2432,7 +2513,7 @@ contains
     integer :: error
     integer(HID_T) :: id,plist_id
     
-    write(h5%filename, "('restart_n',I0.5,'.h5')") lgrid%step
+    write(h5%filename, "('./restarts/restart_n',I0.5,'.h5')") lgrid%step
 
     call h5pcreate_f(H5P_FILE_ACCESS_F,plist_id,error)
 
@@ -2481,6 +2562,11 @@ contains
     call hdf5_annotate_rp(h5,id,"tnextoutput",lgrid%tnextoutput)
 #endif
 
+#ifdef SAVE_RPROFS
+    call hdf5_annotate_ip(h5,id,"rprofs_inextoutput",lgrid%rprofs_inextoutput)
+    call hdf5_annotate_ip(h5,id,"rprofs_dstep_dump",lgrid%rprofs_dstep_dump)
+#endif
+
 #ifdef SAVE_PLANES
     call hdf5_annotate_ip(h5,id,"planes_inextoutput",lgrid%planes_inextoutput)
     call hdf5_annotate_ip(h5,id,"planes_dstep_dump",lgrid%planes_dstep_dump)
@@ -2492,37 +2578,37 @@ contains
 #endif
 
     call hdf5_write_ndarray(h5,id,"prim",mgrid,nvars,&
-    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,.false.,.false.,lgrid%ivol,lgrid%prim)
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%prim,1)
 
 #ifdef USE_MHD
     call hdf5_write_array(h5,id,"b_x1",mgrid,&
-    mgrid%i1(1),mgrid%i2(1)+1,mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),1,.false.,.false.,lgrid%ivol,lgrid%b_x1)
+    mgrid%i1(1),mgrid%i2(1)+1,mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),1,lgrid%ivol,lgrid%b_x1,1)
 
     call hdf5_write_array(h5,id,"b_x2",mgrid,&
-    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2)+1,mgrid%i1(3),mgrid%i2(3),1,.false.,.false.,lgrid%ivol,lgrid%b_x2)
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2)+1,mgrid%i1(3),mgrid%i2(3),1,lgrid%ivol,lgrid%b_x2,1)
 
 #if sdims_make==3
     call hdf5_write_array(h5,id,"b_x3",mgrid,&
-    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3)+1,1,.false.,.false.,lgrid%ivol,lgrid%b_x3)
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3)+1,1,lgrid%ivol,lgrid%b_x3,1)
 #endif
 #endif
 
 #ifdef USE_GRAVITY
 #ifdef USE_GRAVITY_SOLVER
     call hdf5_write_array(h5,id,"phi_cc",mgrid,&
-    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,.false.,.false.,lgrid%ivol,lgrid%phi_cc)
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%phi_cc,1)
 
     call hdf5_write_ndarray(h5,id,"grav",mgrid,sdims,&
-    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,.false.,.false.,lgrid%ivol,lgrid%grav)
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%grav,1)
 #endif
 #ifdef USE_MONOPOLE_GRAVITY
     call hdf5_write_ndarray(h5,id,"grav",mgrid,sdims,&
-    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,.false.,.false.,lgrid%ivol,lgrid%grav)
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%grav,1)
 #endif
 #endif
 
     call hdf5_write_array(h5,id,"temp",mgrid,&
-    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,.false.,.false.,lgrid%ivol,lgrid%temp)
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%temp,1)
 
     call h5gclose_f(id, error)
     call h5fclose_f(h5%file_id, error)
@@ -2681,7 +2767,7 @@ contains
     integer :: error
     integer(HID_T) :: file_id,group_id
     
-    write(h5%filename, "('restart_n',I0.5,'.h5')") lgrid%step
+    write(h5%filename, "('./restarts/restart_n',I0.5,'.h5')") lgrid%step
 
 #ifdef USE_SINGLE_PRECISION 
 #ifdef LITTLE_ENDIAN
@@ -2789,6 +2875,11 @@ contains
     call read_rp(h5,group_id,"tnextoutput",lgrid%tnextoutput)
 #endif
 
+#ifdef SAVE_RPROFS
+    call read_ip(h5,group_id,"rprofs_dstep_dump",lgrid%rprofs_dstep_dump)
+    call read_ip(h5,group_id,"rprofs_inextoutput",lgrid%rprofs_inextoutput)
+#endif
+
 #ifdef SAVE_PLANES
     call read_ip(h5,group_id,"planes_dstep_dump",lgrid%planes_dstep_dump)
     call read_ip(h5,group_id,"planes_inextoutput",lgrid%planes_inextoutput)
@@ -2814,43 +2905,9 @@ contains
     integer :: error,i,j,k
     integer(HID_T) :: id,plist_id
 
-    logical :: resize
-
     real(kind=rp), allocatable, dimension(:,:,:) :: vol
 
-#ifdef GEOMETRY_2D_POLAR
-    real(kind=rp) :: r,rm,rpl,dr
-    r = rp0
-    rm = rp0
-    rpl = rp0
-    dr = rp0
-#endif
-
-#ifdef GEOMETRY_2D_SPHERICAL
-    real(kind=rp) :: r,sin_theta,rm,rpl,dr
-    r = rp0
-    sin_theta = rp0
-    rm = rp0
-    rpl = rp0
-    dr = rp0
-#endif
-
-#ifdef GEOMETRY_3D_SPHERICAL
-    real(kind=rp) :: r,sin_theta,rm,rpl,dr
-    r = rp0
-    sin_theta = rp0
-    rm = rp0
-    rpl = rp0
-    dr = rp0
-#endif
-
-#ifdef RESIZE_OUTPUT
-    resize = .true.
-#else
-    resize = .false.
-#endif
-
-    write(h5%filename, "('grid_n',I0.5,'.h5')") lgrid%step
+    write(h5%filename, "('./grids/grid_n',I0.5,'.h5')") lgrid%step
 
     call h5pcreate_f(H5P_FILE_ACCESS_F,plist_id,error)
 
@@ -2970,6 +3027,10 @@ contains
       call hdf5_annotate_string(id,"geometry-type","2d-polar")
 #endif
 
+#ifdef GEOMETRY_2D_CYLINDRICAL
+      call hdf5_annotate_string(id,"geometry-type","2d-cylindrical")
+#endif
+
 #ifdef GEOMETRY_2D_SPHERICAL
       call hdf5_annotate_string(id,"geometry-type","2d-spherical")
 #endif
@@ -2992,13 +3053,13 @@ contains
 #endif
 #endif 
 
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(USE_INTERNAL_BOUNDARIES) || defined(GEOMETRY_CUBED_SPHERE)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(USE_INTERNAL_BOUNDARIES) || defined(GEOMETRY_CUBED_SPHERE) || defined(GEOMETRY_2D_CYLINDRICAL)
       call hdf5_write_array(h5,id,"r",mgrid, &
-      mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,resize,.false.,lgrid%ivol,lgrid%r)
+      mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%r,0)
 #endif
 
       call hdf5_write_ndarray(h5,id,"coords",mgrid,sdims, &
-      mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,resize,.false.,lgrid%ivol,lgrid%coords)
+      mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%coords,0)
 
 #ifdef USE_TIMMES_KAPPA
       call hdf5_annotate_string(id,"update_kappa","true")
@@ -3009,17 +3070,17 @@ contains
 #if defined(THERMAL_DIFFUSION_STS) || defined(THERMAL_DIFFUSION_EXPLICIT)
 #ifndef USE_TIMMES_KAPPA
       call hdf5_write_array(h5,id,"kappa",mgrid, &
-      mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,resize,.true.,lgrid%ivol,lgrid%kappa)
+      mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%kappa,0)
 #endif
 #endif
 
 #ifdef ADVECT_SPECIES
       call hdf5_annotate_array_rp(h5,id,"A",lgrid%A) 
-      call hdf5_annotate_array_rp(h5,id,"Z",lgrid%Z) 
+      call hdf5_annotate_array_rp(h5,id,"Z",lgrid%Z)
+      call hdf5_annotate_array_string(id,"name_species",lgrid%name_species,nspecies)
 #endif
 
 #ifdef USE_NUCLEAR_NETWORK
-      call hdf5_annotate_array_string(id,"name_species",lgrid%name_species,nspecies)
       call hdf5_annotate_array_string(id,"name_reacs",lgrid%name_reacs,nreacs)
 #endif 
 
@@ -3027,10 +3088,10 @@ contains
 #ifndef USE_MONOPOLE_GRAVITY
 #ifdef USE_GRAVITY
       call hdf5_write_ndarray(h5,id,"grav",mgrid,sdims, &
-      mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,resize,.true.,lgrid%ivol,lgrid%grav)
+      mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%grav,0)
 #ifdef EVOLVE_ETOT
       call hdf5_write_array(h5,id,"phi_cc",mgrid, &
-      mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,resize,.true.,lgrid%ivol,lgrid%phi_cc)
+      mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%phi_cc,0)
 #endif
 #endif
 #endif
@@ -3038,7 +3099,7 @@ contains
 
 #ifdef USE_EDOT
       call hdf5_write_array(h5,id,"edot",mgrid, &
-      mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,resize,.true.,lgrid%ivol,lgrid%edot)
+      mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%edot,0)
 #endif
 
 #ifdef COROTATING_FRAME
@@ -3046,55 +3107,60 @@ contains
 #endif
 
       call hdf5_write_array(h5,id,"vol",mgrid, &
-      mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),0,resize,.false.,lgrid%ivol,vol)
+      mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),0,lgrid%ivol,vol,0)
      
       deallocate(vol)
 
     endif
 
     call hdf5_write_ndarray(h5,id,"prim",mgrid,nvars, &
-    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,resize,.true.,lgrid%ivol,lgrid%prim)
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%prim,0)
 
     call hdf5_write_array(h5,id,"temp",mgrid, &
-    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,resize,.true.,lgrid%ivol,lgrid%temp)
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%temp,0)
 
 #ifdef USE_MHD
     call hdf5_write_ndarray(h5,id,"bfield",mgrid,sdims, &
-    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,resize,.true.,lgrid%ivol,lgrid%b_cc)
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%b_cc,0)
 #endif
 
 #ifdef USE_GRAVITY_SOLVER
     call hdf5_write_array(h5,id,"phi_cc",mgrid, &
-    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,resize,.true.,lgrid%ivol,lgrid%phi_cc)
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%phi_cc,0)
 
     call hdf5_write_ndarray(h5,id,"grav",mgrid,sdims, &
-    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,resize,.true.,lgrid%ivol,lgrid%grav)
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%grav,0)
 #endif
 
 #ifdef USE_MONOPOLE_GRAVITY
     call hdf5_write_ndarray(h5,id,"grav",mgrid,sdims, &
-    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,resize,.true.,lgrid%ivol,lgrid%grav)
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%grav,0)
 #endif
 
 #ifdef USE_TIMMES_KAPPA
     call hdf5_write_array(h5,id,"kappa",mgrid, &
-    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,resize,.true.,lgrid%ivol,lgrid%kappa)
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%kappa,0)
 #endif
 
 #ifdef USE_NUCLEAR_NETWORK
+
 #ifdef USE_NEULOSS
     call hdf5_write_ndarray(h5,id,"edot_nuc",mgrid,nreacs+1, &
-    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),0,resize,.true.,lgrid%ivol,lgrid%edot_nuc)
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),0,lgrid%ivol,lgrid%edot_nuc,0)
 #else
     call hdf5_write_ndarray(h5,id,"edot_nuc",mgrid,nreacs, &
-    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),0,resize,.true.,lgrid%ivol,lgrid%edot_nuc)
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),0,lgrid%ivol,lgrid%edot_nuc,0)
 #endif
     call hdf5_write_ndarray(h5,id,"X_species_dot",mgrid,nspecies, &
-    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),0,resize,.true.,lgrid%ivol,lgrid%X_species_dot)
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),0,lgrid%ivol,lgrid%X_species_dot,0)
+
+#if sdims_make==2
 #ifdef SAVE_SPECIES_FLUXES
     call hdf5_write_nd2array(h5,id,"X_species_dot_reacs",mgrid,nspecies,nreacs, &
-    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),0,resize,lgrid%X_species_dot_reacs)
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),0,lgrid%X_species_dot_reacs)
 #endif
+#endif
+
 #endif
 
     call h5gclose_f(id,error)
@@ -3160,7 +3226,7 @@ contains
      h5%pref_dtypei = H5T_STD_I32BE
 #endif
 
-     write(h5%filename, "('spj_n',I0.5,'.h5')") lgrid%step
+     write(h5%filename, "('./spjs/spj_n',I0.5,'.h5')") lgrid%step
      call h5fcreate_f(h5%filename,H5F_ACC_TRUNC_F,h5%file_id,error)
 
      call h5gcreate_f(h5%file_id,"grid",group_id,error)
@@ -3334,7 +3400,9 @@ contains
        end do
      end do
 
+#ifdef ENFORCE_BARRIERS
      call mpi_barrier(mgrid%comm_cart,ip)
+#endif
 
      allocate(global_flat(1:total_size))
 
@@ -3392,6 +3460,813 @@ contains
 
 #endif
 
+#ifdef SAVE_RPROFS
+ 
+ subroutine write_rprofs(mgrid,lgrid)
+    type(mpigrid), intent(in) :: mgrid
+    type(locgrid), intent(inout) :: lgrid
+
+    type(h5_file) :: h5
+    integer(HID_T) :: group_id,plist_id,dset_id
+    integer(kind=HSIZE_T), dimension(2) :: gnc
+
+    integer :: error,isp,off
+    integer :: i,j,k,ir,rnv_tot,ierr,rprofs_nv,rprofs_nr
+    real(kind=rp), allocatable :: lbuff(:), gbuff(:), vars(:,:) 
+    real(kind=rp) :: fac
+    real(kind=rp) :: rho,T,P,eint,h,vx1,vx2,vx3,ekin,epot,gx1,gx2,gx3, &
+    bx1,bx2,bx3,emag,x,y,z,r,vr,br,gr,kappa,edot,abar,zbar,ye,inv_abar,etot, &
+    abs_b,abs_bh,abs_vel,abs_vh,area,bt1,bt2,div_vel,dTdr,edot_neu, &
+    edot_nuc,inv_T,Kth,s,tmp,vel_dot_grav,vt1,vt2,Eid,lswot15,mu,Pid,ywot, &
+    sid,T4,Prad,Erad,srad,cos_phi,cos_theta,phi,sin_phi,sin_theta,theta, &
+    rmi,rpl,sin_theta_mi,sin_theta_pl,om1,om2,om3,oor1,oor2,oor3,ov1,ov2,ov3, &
+    b_dot_b_dot_nabla_vel,d_vx1_d_x1,d_vx1_d_x2,d_vx1_d_x3,d_vx2_d_x1,d_vx2_d_x2,d_vx2_d_x3, &
+    d_vx3_d_x1,d_vx3_d_x2,d_vx3_d_x3,Jx1,Jx2,Jx3,WL,or1,or2,or3
+
+#ifndef USE_NUCLEAR_NETWORK
+    integer :: nreacs = 0
+#endif
+#ifndef ADVECT_SPECIES
+    integer :: nspecies = 0
+#endif
+
+    rho = rp0
+    T = rp0
+    P = rp0
+    eint = rp0
+    h = rp0
+    vx1 = rp0
+    vx2 = rp0
+    vx3 = rp0
+    ekin = rp0
+    epot = rp0
+    gx1 = rp0
+    gx2 = rp0
+    gx3 = rp0
+    bx1 = rp0
+    bx2 = rp0
+    bx3 = rp0
+    emag = rp0
+    x = rp0
+    y = rp0 
+    z = rp0
+    r = rp0
+    vr = rp0
+    br = rp0
+    gr = rp0
+    kappa = rp0
+    edot = rp0
+    abar = rp0
+    zbar = rp0
+    ye = rp0
+    inv_abar = rp0
+    etot = rp0   
+    abs_b = rp0
+    abs_bh = rp0
+    abs_vel = rp0
+    abs_vh = rp0
+    area = rp0
+    bt1 = rp0
+    bt2 = rp0
+    div_vel = rp0
+    dTdr = rp0
+    edot_neu = rp0
+    edot_nuc = rp0
+    inv_T = rp0
+    Kth = rp0
+    s = rp0
+    tmp = rp0
+    vel_dot_grav = rp0
+    vt1 = rp0
+    vt2 = rp0
+    Eid = rp0
+    lswot15 = rp0
+    mu = rp0
+    Pid = rp0
+    ywot = rp0
+    sid = rp0
+    T4 = rp0
+    Prad = rp0
+    Erad = rp0
+    srad = rp0
+    cos_phi = rp0
+    cos_theta = rp0
+    phi = rp0
+    sin_phi = rp0
+    sin_theta = rp0
+    theta = rp0
+    rmi = rp0
+    rpl = rp0
+    sin_theta_mi = rp0
+    sin_theta_pl = rp0    
+    om1 = rp0
+    om2 = rp0
+    om3 = rp0
+    or1 = rp0
+    or2 = rp0
+    or3 = rp0
+    oor1 = rp0
+    oor2 = rp0
+    oor3 = rp0
+    ov1 = rp0
+    ov2 = rp0
+    ov3 = rp0
+    b_dot_b_dot_nabla_vel = rp0
+    d_vx1_d_x1 = rp0
+    d_vx1_d_x2 = rp0
+    d_vx1_d_x3 = rp0
+    d_vx2_d_x1 = rp0
+    d_vx2_d_x2 = rp0 
+    d_vx2_d_x3 = rp0
+    d_vx3_d_x1 = rp0
+    d_vx3_d_x2 = rp0
+    d_vx3_d_x3 = rp0
+    Jx1 = rp0
+    Jx2 = rp0
+    Jx3 = rp0
+    WL = rp0
+
+#ifdef COROTATING_FRAME
+    om1 = lgrid%omega_rot(1)
+    om2 = lgrid%omega_rot(2)
+    om3 = lgrid%omega_rot(3)
+#endif
+
+    isp = 0
+
+    rprofs_nv = 78+nreacs+nas+nas+nas+nspecies+nspecies
+    rprofs_nr = lgrid%rprofs_nr
+
+    rnv_tot = rprofs_nv*rprofs_nr
+
+    if(mgrid%rankl==master_rank) then
+
+#ifdef USE_SINGLE_PRECISION 
+#ifdef LITTLE_ENDIAN
+     h5%pref_dtypef = H5T_IEEE_F32LE
+#endif
+#ifdef BIG_ENDIAN
+     h5%pref_dtypef = H5T_IEEE_F32BE
+#endif
+#endif
+
+#ifdef USE_DOUBLE_PRECISION
+#ifdef LITTLE_ENDIAN
+     h5%pref_dtypef = H5T_IEEE_F64LE
+#endif
+#ifdef BIG_ENDIAN
+     h5%pref_dtypef = H5T_IEEE_F64BE
+#endif
+#endif
+
+#ifdef LITTLE_ENDIAN
+     h5%pref_dtypei = H5T_STD_I32LE
+#endif
+#ifdef BIG_ENDIAN
+     h5%pref_dtypei = H5T_STD_I32BE
+#endif
+
+     write(h5%filename, "('./rprofs/rprofs_n',I0.5,'.h5')") lgrid%step
+     call h5fcreate_f(h5%filename,H5F_ACC_TRUNC_F,h5%file_id,error)
+
+     call h5gcreate_f(h5%file_id,"grid",group_id,error)
+     call hdf5_annotate_rp(h5,group_id,"time",lgrid%time)
+     call hdf5_annotate_rp(h5,group_id,"dt",lgrid%dt)
+     call hdf5_annotate_ip(h5,group_id,"step",lgrid%step)
+
+    end if
+
+    allocate(lbuff(1:rnv_tot))
+    allocate(gbuff(1:rnv_tot))
+   
+    do ir=1,rnv_tot
+     lbuff(ir) = rp0
+    end do
+
+    do k=mgrid%i1(3),mgrid%i2(3)
+     do j=mgrid%i1(2),mgrid%i2(2)
+      do i=mgrid%i1(1),mgrid%i2(1)
+
+       ir = lgrid%rprofs_ir(i,j,k)
+ 
+       if(ir>0) then
+       
+        rho = lgrid%prim(i_rho,i,j,k)
+        P = lgrid%prim(i_p,i,j,k)
+        T = lgrid%temp(i,j,k)
+        eint = lgrid%eint(i,j,k)/rho
+        h = eint + P/rho
+
+        vx1 = lgrid%prim(i_vx1,i,j,k)
+        vx2 = lgrid%prim(i_vx2,i,j,k)
+#if sdims_make==3
+        vx3 = lgrid%prim(i_vx3,i,j,k)
+#endif
+        ekin = rph*(vx1*vx1+vx2*vx2+vx3*vx3)
+
+        x = lgrid%coords(1,i,j,k)
+        y = lgrid%coords(2,i,j,k)
+#if sdims_make==3
+        z = lgrid%coords(3,i,j,k)
+#endif
+
+#ifdef EVOLVE_ETOT
+        epot = lgrid%phi_cc(i,j,k) 
+#endif
+
+#ifdef USE_GRAVITY
+        gx1 = lgrid%grav(1,i,j,k) 
+        gx2 = lgrid%grav(2,i,j,k) 
+#if sdims_make==3
+        gx3 = lgrid%grav(3,i,j,k) 
+#endif
+#endif
+ 
+#ifdef USE_MHD
+        bx1 = lgrid%b_cc(1,i,j,k)
+        bx2 = lgrid%b_cc(2,i,j,k)
+#if sdims_make==3
+        bx3 = lgrid%b_cc(3,i,j,k)
+#endif
+        emag = rph*(bx1*bx1+bx2*bx2+bx3*bx3)
+#endif
+
+#ifdef USE_INTERNAL_BOUNDARIES
+        r = lgrid%r(i,j,k)
+        theta = acos(z/r)
+        phi = atan2(y,x)
+        cos_theta = cos(theta)
+        sin_theta = sin(theta)
+        cos_phi = cos(phi)
+        sin_phi = sin(phi)
+        vr = (x*vx1+y*vx2+z*vx3)/r
+        vt1 = cos_theta*cos_phi*vx1+cos_theta*sin_theta*vx2-sin_theta*vx3
+        vt2 = -sin_phi*vx1+cos_phi*vx2
+#ifdef USE_MHD
+        br = (x*bx1+y*bx2+z*bx3)/r
+        bt1 = cos_theta*cos_phi*bx1+cos_theta*sin_theta*bx2-sin_theta*bx3
+        bt2 = -sin_phi*bx1+cos_phi*bx2
+#endif
+#ifdef USE_GRAVITY
+        gr = (x*gx1+y*gx2+z*gx3)/r
+#endif
+#elif defined(GEOMETRY_CUBED_SPHERE)
+        r = lgrid%r(i,j,k)
+        theta = acos(z/r)
+        phi = atan2(y,x)
+        cos_theta = cos(theta)
+        sin_theta = sin(theta)
+        cos_phi = cos(phi)
+        sin_phi = sin(phi)
+        vr = (x*vx1+y*vx2+z*vx3)/r
+        vt1 = cos_theta*cos_phi*vx1+cos_theta*sin_theta*vx2-sin_theta*vx3
+        vt2 = -sin_phi*vx1+cos_phi*vx2
+#ifdef USE_MHD
+        br = (x*bx1+y*bx2+z*bx3)/r
+        bt1 = cos_theta*cos_phi*bx1+cos_theta*sin_theta*bx2-sin_theta*bx3
+        bt2 = -sin_phi*bx1+cos_phi*bx2
+#endif
+#elif defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+        r = lgrid%r(i,j,k)
+        vr = vx1
+        vt1 = vx2
+        vt2 = vx3
+#ifdef USE_MHD
+        br = bx1
+        bt1 = bx2
+        bt2 = bx3
+#endif
+#ifdef USE_GRAVITY
+        gr = gx1
+#endif
+#else
+        r = y
+        vr = vx2
+        vt1 = vx1
+        vt2 = vx3
+#ifdef USE_MHD
+        br = bx2
+        bt1 = bx1
+        bt2 = bx3
+#endif
+#ifdef USE_GRAVITY
+        gr = gx2
+#endif
+#endif
+
+#if defined(THERMAL_DIFFUSION_EXPLICIT) || defined(THERMAL_DIFFUSION_STS)
+        kappa = lgrid%kappa(i,j,k)
+#endif
+
+#ifdef USE_EDOT
+        edot = lgrid%edot(i,j,k)
+#endif
+
+#ifdef ADVECT_YE_IABAR
+        abar = rp1/lgrid%prim(i_iabar,i,j,k)
+        ye = lgrid%prim(i_ye,i,j,k)
+        zbar = ye*abar 
+#elif defined(ADVECT_SPECIES)
+        inv_abar = rp0
+        ye = rp0
+        do isp=1,nspecies
+         tmp = lgrid%prim(i_as1+isp-1,i,j,k)/lgrid%A(isp)
+         inv_abar = inv_abar + tmp
+         ye = ye + lgrid%Z(isp)*tmp
+        end do
+        abar = rp1/inv_abar
+        zbar = ye*abar
+#else
+        abar = lgrid%mu/(rp1-rph*lgrid%mu)
+        ye = rph
+        zbar = ye*abar        
+#endif
+
+        mu = abar/(zbar+rp1)
+
+#ifdef HELMHOLTZ_EOS
+
+        call helm_rhoT_given_entropy(rho,T,abar,zbar,s)
+
+#elif defined(PIG_EOS)
+
+        call pig_rhoT_given_entropy(rho,T,s)
+
+#elif defined(USE_PRAD)
+
+        tmp = rp1/mu
+        Pid = CONST_RGAS*rho*T*tmp
+        Eid = CONST_RGAS*T*tmp/(lgrid%gm-rp1)
+        lswot15 = rpoh*log((rp2*CONST_PI*CONST_MU*CONST_KB)/(CONST_H*CONST_H))
+        ywot = log(mu*mu*sqrt(mu)/(rho*CONST_AV))
+        y = ywot+lswot15+rpoh*log(T)
+        sid = (Pid/rho+Eid)/T + CONST_KB*CONST_AV*tmp*y
+
+        T4 = T*T*T*T
+        Prad = CONST_RAD*T4*othird
+        Erad = CONST_RAD*T4/rho
+        srad = (Prad/rho+Erad)/T
+
+        s = sid + srad 
+
+#else
+
+        tmp = rp1/mu
+        Pid = CONST_RGAS*rho*T*tmp
+        Eid = CONST_RGAS*T*tmp/(lgrid%gm-rp1)
+        lswot15 = rpoh*log((rp2*CONST_PI*CONST_MU*CONST_KB)/(CONST_H*CONST_H))
+        ywot = log(mu*mu*sqrt(mu)/(rho*CONST_AV))
+        y = ywot+lswot15+rpoh*log(T)
+        s = (Pid/rho+Eid)/T + CONST_KB*CONST_AV*tmp*y
+
+#endif
+
+        etot = eint + ekin + emag 
+
+#ifdef USE_INTERNAL_BOUNDARIES
+        area = CONST_PI*(lgrid%rprofs_r(ir)+lgrid%rprofs_r(ir+1))**2
+#elif defined(GEOMETRY_CUBED_SPHERE)
+        area = CONST_PI*(lgrid%rprofs_r(ir)+lgrid%rprofs_r(ir+1))**2
+#elif defined(GEOMETRY_2D_POLAR)
+        area = CONST_PI*(lgrid%rprofs_r(ir)+lgrid%rprofs_r(ir+1))
+#elif defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+        area = CONST_PI*(lgrid%rprofs_r(ir)+lgrid%rprofs_r(ir+1))**2
+#else
+#if sdims_make==3
+        area = (lgrid%x1u-lgrid%x1l)*(lgrid%x3u-lgrid%x3l)
+#else
+        area = (lgrid%x1u-lgrid%x1l)
+#endif
+#endif
+
+        abs_vel = sqrt(rp2*ekin)
+        abs_vh = sqrt(vt1*vt1+vt2*vt2)
+
+#ifdef USE_INTERNAL_BOUNDARIES
+        div_vel = &
+        (lgrid%prim(i_vx1,i+1,j,k)-lgrid%prim(i_vx1,i-1,j,k)) / &
+        (lgrid%coords(1,i+1,j,k)-lgrid%coords(1,i-1,j,k)) + &
+        (lgrid%prim(i_vx2,i,j+1,k)-lgrid%prim(i_vx2,i,j-1,k)) / &
+        (lgrid%coords(2,i,j+1,k)-lgrid%coords(2,i,j-1,k)) 
+#if sdims_make==3
+        div_vel = div_vel + (lgrid%prim(i_vx3,i,j,k+1)-lgrid%prim(i_vx3,i,j,k-1)) / &
+        (lgrid%coords(3,i,j,k+1)-lgrid%coords(3,i,j,k-1))         
+#endif
+#elif defined(GEOMETRY_CUBED_SPHERE)
+        div_vel = rp0
+#elif defined(GEOMETRY_2D_POLAR)
+        rpl = lgrid%r(i+1,j,k)
+        rmi = lgrid%r(i-1,j,k)
+
+        div_vel = & 
+        (rpl*lgrid%prim(i_vx1,i+1,j,k)-rmi*lgrid%prim(i_vx1,i-1,j,k)) / &
+        (r*(rpl-rmi)) 
+
+        div_vel = div_vel + &
+        (lgrid%prim(i_vx2,i,j+1,k)-lgrid%prim(i_vx2,i,j-1,k)) / &
+        (r*lgrid%dx2)
+#elif defined(GEOMETRY_2D_SPHERICAL)
+        rpl = lgrid%r(i+1,j,k)
+        rmi = lgrid%r(i-1,j,k)
+
+        div_vel = & 
+        (rpl*rpl*lgrid%prim(i_vx1,i+1,j,k)-rmi*rmi*lgrid%prim(i_vx1,i-1,j,k)) / &
+        (r*r*(rpl-rmi)) 
+
+        sin_theta_pl = lgrid%sin_theta(i,j+1,k)
+        sin_theta_mi = lgrid%sin_theta(i,j-1,k)
+
+        tmp = rp1/(r*lgrid%sin_theta(i,j,k))
+
+        div_vel = div_vel + & 
+        tmp* &
+        (sin_theta_pl*lgrid%prim(i_vx2,i,j+1,k)-sin_theta_mi*lgrid%prim(i_vx2,i,j-1,k)) / &
+        lgrid%dx2
+#elif defined(GEOMETRY_3D_SPHERICAL)
+        rpl = lgrid%r(i+1,j,k)
+        rmi = lgrid%r(i-1,j,k)
+
+        div_vel = & 
+        (rpl*rpl*lgrid%prim(i_vx1,i+1,j,k)-rmi*rmi*lgrid%prim(i_vx1,i-1,j,k)) / &
+        (r*r*(rpl-rmi)) 
+
+        sin_theta_pl = lgrid%sin_theta(i,j+1,k)
+        sin_theta_mi = lgrid%sin_theta(i,j-1,k)
+
+        tmp = lgrid%inv_r_sin_theta(i,j,k)
+
+        div_vel = div_vel + & 
+        tmp* &
+        (sin_theta_pl*lgrid%prim(i_vx2,i,j+1,k)-sin_theta_mi*lgrid%prim(i_vx2,i,j-1,k)) / &
+        lgrid%dx2
+
+        div_vel = div_vel + &
+        tmp* &
+        (lgrid%prim(i_vx3,i,j,k+1)-lgrid%prim(i_vx3,i,j,k-1)) / &
+        lgrid%dx3
+#else
+        div_vel = &
+        (lgrid%prim(i_vx1,i+1,j,k)-lgrid%prim(i_vx1,i-1,j,k)) / &
+        (lgrid%coords(1,i+1,j,k)-lgrid%coords(1,i-1,j,k)) + &
+        (lgrid%prim(i_vx2,i,j+1,k)-lgrid%prim(i_vx2,i,j-1,k)) / &
+        (lgrid%coords(2,i,j+1,k)-lgrid%coords(2,i,j-1,k)) 
+#if sdims_make==3
+        div_vel = div_vel + (lgrid%prim(i_vx3,i,j,k+1)-lgrid%prim(i_vx3,i,j,k-1)) / &
+        (lgrid%coords(3,i,j,k+1)-lgrid%coords(3,i,j,k-1)) 
+#endif
+#endif
+
+        inv_T = rp1/T
+
+        vel_dot_grav = &
+        vx1*gx1+vx2*gx2+vx3*gx3
+
+#ifdef USE_INTERNAL_BOUNDARIES
+        dTdr = &
+        lgrid%coords(1,i,j,k)*(lgrid%temp(i+1,j,k)-lgrid%temp(i-1,j,k)) / &
+        (lgrid%coords(1,i+1,j,k)-lgrid%coords(1,i-1,j,k)) + &
+        lgrid%coords(2,i,j,k)*(lgrid%temp(i,j+1,k)-lgrid%temp(i,j-1,k)) / &
+        (lgrid%coords(2,i,j+1,k)-lgrid%coords(2,i,j-1,k)) 
+#if sdims_make==3
+        dTdr = dTdr + lgrid%coords(3,i,j,k)*(lgrid%temp(i,j,k+1)-lgrid%temp(i,j,k-1)) / &
+        (lgrid%coords(3,i,j,k+1)-lgrid%coords(3,i,j,k-1))         
+#endif
+        dTdr = dTdr/lgrid%r(i,j,k)
+#elif defined(GEOMETRY_CUBED_SPHERE)
+        dTdr = rp0
+#elif defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+        dTdr = &
+        (lgrid%temp(i+1,j,k)-lgrid%temp(i-1,j,k)) / &
+        (lgrid%r(i+1,j,k)-lgrid%r(i-1,j,k)) 
+#else
+        dTdr = &
+        (lgrid%temp(i,j+1,k)-lgrid%temp(i,j-1,k)) / &
+        (lgrid%coords(2,i,j+1,k)-lgrid%coords(2,i,j-1,k)) 
+#endif
+
+#if defined(THERMAL_DIFFUSION_EXPLICIT) || defined(THERMAL_DIFFUSION_STS)
+        Kth = fthirds*CONST_RAD*CONST_C*T*T*T/(kappa*rho)
+#endif 
+
+        edot_nuc = rp0
+        edot_neu = rp0
+#ifdef USE_NUCLEAR_NETWORK
+        do isp=1,nreacs
+         edot_nuc = edot_nuc + lgrid%edot_nuc(isp,i,j,k)
+        end do
+#ifdef USE_NEULOSS 
+        edot_neu = lgrid%edot_nuc(nreacs+1,i,j,k)
+#endif
+#endif
+ 
+        abs_b = sqrt(rp2*emag)
+        abs_bh = sqrt(bt1*bt1+bt2*bt2)
+
+#ifdef COROTATING_FRAME
+
+#if defined(GEOMETRY_CUBED_SPHERE) || defined(USE_INTERNAL_BOUNDARIES)
+
+        tmp = rho*vt2*om3
+        ov1 = -sin_theta*tmp
+        ov2 = -cos_theta*tmp
+        ov3 = (cos_theta*rho*vt1+sin_theta*rho*vr)*om3
+        or3 = r*sin_theta*om3
+        tmp = or3*om3
+        oor1 = -sin_theta*tmp
+        oor2 = -cos_theta*tmp
+
+#elif defined(GEOMETRY_2D_POLAR)
+
+        tmp = rho*vt2*om3
+        ov1 = -tmp
+        ov2 = rho*vr*om3
+        or2 = r*om3
+        tmp = or2*om3
+        oor1 = -tmp
+
+#elif defined(GEOMETRY_3D_SPHERICAL)
+
+        sin_theta = lgrid%sin_theta(i,j,k)
+        cos_theta = lgrid%cos_theta(i,j,k)
+
+        tmp = rho*vt2*om3
+        ov1 = -sin_theta*tmp
+        ov2 = -cos_theta*tmp
+        ov3 = (cos_theta*rho*vt1+sin_theta*rho*vr)*om3
+        or3 = r*sin_theta*om3
+        tmp = or3*om3
+        oor1 = -sin_theta*tmp
+        oor2 = -cos_theta*tmp
+
+#else
+
+        ov1 = rho*vx3*om2-rho*vx2*om3
+        ov2 = -rho*vx3*om1+rho*vx1*om3
+        ov3 = rho*vx2*om1-rho*vx1*om2
+        or1 = z*om2-y*om3
+        or2 = -z*om1+x*om3
+        or3 = y*om1-x*om2
+        oor1 = or3*om2-or2*om3
+        oor2 = -or3*om1+or1*om3
+        oor3 = or2*om1-or1*om2
+
+#endif
+
+#endif
+
+#ifdef USE_MHD
+
+#if defined(GEOMETRY_CARTESIAN_UNIFORM) || defined(GEOMETRY_CARTESIAN_NONUNIFORM)
+
+        d_vx1_d_x1 = &
+        (lgrid%prim(i_vx1,i+1,j,k)-lgrid%prim(i_vx1,i-1,j,k)) / &
+        (lgrid%coords(1,i+1,j,k)-lgrid%coords(1,i-1,j,k))
+
+        d_vx1_d_x2 = &
+        (lgrid%prim(i_vx1,i,j+1,k)-lgrid%prim(i_vx1,i,j-1,k)) / &
+        (lgrid%coords(2,i,j+1,k)-lgrid%coords(2,i,j-1,k))
+
+#if sdims_make==3
+        d_vx1_d_x3 = &
+        (lgrid%prim(i_vx1,i,j,k+1)-lgrid%prim(i_vx1,i,j,k-1)) / &
+        (lgrid%coords(3,i,j,k+1)-lgrid%coords(3,i,j,k-1))
+#endif
+
+        d_vx2_d_x1 = &
+        (lgrid%prim(i_vx2,i+1,j,k)-lgrid%prim(i_vx2,i-1,j,k)) / &
+        (lgrid%coords(1,i+1,j,k)-lgrid%coords(1,i-1,j,k))
+
+        d_vx2_d_x2 = &
+        (lgrid%prim(i_vx2,i,j+1,k)-lgrid%prim(i_vx2,i,j-1,k)) / &
+        (lgrid%coords(2,i,j+1,k)-lgrid%coords(2,i,j-1,k))
+
+#if sdims_make==3
+        d_vx2_d_x3 = &
+        (lgrid%prim(i_vx2,i,j,k+1)-lgrid%prim(i_vx2,i,j,k-1)) / &
+        (lgrid%coords(3,i,j,k+1)-lgrid%coords(3,i,j,k-1))
+#endif
+
+        d_vx3_d_x1 = &
+        (lgrid%prim(i_vx3,i+1,j,k)-lgrid%prim(i_vx3,i-1,j,k)) / &
+        (lgrid%coords(1,i+1,j,k)-lgrid%coords(1,i-1,j,k))
+
+        d_vx3_d_x2 = &
+        (lgrid%prim(i_vx3,i,j+1,k)-lgrid%prim(i_vx3,i,j-1,k)) / &
+        (lgrid%coords(2,i,j+1,k)-lgrid%coords(2,i,j-1,k))
+
+#if sdims_make==3
+        d_vx3_d_x3 = &
+        (lgrid%prim(i_vx3,i,j,k+1)-lgrid%prim(i_vx3,i,j,k-1)) / &
+        (lgrid%coords(3,i,j,k+1)-lgrid%coords(3,i,j,k-1))
+#endif 
+
+        b_dot_b_dot_nabla_vel = &
+        bx1*(bx1*d_vx1_d_x1+bx2*d_vx1_d_x2+bx3*d_vx1_d_x3) + &
+        bx2*(bx1*d_vx2_d_x1+bx2*d_vx2_d_x2+bx3*d_vx2_d_x3) + &
+        bx3*(bx1*d_vx3_d_x1+bx2*d_vx3_d_x2+bx3*d_vx3_d_x3) 
+
+#if sdims_make==3
+        Jx1 = &
+        (lgrid%b_cc(3,i,j+1,k)-lgrid%b_cc(3,i,j-1,k)) / &
+        (lgrid%coords(2,i,j+1,k)-lgrid%coords(2,i,j-1,k)) - & 
+        (lgrid%b_cc(2,i,j,k+1)-lgrid%b_cc(2,i,j,k-1)) / &
+        (lgrid%coords(3,i,j,k+1)-lgrid%coords(3,i,j,k-1)) 
+
+        Jx2 = &
+        (lgrid%b_cc(1,i,j,k+1)-lgrid%b_cc(1,i,j,k-1)) / &
+        (lgrid%coords(3,i,j,k+1)-lgrid%coords(3,i,j,k-1)) - &
+        (lgrid%b_cc(3,i+1,j,k)-lgrid%b_cc(3,i-1,j,k)) / &
+        (lgrid%coords(1,i+1,j,k)-lgrid%coords(1,i-1,j,k)) 
+#endif 
+
+        Jx3 = &
+        (lgrid%b_cc(2,i+1,j,k)-lgrid%b_cc(2,i-1,j,k)) / &
+        (lgrid%coords(1,i+1,j,k)-lgrid%coords(1,i-1,j,k)) - &
+        (lgrid%b_cc(1,i,j+1,k)-lgrid%b_cc(1,i,j-1,k)) / &
+        (lgrid%coords(2,i,j+1,k)-lgrid%coords(2,i,j-1,k)) 
+
+        WL = vx1*(Jx2*bx3-Jx3*bx2) + &
+        vx2*(Jx3*bx1-Jx1*bx3) + &
+        vx3*(Jx1*bx2-Jx2*bx1)        
+
+#endif
+
+#endif
+
+        lbuff(ir) = lbuff(ir) + area
+        lbuff(rprofs_nr+ir) = lbuff(rprofs_nr+ir) + gr
+        lbuff(2*rprofs_nr+ir) = lbuff(2*rprofs_nr+ir) + epot
+        lbuff(3*rprofs_nr+ir) = lbuff(3*rprofs_nr+ir) + kappa
+        lbuff(4*rprofs_nr+ir) = lbuff(4*rprofs_nr+ir) + edot
+        lbuff(5*rprofs_nr+ir) = lbuff(5*rprofs_nr+ir) + rho
+        lbuff(6*rprofs_nr+ir) = lbuff(6*rprofs_nr+ir) + P
+        lbuff(7*rprofs_nr+ir) = lbuff(7*rprofs_nr+ir) + T
+        lbuff(8*rprofs_nr+ir) = lbuff(8*rprofs_nr+ir) + s
+        lbuff(9*rprofs_nr+ir) = lbuff(9*rprofs_nr+ir) + abar
+        lbuff(10*rprofs_nr+ir) = lbuff(10*rprofs_nr+ir) + ye
+        lbuff(11*rprofs_nr+ir) = lbuff(11*rprofs_nr+ir) + zbar
+        lbuff(12*rprofs_nr+ir) = lbuff(12*rprofs_nr+ir) + rho*rho
+        lbuff(13*rprofs_nr+ir) = lbuff(13*rprofs_nr+ir) + T*T
+        lbuff(14*rprofs_nr+ir) = lbuff(14*rprofs_nr+ir) + P*P
+        lbuff(15*rprofs_nr+ir) = lbuff(15*rprofs_nr+ir) + s*s
+        lbuff(16*rprofs_nr+ir) = lbuff(16*rprofs_nr+ir) + abs_vel
+        lbuff(17*rprofs_nr+ir) = lbuff(17*rprofs_nr+ir) + abs_vh
+        lbuff(18*rprofs_nr+ir) = lbuff(18*rprofs_nr+ir) + rho*vr
+        lbuff(19*rprofs_nr+ir) = lbuff(19*rprofs_nr+ir) + rho*eint
+        lbuff(20*rprofs_nr+ir) = lbuff(20*rprofs_nr+ir) + rho*ekin
+        lbuff(21*rprofs_nr+ir) = lbuff(21*rprofs_nr+ir) + rho*etot
+        lbuff(22*rprofs_nr+ir) = lbuff(22*rprofs_nr+ir) + rho*h
+        lbuff(23*rprofs_nr+ir) = lbuff(23*rprofs_nr+ir) + rho*s
+        lbuff(24*rprofs_nr+ir) = lbuff(24*rprofs_nr+ir) + rho*eint*vr
+        lbuff(25*rprofs_nr+ir) = lbuff(25*rprofs_nr+ir) + rho*ekin*vr
+        lbuff(26*rprofs_nr+ir) = lbuff(26*rprofs_nr+ir) + rho*h*vr
+        lbuff(27*rprofs_nr+ir) = lbuff(27*rprofs_nr+ir) + rho*s*vr
+        lbuff(28*rprofs_nr+ir) = lbuff(28*rprofs_nr+ir) + div_vel
+        lbuff(29*rprofs_nr+ir) = lbuff(29*rprofs_nr+ir) + P*div_vel
+        lbuff(30*rprofs_nr+ir) = lbuff(30*rprofs_nr+ir) + inv_T
+        lbuff(31*rprofs_nr+ir) = lbuff(31*rprofs_nr+ir) + vr
+        lbuff(32*rprofs_nr+ir) = lbuff(32*rprofs_nr+ir) + abar*vr
+        lbuff(33*rprofs_nr+ir) = lbuff(33*rprofs_nr+ir) + zbar*vr
+        lbuff(34*rprofs_nr+ir) = lbuff(34*rprofs_nr+ir) + P*vr
+        lbuff(35*rprofs_nr+ir) = lbuff(35*rprofs_nr+ir) + T*vr
+        lbuff(36*rprofs_nr+ir) = lbuff(36*rprofs_nr+ir) + rho*vel_dot_grav
+        lbuff(37*rprofs_nr+ir) = lbuff(37*rprofs_nr+ir) + vel_dot_grav
+        lbuff(38*rprofs_nr+ir) = lbuff(38*rprofs_nr+ir) + dTdr
+        lbuff(39*rprofs_nr+ir) = lbuff(39*rprofs_nr+ir) + Kth
+        lbuff(40*rprofs_nr+ir) = lbuff(40*rprofs_nr+ir) + Kth*dTdr
+        lbuff(41*rprofs_nr+ir) = lbuff(41*rprofs_nr+ir) + abar*abar
+        lbuff(42*rprofs_nr+ir) = lbuff(42*rprofs_nr+ir) + edot_nuc
+        lbuff(43*rprofs_nr+ir) = lbuff(43*rprofs_nr+ir) + edot_neu
+        off = 43
+#ifdef USE_NUCLEAR_NETWORK
+        do isp=1,nreacs
+         lbuff((off+isp)*rprofs_nr+ir) = lbuff((off+isp)*rprofs_nr+ir) + &
+         lgrid%edot_nuc(isp,i,j,k)
+        end do
+#endif
+        off = 43+nreacs
+        lbuff((off+1)*rprofs_nr+ir) = lbuff((off+1)*rprofs_nr+ir) + edot_nuc*inv_T
+        lbuff((off+2)*rprofs_nr+ir) = lbuff((off+2)*rprofs_nr+ir) + edot_neu*inv_T
+        off = 45+nreacs
+#if nas_make>0
+        do isp=1,nas
+         lbuff((off+isp)*rprofs_nr+ir) = lbuff((off+isp)*rprofs_nr+ir) + & 
+         rho*lgrid%prim(i_as1+isp-1,i,j,k)
+        end do
+#endif
+        off = 45+nreacs+nas
+#if nas_make>0
+        do isp=1,nas
+         tmp = lgrid%prim(i_as1+isp-1,i,j,k)
+         lbuff((off+isp)*rprofs_nr+ir) = lbuff((off+isp)*rprofs_nr+ir) + & 
+         rho*tmp*tmp
+        end do
+#endif
+        off = 45+nreacs+nas+nas
+#if nas_make>0
+        do isp=1,nas
+         lbuff((off+isp)*rprofs_nr+ir) = lbuff((off+isp)*rprofs_nr+ir) + & 
+         rho*lgrid%prim(i_as1+isp-1,i,j,k)*vr
+        end do
+#endif
+         off = 45+nreacs+nas+nas+nas
+#ifdef USE_NUCLEAR_NETWORK
+        do isp=1,nspecies
+         lbuff((off+isp)*rprofs_nr+ir) = lbuff((off+isp)*rprofs_nr+ir) + & 
+         rho*lgrid%X_species_dot(isp,i,j,k)
+        end do
+#endif
+        off = 45+nreacs+nas+nas+nas+nspecies
+#ifdef USE_NUCLEAR_NETWORK
+        do isp=1,nspecies
+         lbuff((off+isp)*rprofs_nr+ir) = lbuff((off+isp)*rprofs_nr+ir) + & 
+         rho*lgrid%X_species_dot(isp,i,j,k)*lgrid%prim(i_as1+isp-1,i,j,k)
+        end do
+#endif
+        off = 45+nreacs+nas+nas+nas+nspecies+nspecies
+        lbuff((off+1)*rprofs_nr+ir) = lbuff((off+1)*rprofs_nr+ir) + rho*vr*vr
+        lbuff((off+2)*rprofs_nr+ir) = lbuff((off+2)*rprofs_nr+ir) + rho*vt1
+        lbuff((off+3)*rprofs_nr+ir) = lbuff((off+3)*rprofs_nr+ir) + rho*vt1*vt1
+        lbuff((off+4)*rprofs_nr+ir) = lbuff((off+4)*rprofs_nr+ir) + rho*vt2
+        lbuff((off+5)*rprofs_nr+ir) = lbuff((off+5)*rprofs_nr+ir) + rho*vt2*vt2
+        lbuff((off+6)*rprofs_nr+ir) = lbuff((off+6)*rprofs_nr+ir) + emag
+        lbuff((off+7)*rprofs_nr+ir) = lbuff((off+7)*rprofs_nr+ir) + br
+        lbuff((off+8)*rprofs_nr+ir) = lbuff((off+8)*rprofs_nr+ir) + abs_b
+        lbuff((off+9)*rprofs_nr+ir) = lbuff((off+9)*rprofs_nr+ir) + abs_bh
+        lbuff((off+10)*rprofs_nr+ir) = lbuff((off+10)*rprofs_nr+ir) + br*br
+        lbuff((off+11)*rprofs_nr+ir) = lbuff((off+11)*rprofs_nr+ir) + bt1
+        lbuff((off+12)*rprofs_nr+ir) = lbuff((off+12)*rprofs_nr+ir) + bt2
+        lbuff((off+13)*rprofs_nr+ir) = lbuff((off+13)*rprofs_nr+ir) + bt1*bt1
+        lbuff((off+14)*rprofs_nr+ir) = lbuff((off+14)*rprofs_nr+ir) + bt2*bt2
+        lbuff((off+15)*rprofs_nr+ir) = lbuff((off+15)*rprofs_nr+ir) + rho*vr*vt1
+        lbuff((off+16)*rprofs_nr+ir) = lbuff((off+16)*rprofs_nr+ir) + rho*vr*vt2
+        lbuff((off+17)*rprofs_nr+ir) = lbuff((off+17)*rprofs_nr+ir) + rho*vt1*vt2
+        lbuff((off+18)*rprofs_nr+ir) = lbuff((off+18)*rprofs_nr+ir) + br*bt1
+        lbuff((off+19)*rprofs_nr+ir) = lbuff((off+19)*rprofs_nr+ir) + br*bt2
+        lbuff((off+20)*rprofs_nr+ir) = lbuff((off+20)*rprofs_nr+ir) + bt1*bt2
+        lbuff((off+21)*rprofs_nr+ir) = lbuff((off+21)*rprofs_nr+ir) - br*(br*vr+bt1*vt1+bt2*vt2)
+        lbuff((off+22)*rprofs_nr+ir) = lbuff((off+22)*rprofs_nr+ir) + rp2*ov1
+        lbuff((off+23)*rprofs_nr+ir) = lbuff((off+23)*rprofs_nr+ir) + rho*oor1
+        lbuff((off+24)*rprofs_nr+ir) = lbuff((off+24)*rprofs_nr+ir) + rp2*ov2
+        lbuff((off+25)*rprofs_nr+ir) = lbuff((off+25)*rprofs_nr+ir) + rho*oor2
+        lbuff((off+26)*rprofs_nr+ir) = lbuff((off+26)*rprofs_nr+ir) + rp2*ov3
+        lbuff((off+27)*rprofs_nr+ir) = lbuff((off+27)*rprofs_nr+ir) + rho*oor3
+#if defined(GEOMETRY_CUBED_SPHERE) || defined(USE_INTERNAL_BOUNDARIES) || defined(GEOMETRY_3D_SPHERICAL)
+        lbuff((off+28)*rprofs_nr+ir) = lbuff((off+28)*rprofs_nr+ir) + (rho*vr*oor1+rho*vt1*oor2)
+#else
+        lbuff((off+28)*rprofs_nr+ir) = lbuff((off+28)*rprofs_nr+ir) + (rho*vx1*oor1+rho*vx2*oor2+rho*vx3*oor3)
+#endif
+        lbuff((off+29)*rprofs_nr+ir) = lbuff((off+29)*rprofs_nr+ir) + emag*vr
+        lbuff((off+30)*rprofs_nr+ir) = lbuff((off+30)*rprofs_nr+ir) + emag*div_vel
+        lbuff((off+31)*rprofs_nr+ir) = lbuff((off+31)*rprofs_nr+ir) + b_dot_b_dot_nabla_vel
+        lbuff((off+32)*rprofs_nr+ir) = lbuff((off+32)*rprofs_nr+ir) + WL
+
+       endif
+
+      end do
+     end do
+    end do
+
+    call mpi_reduce(lbuff,gbuff,rnv_tot, &
+    MPI_RP,MPI_SUM,master_rank,mgrid%comm_cart,ierr)
+ 
+    if(mgrid%rankl==master_rank) then
+     allocate(vars(1:rprofs_nv,1:rprofs_nr))
+
+     do ir=1,rprofs_nr
+      fac = rp1/real(lgrid%rprofs_counts(ir),kind=rp)
+      do i=1,rprofs_nv
+       vars(i,ir) = gbuff((i-1)*rprofs_nr+ir)*fac
+      end do
+     end do
+
+     gnc(1) = rprofs_nv
+     gnc(2) = lgrid%rprofs_nr
+     call h5screate_simple_f(2,gnc,plist_id,error)
+
+     call hdf5_annotate_ip(h5,group_id,"nas",nas)
+     call hdf5_annotate_ip(h5,group_id,"nspecies",nspecies)
+     call hdf5_annotate_ip(h5,group_id,"nreacs",nreacs)
+
+     call hdf5_annotate_array_rp(h5,group_id,"rf",lgrid%rprofs_r)
+     call h5dcreate_f(group_id,"havg",h5%pref_dtypef,plist_id,dset_id,error)
+     call h5dwrite_f(dset_id,h5%pref_dtypef,vars,gnc,error)
+
+     call h5dclose_f(dset_id,error)
+     call h5sclose_f(plist_id,error)
+     call h5gclose_f(group_id,error)
+     call h5fclose_f(h5%file_id,error)
+
+     deallocate(vars)
+    endif
+
+    deallocate(lbuff)
+    deallocate(gbuff)
+
+ end subroutine write_rprofs
+
+#endif
+
 #ifdef SAVE_PLANES
  
  subroutine write_planes(mgrid,lgrid)
@@ -3404,7 +4279,7 @@ contains
     integer(HID_T) :: id,plist_id
     character(len=filename_size) :: filename
 
-    write(h5%filename, "('planes_n',I0.5,'.h5')") lgrid%step
+    write(h5%filename, "('./planes/planes_n',I0.5,'.h5')") lgrid%step
 
     call h5pcreate_f(H5P_FILE_ACCESS_F,plist_id,error)
 
@@ -3454,6 +4329,13 @@ contains
 
     do ip=1,nplanes_x1
 
+     if(lgrid%step==0) then
+      write(filename, "('coords_x1_n',I0.5)") ip
+      call hdf5_write_ndarray_x1(h5,id,filename,mgrid,3, &
+      mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),lgrid%planes_x1_index(ip),& 
+      ngc,lgrid%coords,lgrid%planes_x1_inside_domain(ip))
+     endif
+
      write(filename, "('prim_x1_n',I0.5)") ip
      call hdf5_write_ndarray_x1(h5,id,filename,mgrid,nvars, &
      mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),lgrid%planes_x1_index(ip),& 
@@ -3482,6 +4364,13 @@ contains
 
     do ip=1,nplanes_x2
 
+     if(lgrid%step==0) then
+      write(filename, "('coords_x2_n',I0.5)") ip
+      call hdf5_write_ndarray_x2(h5,id,filename,mgrid,3, &
+      mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),lgrid%planes_x2_index(ip),& 
+      ngc,lgrid%coords,lgrid%planes_x2_inside_domain(ip))
+     endif
+
      write(filename, "('prim_x2_n',I0.5)") ip
      call hdf5_write_ndarray_x2(h5,id,filename,mgrid,nvars, &
      mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),lgrid%planes_x2_index(ip),& 
@@ -3509,6 +4398,13 @@ contains
     call hdf5_annotate_array_ip(h5,id,filename,lgrid%planes_x3_index)
 
     do ip=1,nplanes_x3
+
+     if(lgrid%step==0) then
+      write(filename, "('coords_x3_n',I0.5)") ip
+      call hdf5_write_ndarray_x3(h5,id,filename,mgrid,3, &
+      mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),lgrid%planes_x3_index(ip),& 
+      ngc,lgrid%coords,lgrid%planes_x3_inside_domain(ip))
+     endif
 
      write(filename, "('prim_x3_n',I0.5)") ip
      call hdf5_write_ndarray_x3(h5,id,filename,mgrid,nvars, &
@@ -4201,13 +5097,12 @@ contains
 
 #endif
 
- subroutine hdf5_write_array(h5,group_id,dsetname,mgrid,lx1,ux1,lx2,ux2,lx3,ux3,ghost,resize,apply_weights,ivol,vec)
+ subroutine hdf5_write_array(h5,group_id,dsetname,mgrid,lx1,ux1,lx2,ux2,lx3,ux3,ghost,ivol,vec,is_restart)
     type(h5_file) :: h5
     integer(kind=HID_T), intent(in) :: group_id
     character(len=*) :: dsetname
     type(mpigrid), intent(in) :: mgrid
     integer, intent(in) :: lx1,ux1,lx2,ux2,lx3,ux3,ghost
-    logical, intent(in) :: resize,apply_weights
     real(kind=rp), intent(in), dimension(lx1-ngc:ux1+ngc,lx2-ngc:ux2+ngc, &
 #if sdims_make==2
     lx3:ux3) :: ivol
@@ -4224,37 +5119,30 @@ contains
 #if sdims_make==3
     lx3-ghost:ux3+ghost), intent(in) :: vec
 #endif
+    integer, intent(in) :: is_restart
 
     integer(kind=HID_T) :: dset_id,filespace,memspace,plist_id
     integer(kind=HSIZE_T), dimension(3) :: gnc,cnt,off
     integer(kind=HSIZE_T), dimension(3) :: memcnt,memcnt2,memoff
     integer :: err
-    real(kind=rp) :: tmp
 
     integer :: nx1l,nx2l,nx3l
 
-    integer, dimension(3) :: i1r,i2r
-    integer :: i,j,k,ia,ja,ka
     real(kind=rp), allocatable :: vec_aux(:,:,:)
+    real(kind=rp) :: v1,v2,ivol_sum
+    integer :: i,j,k,ii,jj,kk,ia,ja,ka
+    integer, dimension(3) :: i1r,i2r
 
-#if defined(GEOMETRY_CARTESIAN_NONUNIFORM) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_CUBED_SPHERE)
-    real(kind=rp) :: v1=rp1,v2=rp1,v3=rp1,v4=rp1,v5=rp1,v6=rp1,v7=rp1,v8=rp1,ivol_sum=rp1
-#endif
-
-    tmp = ivol(lx1,lx1,ux1)
-
-    if(apply_weights) then
-     nx1l = 1
-    end if
+    v1 = ivol(lx1,lx2,lx3)
 
     nx1l = ux1-lx1+1
     nx2l = ux2-lx2+1
     nx3l = ux3-lx3+1
- 
-    if(resize .eqv. .true.) then
-     nx1l = int(nx1l/2)
-     nx2l = int(nx2l/2)
-     nx3l = int(nx3l/2)
+
+    if(is_restart==0) then
+      nx1l = int(nx1l/compression_factor)
+      nx2l = int(nx2l/compression_factor)
+      nx3l = int(nx3l/compression_factor)
     endif
 
     gnc(1) = nx1l*mgrid%bricks(1)
@@ -4298,102 +5186,81 @@ contains
     off(1) = nx1l*mgrid%coords_dd(1)
     off(2) = nx2l*mgrid%coords_dd(2)
     off(3) = nx3l*mgrid%coords_dd(3)
+
+    if(compression_factor>1 .and. is_restart==0) then 
+
+      i1r(1) = int(mgrid%coords_dd(1)*nx1l+1)
+      i2r(1) = int((mgrid%coords_dd(1)+1)*nx1l)
  
-    if(resize .eqv. .true.) then
+      i1r(2) = int(mgrid%coords_dd(2)*nx2l+1)
+      i2r(2) = int((mgrid%coords_dd(2)+1)*nx2l)
 
-     i1r(1) = int(mgrid%coords_dd(1)*nx1l+1)
-     i2r(1) = int((mgrid%coords_dd(1)+1)*nx1l)
+      i1r(3) = int(mgrid%coords_dd(3)*nx3l+1)
+      i2r(3) = int((mgrid%coords_dd(3)+1)*nx3l)
 
-     i1r(2) = int(mgrid%coords_dd(2)*nx2l+1)
-     i2r(2) = int((mgrid%coords_dd(2)+1)*nx2l)
+      allocate(vec_aux(i1r(1)-ghost:i2r(1)+ghost,i1r(2)-ghost:i2r(2)+ghost,i1r(3)-ghost:i2r(3)+ghost))
 
-     i1r(3) = int(mgrid%coords_dd(3)*nx3l+1)
-     i2r(3) = int((mgrid%coords_dd(3)+1)*nx3l)
+      do k=i1r(3),i2r(3)
+       do j=i1r(2),i2r(2)
+        do i=i1r(1),i2r(1)
+ 
+         ia = compression_factor*i-(compression_factor-1)
+         ja = compression_factor*j-(compression_factor-1)
+         ka = compression_factor*k-(compression_factor-1)
 
-     allocate(vec_aux(i1r(1)-ghost:i2r(1)+ghost,i1r(2)-ghost:i2r(2)+ghost,i1r(3)-ghost:i2r(3)+ghost))
+         ivol_sum = rp0
+         v2 = rp0
 
-     do k=i1r(3),i2r(3)
-      do j=i1r(2),i2r(2)
-       do i=i1r(1),i2r(1)
-   
-        ia = 2*i-1
-        ja = 2*j-1
-        ka = 2*k-1
+         do kk=0,compression_factor-1
+          do jj=0,compression_factor-1
+           do ii=0,compression_factor-1
 
-#if defined(GEOMETRY_CARTESIAN_NONUNIFORM) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_CUBED_SPHERE)
-
-        if(apply_weights .eqv. .true.) then
-
-         v1 = rp1/ivol(ia,ja,ka)
-         v2 = rp1/ivol(ia+1,ja,ka)
-         v3 = rp1/ivol(ia,ja+1,ka)
-         v4 = rp1/ivol(ia,ja,ka+1)
-         v5 = rp1/ivol(ia+1,ja+1,ka)
-         v6 = rp1/ivol(ia,ja+1,ka+1)
-         v7 = rp1/ivol(ia+1,ja,ka+1)
-         v8 = rp1/ivol(ia+1,ja+1,ka+1)
-
-         ivol_sum = rp1/(v1+v2+v3+v4+v5+v6+v7+v8)
-
-        end if
-
-        vec_aux(i,j,k) = ivol_sum*( &
-        v1*vec(ia,ja,ka) + &
-        v2*vec(ia+1,ja,ka) + &
-        v3*vec(ia,ja+1,ka) + &
-        v4*vec(ia,ja,ka+1) + &
-        v5*vec(ia+1,ja+1,ka) + &
-        v6*vec(ia,ja+1,ka+1) + &
-        v7*vec(ia+1,ja,ka+1) + &
-        v8*vec(ia+1,ja+1,ka+1) &
-        )
-
+#if defined(GEOMETRY_CARTESIAN_NONUNIFORM) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_CUBED_SPHERE)            
+            v1 = rp1/ivol(ia+ii,ja+jj,ka+kk)
 #else
-
-        vec_aux(i,j,k) = 0.125_rp*( &
-        vec(ia,ja,ka) + &
-        vec(ia+1,ja,ka) + &
-        vec(ia,ja+1,ka) + &
-        vec(ia,ja,ka+1) + &
-        vec(ia+1,ja+1,ka) + &
-        vec(ia,ja+1,ka+1) + &
-        vec(ia+1,ja,ka+1) + &
-        vec(ia+1,ja+1,ka+1) &
-        )
-
+            v1 = rp1
 #endif
+            ivol_sum = ivol_sum + v1
+            v2 = v2 + vec(ia+ii,ja+jj,ka+kk)*v1
 
-       end do
-      end do 
-     end do
- 
-    endif
+           end do
+          end do
+         end do
+
+         ivol_sum = rp1/ivol_sum
+         vec_aux(i,j,k) = v2*ivol_sum
+                  
+        end do
+       end do 
+      end do
+
+    end if
 
     call h5dget_space_f(dset_id, filespace, err)
     call h5sselect_hyperslab_f(filespace,H5S_SELECT_SET_F,off,cnt,err)
 
     call h5pcreate_f(H5P_DATASET_XFER_F,plist_id,err)
     call h5pset_dxpl_mpio_f(plist_id,H5FD_MPIO_COLLECTIVE_F,err)
-
-    if(resize .eqv. .true.) then
-
-     call h5dwrite_f(dset_id,h5%pref_dtypef, &
-     vec_aux( &
-     lbound(vec_aux,1), &
-     lbound(vec_aux,2), &
-     lbound(vec_aux,3) ), &
-     gnc,err,memspace,filespace,plist_id)
-
-     deallocate(vec_aux)
   
+    if(compression_factor>1 .and. is_restart==0) then
+
+      call h5dwrite_f(dset_id,h5%pref_dtypef, &
+      vec_aux( &
+      lbound(vec_aux,1), &
+      lbound(vec_aux,2), &
+      lbound(vec_aux,3) ), &
+      gnc,err,memspace,filespace,plist_id)
+
+      deallocate(vec_aux)
+    
     else
 
-     call h5dwrite_f(dset_id,h5%pref_dtypef, &
-     vec( &
-     lbound(vec,1), &
-     lbound(vec,2), &
-     lbound(vec,3) ), &
-     gnc,err,memspace,filespace,plist_id)
+      call h5dwrite_f(dset_id,h5%pref_dtypef, &
+      vec( &
+      lbound(vec,1), &
+      lbound(vec,2), &
+      lbound(vec,3) ), &
+      gnc,err,memspace,filespace,plist_id)
 
     endif
 
@@ -4404,14 +5271,13 @@ contains
 
  end subroutine hdf5_write_array
 
- subroutine hdf5_write_ndarray(h5,group_id,dsetname,mgrid,nv,lx1,ux1,lx2,ux2,lx3,ux3,ghost,resize,apply_weights,ivol,vec)
+ subroutine hdf5_write_ndarray(h5,group_id,dsetname,mgrid,nv,lx1,ux1,lx2,ux2,lx3,ux3,ghost,ivol,vec,is_restart)
     type(h5_file) :: h5
     integer(kind=HID_T), intent(in) :: group_id
     character(len=*) :: dsetname
     type(mpigrid), intent(in) :: mgrid
     integer, intent(in) :: nv
     integer, intent(in) :: lx1,ux1,lx2,ux2,lx3,ux3,ghost
-    logical, intent(in) :: resize,apply_weights
     real(kind=rp), intent(in), dimension(lx1-ngc:ux1+ngc,lx2-ngc:ux2+ngc, &
 #if sdims_make==2
     lx3:ux3) :: ivol
@@ -4428,39 +5294,32 @@ contains
 #if sdims_make==3
     lx3-ghost:ux3+ghost), intent(in) :: vec
 #endif
+    integer, intent(in) :: is_restart
 
     integer(kind=HID_T) :: dset_id,filespace,memspace,plist_id
     integer(kind=HSIZE_T), dimension(4) :: gnc,cnt,off
     integer(kind=HSIZE_T), dimension(4) :: memcnt,memcnt2,memoff
     integer :: err
-    real(kind=rp) :: tmp
 
     integer :: nx1l,nx2l,nx3l
 
     integer, dimension(3) :: i1r,i2r
-    integer :: iv,i,j,k,ia,ja,ka
+    integer :: iv,i,j,k,ia,ja,ka,ii,jj,kk
+    real(kind=rp) :: v1,v2(1:nv),ivol_sum
     real(kind=rp), allocatable :: vec_aux(:,:,:,:)
 
-#if defined(GEOMETRY_CARTESIAN_NONUNIFORM) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_CUBED_SPHERE)
-    real(kind=rp) :: v1=rp1,v2=rp1,v3=rp1,v4=rp1,v5=rp1,v6=rp1,v7=rp1,v8=rp1,ivol_sum=rp1
-#endif
-
-    tmp = ivol(lx1,lx1,ux1)
-
-    if(apply_weights) then
-     nx1l = 1
-    end if
+    v1 = ivol(lx1,lx2,lx3)
 
     nx1l = ux1-lx1+1
     nx2l = ux2-lx2+1
     nx3l = ux3-lx3+1
- 
-    if(resize .eqv. .true.) then
-     nx1l = int(nx1l/2)
-     nx2l = int(nx2l/2)
-     nx3l = int(nx3l/2)
+
+    if(is_restart==0) then
+     nx1l = int(nx1l/compression_factor)
+     nx2l = int(nx2l/compression_factor)
+     nx3l = int(nx3l/compression_factor)
     endif
- 
+
     gnc(1) = nv
     gnc(2) = nx1l*mgrid%bricks(1)
     gnc(3) = nx2l*mgrid%bricks(2)
@@ -4508,8 +5367,8 @@ contains
     off(2) = nx1l*mgrid%coords_dd(1)
     off(3) = nx2l*mgrid%coords_dd(2)
     off(4) = nx3l*mgrid%coords_dd(3)
-
-    if(resize .eqv. .true.) then
+   
+    if(compression_factor>1 .and. is_restart==0) then
 
      i1r(1) = int(mgrid%coords_dd(1)*nx1l+1)
      i2r(1) = int((mgrid%coords_dd(1)+1)*nx1l)
@@ -4526,63 +5385,45 @@ contains
       do j=i1r(2),i2r(2)
        do i=i1r(1),i2r(1)
 
-        ia = 2*i-1
-        ja = 2*j-1
-        ka = 2*k-1
+        ia = compression_factor*i-(compression_factor-1)
+        ja = compression_factor*j-(compression_factor-1)
+        ka = compression_factor*k-(compression_factor-1)
 
-#if defined(GEOMETRY_CARTESIAN_NONUNIFORM) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_CUBED_SPHERE)
-
-        if(apply_weights .eqv. .true.) then 
-         v1 = rp1/ivol(ia,ja,ka)
-         v2 = rp1/ivol(ia+1,ja,ka)
-         v3 = rp1/ivol(ia,ja+1,ka)
-         v4 = rp1/ivol(ia,ja,ka+1)
-         v5 = rp1/ivol(ia+1,ja+1,ka)
-         v6 = rp1/ivol(ia,ja+1,ka+1)
-         v7 = rp1/ivol(ia+1,ja,ka+1)
-         v8 = rp1/ivol(ia+1,ja+1,ka+1)
-         ivol_sum = rp1/(v1+v2+v3+v4+v5+v6+v7+v8)
-        endif
-
+        ivol_sum = rp0
         do iv=1,nv
-
-         vec_aux(iv,i,j,k) = ivol_sum*( &
-         v1*vec(iv,ia,ja,ka) + &
-         v2*vec(iv,ia+1,ja,ka) + &
-         v3*vec(iv,ia,ja+1,ka) + &
-         v4*vec(iv,ia,ja,ka+1) + &
-         v5*vec(iv,ia+1,ja+1,ka) + &
-         v6*vec(iv,ia,ja+1,ka+1) + &
-         v7*vec(iv,ia+1,ja,ka+1) + &
-         v8*vec(iv,ia+1,ja+1,ka+1) &
-         )
-
+         v2(iv) = rp0
         end do
 
+        do kk=0,compression_factor-1
+         do jj=0,compression_factor-1
+          do ii=0,compression_factor-1
+
+#if defined(GEOMETRY_CARTESIAN_NONUNIFORM) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_CUBED_SPHERE)            
+            v1 = rp1/ivol(ia+ii,ja+jj,ka+kk)
 #else
+            v1 = rp1
+#endif
+            ivol_sum = ivol_sum + v1
+
+            do iv=1,nv
+             v2(iv) = v2(iv) + vec(iv,ia+ii,ja+jj,ka+kk)*v1
+            end do
+
+          end do
+         end do
+        end do
+       
+        ivol_sum = rp1/ivol_sum
 
         do iv=1,nv
-
-         vec_aux(iv,i,j,k) = 0.125_rp*( &
-         vec(iv,ia,ja,ka) + &
-         vec(iv,ia+1,ja,ka) + &
-         vec(iv,ia,ja+1,ka) + &
-         vec(iv,ia,ja,ka+1) + &
-         vec(iv,ia+1,ja+1,ka) + &
-         vec(iv,ia,ja+1,ka+1) + &
-         vec(iv,ia+1,ja,ka+1) + &
-         vec(iv,ia+1,ja+1,ka+1) &
-         )
-
+         vec_aux(iv,i,j,k) = v2(iv)*ivol_sum
         end do
-
-#endif
 
        end do
-      end do 
+      end do
      end do
- 
-    end if
+
+    endif
 
     call h5dget_space_f(dset_id,filespace,err)
     call h5sselect_hyperslab_f(filespace,H5S_SELECT_SET_F,off,cnt,err)
@@ -4590,27 +5431,27 @@ contains
     call h5pcreate_f(H5P_DATASET_XFER_F,plist_id,err)
     call h5pset_dxpl_mpio_f(plist_id,H5FD_MPIO_COLLECTIVE_F,err)
 
-    if(resize .eqv. .true.) then
+    if(compression_factor>1 .and. is_restart==0) then
 
-     call h5dwrite_f(dset_id,h5%pref_dtypef, &
-     vec_aux(1, &
-     lbound(vec_aux,2), &
-     lbound(vec_aux,3), &
-     lbound(vec_aux,4) ), &
-     gnc,err,memspace,filespace,plist_id)
+      call h5dwrite_f(dset_id,h5%pref_dtypef, &
+      vec_aux(1, &
+      lbound(vec_aux,2), &
+      lbound(vec_aux,3), &
+      lbound(vec_aux,4) ), &
+      gnc,err,memspace,filespace,plist_id)
 
-     deallocate(vec_aux)
+      deallocate(vec_aux)
 
     else
 
-     call h5dwrite_f(dset_id,h5%pref_dtypef, &
-     vec(1, &
-     lbound(vec,2), &
-     lbound(vec,3), &
-     lbound(vec,4) ), &
-     gnc,err,memspace,filespace,plist_id)
- 
-    end if
+      call h5dwrite_f(dset_id,h5%pref_dtypef, &
+      vec(1, &
+      lbound(vec,2), &
+      lbound(vec,3), &
+      lbound(vec,4) ), &
+      gnc,err,memspace,filespace,plist_id)
+     
+    endif
 
     call h5sclose_f(filespace,err)
     call h5sclose_f(memspace,err)
@@ -4619,16 +5460,16 @@ contains
 
  end subroutine hdf5_write_ndarray
 
+#if sdims_make==2
 #ifdef SAVE_SPECIES_FLUXES
 
- subroutine hdf5_write_nd2array(h5,group_id,dsetname,mgrid,nv,nr,lx1,ux1,lx2,ux2,lx3,ux3,ghost,resize,vec)
+ subroutine hdf5_write_nd2array(h5,group_id,dsetname,mgrid,nv,nr,lx1,ux1,lx2,ux2,lx3,ux3,ghost,vec)
     type(h5_file) :: h5
     integer(kind=HID_T), intent(in) :: group_id
     character(len=*) :: dsetname
     type(mpigrid), intent(in) :: mgrid
     integer, intent(in) :: nv,nr
     integer, intent(in) :: lx1,ux1,lx2,ux2,lx3,ux3,ghost
-    logical, intent(in) :: resize
     real(kind=rp), dimension(1:nv,1:nr, &
     lx1-ghost:ux1+ghost, &
     lx2-ghost:ux2+ghost, &
@@ -4645,19 +5486,9 @@ contains
 
     integer :: nx1l,nx2l,nx3l
 
-    integer, dimension(3) :: i1r,i2r
-    integer :: iv,ir,i,j,k,ia,ja,ka
-    real(kind=rp), allocatable :: vec_aux(:,:,:,:,:)
-
     nx1l = ux1-lx1+1
     nx2l = ux2-lx2+1
     nx3l = ux3-lx3+1
- 
-    if(resize .eqv. .true.) then
-     nx1l = int(nx1l/2)
-     nx2l = int(nx2l/2)
-     nx3l = int(nx3l/2)
-    endif
  
     gnc(1) = nv
     gnc(2) = nr
@@ -4713,77 +5544,19 @@ contains
     off(4) = nx2l*mgrid%coords_dd(2)
     off(5) = nx3l*mgrid%coords_dd(3)
 
-    if(resize .eqv. .true.) then
-
-     i1r(1) = int(mgrid%coords_dd(1)*nx1l+1)
-     i2r(1) = int((mgrid%coords_dd(1)+1)*nx1l)
-
-     i1r(2) = int(mgrid%coords_dd(2)*nx2l+1)
-     i2r(2) = int((mgrid%coords_dd(2)+1)*nx2l)
-
-     i1r(3) = int(mgrid%coords_dd(3)*nx3l+1)
-     i2r(3) = int((mgrid%coords_dd(3)+1)*nx3l)
-
-     allocate(vec_aux(1:nv,1:nr,i1r(1)-ghost:i2r(1)+ghost,i1r(2)-ghost:i2r(2)+ghost,i1r(3)-ghost:i2r(3)+ghost))
-
-     do k=i1r(3),i2r(3)
-      do j=i1r(2),i2r(2)
-       do i=i1r(1),i2r(1)
-        do ir=1,nr
-         do iv=1,nv
-
-          ia = 2*i-1
-          ja = 2*j-1
-          ka = 2*k-1
-
-          vec_aux(iv,ir,i,j,k) = 0.125_rp*( &
-          vec(iv,ir,ia,ja,ka) + &
-          vec(iv,ir,ia+1,ja,ka) + &
-          vec(iv,ir,ia,ja+1,ka) + &
-          vec(iv,ir,ia,ja,ka+1) + &
-          vec(iv,ir,ia+1,ja+1,ka) + &
-          vec(iv,ir,ia,ja+1,ka+1) + &
-          vec(iv,ir,ia+1,ja,ka+1) + &
-          vec(iv,ir,ia+1,ja+1,ka+1) &
-          )
-
-         end do
-        end do
-       end do
-      end do 
-     end do
- 
-    end if
-
     call h5dget_space_f(dset_id,filespace,err)
     call h5sselect_hyperslab_f(filespace,H5S_SELECT_SET_F,off,cnt,err)
 
     call h5pcreate_f(H5P_DATASET_XFER_F,plist_id,err)
     call h5pset_dxpl_mpio_f(plist_id,H5FD_MPIO_COLLECTIVE_F,err)
 
-    if(resize .eqv. .true.) then
-
-     call h5dwrite_f(dset_id,h5%pref_dtypef, &
-     vec_aux(1, &
-     1, &
-     lbound(vec_aux,3), &
-     lbound(vec_aux,4), &
-     lbound(vec_aux,5) ), &
-     gnc,err,memspace,filespace,plist_id)
-
-     deallocate(vec_aux)
-
-    else
-
-     call h5dwrite_f(dset_id,h5%pref_dtypef, &
-     vec(1, &
-     1, &
-     lbound(vec,3), &
-     lbound(vec,4), &
-     lbound(vec,5) ), &
-     gnc,err,memspace,filespace,plist_id)
- 
-    end if
+    call h5dwrite_f(dset_id,h5%pref_dtypef, &
+    vec(1, &
+    1, &
+    lbound(vec,3), &
+    lbound(vec,4), &
+    lbound(vec,5) ), &
+    gnc,err,memspace,filespace,plist_id)
 
     call h5sclose_f(filespace,err)
     call h5sclose_f(memspace,err)
@@ -4792,6 +5565,7 @@ contains
 
  end subroutine hdf5_write_nd2array
 
+#endif
 #endif
 
  subroutine hdf5_annotate_rp(h5,id,key,val)
@@ -4922,15 +5696,19 @@ contains
     type(locgrid), intent(inout) :: lgrid
 
     real(kind=rp) :: wct_hydro,wcti_hydro,wctf_hydro, &
-    wctoi,wctof,wctg,step0,temp_max,temp_max_comm
+    wctoi,wctof,wctg,temp_max,temp_max_comm
 #ifdef RESTART_LAST
     integer :: step_tmp(1)
 #endif
-    integer :: ierr,iv,res_nr,iflush,max_T_met
+    integer :: ierr,iv,res_nr,iflush,max_T_met,step0
     integer :: i,j,k,ipr,iter
     integer :: lx1,ux1,lx2,ux2,lx3,ux3
     real(kind=rp) :: abar,eint,gm,gmm1,igmm1,p,rho,sound,sound2,T,ye,zbar,dp_drho,dp_deps
     real(kind=rp) :: mu,inv_mu,inv_abar,T2,T3,T4,dRes_dT,tmp,Res0,Res_prad,cv,tmp1,tmp2
+
+#ifdef SAVE_RPROFS
+    integer, allocatable :: rprofs_counts(:)
+#endif
 
 #ifdef GEOMETRY_2D_POLAR
     real(kind=rp) :: r,rm,rpl,dr
@@ -4938,6 +5716,16 @@ contains
     rm = rp0
     rpl = rp0
     dr = rp0
+#endif
+
+#ifdef GEOMETRY_2D_CYLINDRICAL
+    real(kind=rp) :: r,rm,rpl,dr,zm,zpl
+    r = rp0
+    rm = rp0
+    rpl = rp0
+    dr = rp0
+    zm = rp0
+    zpl = rp0
 #endif
 
 #ifdef GEOMETRY_2D_SPHERICAL
@@ -5040,6 +5828,15 @@ contains
          tmp = r*dr*lgrid%dx2
 #endif
 
+#ifdef GEOMETRY_2D_CYLINDRICAL
+         rm = lgrid%r_x1(i,j,k)
+         rpl = lgrid%r_x1(i+1,j,k)
+         dr = rpl-rm
+         zm = lgrid%coords_x2(2,i,j,k)
+         zpl = lgrid%coords_x2(2,i,j+1,k)
+         tmp = dr*(zpl-zm)
+#endif
+
 #ifdef GEOMETRY_2D_SPHERICAL
          r = lgrid%r(i,j,k)
          sin_theta = lgrid%sin_theta(i,j,k)
@@ -5092,6 +5889,45 @@ contains
       end do
      end do
     end do
+
+#endif
+
+#ifdef SAVE_RPROFS
+
+    allocate(rprofs_counts(1:lgrid%rprofs_nr))
+
+    do ipr=1,lgrid%rprofs_nr
+      rprofs_counts(ipr) = 0
+    end do 
+
+    do k=lx3,ux3
+     do j=lx2,ux2
+      do i=lx1,ux1
+
+#if defined(USE_INTERNAL_BOUNDARIES) || defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_CUBED_SPHERE)
+        tmp = lgrid%r(i,j,k)
+#else
+        tmp = lgrid%coords(2,i,j,k)
+#endif
+
+        lgrid%rprofs_ir(i,j,k) = 0
+
+        do ipr=1,lgrid%rprofs_nr
+         if((tmp>lgrid%rprofs_r(ipr)) .and. (tmp<lgrid%rprofs_r(ipr+1))) then
+          lgrid%rprofs_ir(i,j,k) = ipr
+          rprofs_counts(ipr) = rprofs_counts(ipr) + 1
+         endif
+        end do
+
+      end do
+     end do
+    end do
+
+    call mpi_reduce(rprofs_counts,lgrid%rprofs_counts,lgrid%rprofs_nr, &
+    MPI_INTEGER,MPI_SUM,master_rank,mgrid%comm_cart,ierr)
+
+    deallocate(rprofs_counts)
+
 
 #endif
 
@@ -5175,7 +6011,7 @@ contains
 
 #ifdef USE_MHD
 
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_2D_CYLINDRICAL)
     do k=lx3,ux3
      do j=lx2,ux2
       do i=lx1,ux1
@@ -5546,8 +6382,14 @@ contains
       end do
      end do 
 
+#ifdef ENFORCE_BARRIERS
      call mpi_barrier(mgrid%comm_cart,ierr)
+#endif
      call compute_hyperbolic_dt(mgrid,lgrid) 
+
+#ifdef SAVE_RPROFS
+     lgrid%rprofs_dstep_dump = nint(rprofs_dt_dump/lgrid%dt)
+#endif
 
 #ifdef SAVE_PLANES
      lgrid%planes_dstep_dump = nint(planes_dt_dump/lgrid%dt)
@@ -5665,7 +6507,9 @@ contains
 #ifdef THERMAL_DIFFUSION_STS
 #ifndef EVALUATE_PARABOLIC_TIMESTEP
     if(lgrid%step==0) then
+#ifdef ENFORCE_BARRIERS
      call mpi_barrier(mgrid%comm_cart,ierr)
+#endif
      call compute_parabolic_dt(mgrid,lgrid)
     endif
 #endif
@@ -5714,7 +6558,7 @@ contains
 
           if(iflush==10000) then
         
-           open(newunit=iv,file='pp'//trim(str(ipr))//'_'//trim(str(lgrid%step))//'.dat', &
+           open(newunit=iv,file='./pps/pp'//trim(str(ipr))//'_'//trim(str(lgrid%step))//'.dat', &
            status='replace',action='write',form='unformatted',access='stream')
 
            do i=1,10000
@@ -5748,6 +6592,21 @@ contains
        end if
 #endif
 
+#ifdef SAVE_RPROFS
+       if(lgrid%step==lgrid%rprofs_inextoutput) then
+        call mpi_barrier(mgrid%comm_cart,ierr)
+        call communicate_ndarray(mgrid,sdims,lx1,ux1,lx2,ux2,lx3,ux3,ngc,lgrid%prim(i_vx1:i_vx3,:,:,:),.false.)
+#if defined(THERMAL_DIFFUSION_EXPLICIT) || defined(THERMAL_DIFFUSION_STS)
+        call communicate_array(mgrid,lx1,ux1,lx2,ux2,lx3,ux3,ngc,lgrid%temp,.false.)
+#endif
+#ifdef USE_MHD
+        call communicate_ndarray(mgrid,sdims,lx1,ux1,lx2,ux2,lx3,ux3,ngc,lgrid%b_cc,.false.)
+#endif   
+        call write_rprofs(mgrid,lgrid)
+        lgrid%rprofs_inextoutput = lgrid%rprofs_inextoutput + lgrid%rprofs_dstep_dump
+       end if
+#endif
+
 #ifdef SAVE_PLANES
        if(lgrid%step==lgrid%planes_inextoutput) then
         call mpi_barrier(mgrid%comm_cart,ierr)
@@ -5758,11 +6617,15 @@ contains
 
 #ifdef SAVE_SPHERICAL_PROJECTIONS
        if(lgrid%step==lgrid%spj_inextoutput) then
+#ifndef SAVE_RPROFS
+#ifdef ENFORCE_BARRIERS
         call mpi_barrier(mgrid%comm_cart,ierr)
+#endif
         call communicate_ndarray(mgrid,nvars,lx1,ux1,lx2,ux2,lx3,ux3,ngc,lgrid%prim,.true.)
         call communicate_array(mgrid,lx1,ux1,lx2,ux2,lx3,ux3,ngc,lgrid%temp,.true.)
 #ifdef USE_MHD
         call communicate_ndarray(mgrid,sdims,lx1,ux1,lx2,ux2,lx3,ux3,ngc,lgrid%b_cc,.true.)
+#endif
 #endif
         call write_spherical_projections(mgrid,lgrid)
         lgrid%spj_inextoutput = lgrid%spj_inextoutput + lgrid%spj_dstep_dump
@@ -5808,7 +6671,9 @@ contains
 
 #ifdef THERMAL_DIFFUSION_STS
 #ifdef EVALUATE_PARABOLIC_TIMESTEP
+#ifdef ENFORCE_BARRIERS
        call mpi_barrier(mgrid%comm_cart,ierr)
+#endif
        call compute_parabolic_dt(mgrid,lgrid) 
 #endif 
        call thermal_diffusion_step(mgrid,lgrid,1)
@@ -5845,7 +6710,9 @@ contains
        lgrid%time = lgrid%time + lgrid%dt
 
 #ifdef VARIABLE_TIMESTEP
+#ifdef ENFORCE_BARRIERS
        call mpi_barrier(mgrid%comm_cart,ierr)
+#endif
        call compute_hyperbolic_dt(mgrid,lgrid)
 #endif
 
@@ -5889,6 +6756,20 @@ contains
     if(lgrid%time>=lgrid%tnextoutput) lgrid%tnextoutput = lgrid%tnextoutput + dt_dump
 #endif
 
+#ifdef SAVE_RPROFS
+    if((lgrid%step==lgrid%rprofs_inextoutput) .or. (lgrid%time>=tmax) .or. (lgrid%step==stepmax)) then
+      call communicate_ndarray(mgrid,sdims,lx1,ux1,lx2,ux2,lx3,ux3,ngc,lgrid%prim(i_vx1:i_vx3,:,:,:),.false.)
+#if defined(THERMAL_DIFFUSION_EXPLICIT) || defined(THERMAL_DIFFUSION_STS)
+      call communicate_array(mgrid,lx1,ux1,lx2,ux2,lx3,ux3,ngc,lgrid%temp,.false.)
+#endif
+#ifdef USE_MHD
+      call communicate_ndarray(mgrid,sdims,lx1,ux1,lx2,ux2,lx3,ux3,ngc,lgrid%b_cc,.false.)
+#endif
+      call write_rprofs(mgrid,lgrid) 
+      lgrid%rprofs_inextoutput = lgrid%rprofs_inextoutput + lgrid%rprofs_dstep_dump
+    end if
+#endif
+
 #ifdef SAVE_PLANES
     if((lgrid%step==lgrid%planes_inextoutput) .or. (lgrid%time>=tmax) .or. (lgrid%step==stepmax)) then
       call write_planes(mgrid,lgrid) 
@@ -5898,11 +6779,15 @@ contains
 
 #ifdef SAVE_SPHERICAL_PROJECTIONS
     if((lgrid%step==lgrid%spj_inextoutput) .or. (lgrid%time>=tmax) .or. (lgrid%step==stepmax)) then
+#ifndef SAVE_RPROFS
+#ifdef ENFORCE_BARRIERS
       call mpi_barrier(mgrid%comm_cart,ierr)
+#endif
       call communicate_ndarray(mgrid,nvars,lx1,ux1,lx2,ux2,lx3,ux3,ngc,lgrid%prim,.true.)
       call communicate_array(mgrid,lx1,ux1,lx2,ux2,lx3,ux3,ngc,lgrid%temp,.true.)
 #ifdef USE_MHD
       call communicate_ndarray(mgrid,sdims,lx1,ux1,lx2,ux2,lx3,ux3,ngc,lgrid%b_cc,.true.)
+#endif
 #endif
       call write_spherical_projections(mgrid,lgrid)
       lgrid%spj_inextoutput = lgrid%spj_inextoutput + lgrid%spj_dstep_dump
@@ -5917,7 +6802,7 @@ contains
 
        if(lgrid%pp_inside_domain(ipr).eqv..true.) then
   
-         open(newunit=iv,file='pp'//trim(str(ipr))//'_'//trim(str(lgrid%step-1))//'.dat', &
+         open(newunit=iv,file='./pps/pp'//trim(str(ipr))//'_'//trim(str(lgrid%step-1))//'.dat', &
          status='replace',action='write',form='unformatted',access='stream')
 
          do i=1,iflush
@@ -5933,7 +6818,6 @@ contains
     end if
 
 #endif
-
     call mpi_barrier(mgrid%comm_cart,ierr)
     call write_restart(mgrid,lgrid)
 
@@ -5946,7 +6830,7 @@ contains
       write(*,'("| step=",I8.8," | time=",E9.3," | dt=",E9.3,"| t/tmax=",E9.3," |")') &
       lgrid%step,lgrid%time,lgrid%dt,lgrid%time/tmax
       write(*,'("wct/cell/cycle/core = ",E9.3," mus")') & 
-      wct_hydro/(lgrid%step-step0)/(mgrid%nx1l*mgrid%nx2l*mgrid%nx3l)*1.0e6_rp
+      wct_hydro/real(lgrid%step-step0,kind=rp)/real(mgrid%nx1l*mgrid%nx2l*mgrid%nx3l,kind=rp)*1.0e6_rp
       write(*,'("updated cells/s = ",E9.3)') & 
       (lgrid%step-step0)*(real(nx1,kind=rp)*real(nx2,kind=rp)*real(nx3,kind=rp))/wct_hydro 
       write(*,'("total wct (no output) = ",E9.3," s")') wct_hydro
@@ -6297,7 +7181,9 @@ contains
 #endif
 #endif
 
+#ifdef ENFORCE_BARRIERS
      call mpi_barrier(mgrid%comm_cart,ierr)
+#endif
      call communicate_ndarray(mgrid,nvars,lx1,ux1,lx2,ux2,lx3,ux3,ngc,lgrid%prim,communicate_corners)
 #ifdef USE_MHD
      call communicate_ndarray(mgrid,sdims,lx1,ux1,lx2,ux2,lx3,ux3,ngc,lgrid%b_cc,communicate_corners)
@@ -7110,12 +7996,28 @@ contains
            lgrid%b_cc(iv,i-1,j,k) = bc_facb(iv)*lgrid%b_cc(iv,i,j,k)
           end do
 #endif
+
+#ifndef HSE_BCS
 #if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
           lgrid%temp(i-1,j,k) = lgrid%temp(i,j,k)
 #endif
 #ifdef USE_FASTEOS
           lgrid%gammaf(i_gammae,i-1,j,k) = lgrid%gammaf(i_gammae,i,j,k)
           lgrid%gammaf(i_gammac,i-1,j,k) = lgrid%gammaf(i_gammac,i,j,k)
+#endif
+#endif
+
+#ifdef HSE_BCS
+          rho = lgrid%prim(i_rho,i,j,k)
+          lgrid%prim(i_p,i-1,j,k) = lgrid%prim(i_p,i,j,k)-rho*lgrid%grav(1,i,j,k)*lgrid%dx1
+          lgrid%prim(i_rho,i-1,j,k) = rp2*rho-lgrid%prim(i_rho,i+1,j,k)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+          lgrid%temp(i-1,j,k) = rp2*lgrid%temp(i,j,k)-lgrid%temp(i+1,j,k)
+#endif
+#ifdef USE_FASTEOS
+          lgrid%gammaf(i_gammae,i-1,j,k) = rp2*lgrid%gammaf(i_gammae,i,j,k)-lgrid%gammaf(i_gammae,i+1,j,k)
+          lgrid%gammaf(i_gammac,i-1,j,k) = rp2*lgrid%gammaf(i_gammac,i,j,k)-lgrid%gammaf(i_gammac,i+1,j,k)
+#endif
 #endif
 
           if((lgrid%is_solid(i+1,j,k)==0) .and. (i>=lx1)) then
@@ -7128,12 +8030,28 @@ contains
             lgrid%b_cc(iv,i-2,j,k) = bc_facb(iv)*lgrid%b_cc(iv,i+1,j,k)
            end do
 #endif
+
+#ifndef HSE_BCS
 #if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
            lgrid%temp(i-2,j,k) = lgrid%temp(i+1,j,k)
 #endif
 #ifdef USE_FASTEOS
            lgrid%gammaf(i_gammae,i-2,j,k) = lgrid%gammaf(i_gammae,i+1,j,k)
            lgrid%gammaf(i_gammac,i-2,j,k) = lgrid%gammaf(i_gammac,i+1,j,k)
+#endif
+#endif
+
+#ifdef HSE_BCS
+           rho = lgrid%prim(i_rho,i,j,k)
+           lgrid%prim(i_p,i-2,j,k) = lgrid%prim(i_p,i,j,k)-rp2*rho*lgrid%grav(1,i,j,k)*lgrid%dx1
+           lgrid%prim(i_rho,i-2,j,k) = rp3*rho-rp2*lgrid%prim(i_rho,i+1,j,k)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+           lgrid%temp(i-2,j,k) = rp3*lgrid%temp(i,j,k)-rp2*lgrid%temp(i+1,j,k)
+#endif
+#ifdef USE_FASTEOS
+           lgrid%gammaf(i_gammae,i-2,j,k) = rp3*lgrid%gammaf(i_gammae,i,j,k)-rp2*lgrid%gammaf(i_gammae,i+1,j,k)
+           lgrid%gammaf(i_gammac,i-2,j,k) = rp3*lgrid%gammaf(i_gammac,i,j,k)-rp2*lgrid%gammaf(i_gammac,i+1,j,k)
+#endif
 #endif
 
           endif
@@ -7150,12 +8068,28 @@ contains
            lgrid%b_cc(iv,i+1,j,k) = bc_facb(iv)*lgrid%b_cc(iv,i,j,k)
           end do
 #endif
+
+#ifndef HSE_BCS
 #if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
           lgrid%temp(i+1,j,k) = lgrid%temp(i,j,k)
 #endif
 #ifdef USE_FASTEOS
           lgrid%gammaf(i_gammae,i+1,j,k) = lgrid%gammaf(i_gammae,i,j,k)
           lgrid%gammaf(i_gammac,i+1,j,k) = lgrid%gammaf(i_gammac,i,j,k)
+#endif
+#endif
+
+#ifdef HSE_BCS
+          rho = lgrid%prim(i_rho,i,j,k)
+          lgrid%prim(i_p,i+1,j,k) = lgrid%prim(i_p,i,j,k)+rho*lgrid%grav(1,i,j,k)*lgrid%dx1
+          lgrid%prim(i_rho,i+1,j,k) = rp2*rho-lgrid%prim(i_rho,i-1,j,k)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+          lgrid%temp(i+1,j,k) = rp2*lgrid%temp(i,j,k)-lgrid%temp(i-1,j,k)
+#endif
+#ifdef USE_FASTEOS
+          lgrid%gammaf(i_gammae,i+1,j,k) = rp2*lgrid%gammaf(i_gammae,i,j,k)-lgrid%gammaf(i_gammae,i-1,j,k)
+          lgrid%gammaf(i_gammac,i+1,j,k) = rp2*lgrid%gammaf(i_gammac,i,j,k)-lgrid%gammaf(i_gammac,i-1,j,k)
+#endif
 #endif
 
           if((lgrid%is_solid(i-1,j,k)==0) .and. (i<=ux1)) then
@@ -7168,12 +8102,28 @@ contains
             lgrid%b_cc(iv,i+2,j,k) = bc_facb(iv)*lgrid%b_cc(iv,i-1,j,k)
            end do
 #endif
+
+#ifndef HSE_BCS
 #if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
            lgrid%temp(i+2,j,k) = lgrid%temp(i-1,j,k)
 #endif
 #ifdef USE_FASTEOS
            lgrid%gammaf(i_gammae,i+2,j,k) = lgrid%gammaf(i_gammae,i-1,j,k)
            lgrid%gammaf(i_gammac,i+2,j,k) = lgrid%gammaf(i_gammac,i-1,j,k)
+#endif
+#endif
+
+#ifdef HSE_BCS
+           rho = lgrid%prim(i_rho,i,j,k)
+           lgrid%prim(i_p,i+2,j,k) = lgrid%prim(i_p,i,j,k)+rp2*rho*lgrid%grav(1,i,j,k)*lgrid%dx1
+           lgrid%prim(i_rho,i+2,j,k) = rp3*rho-rp2*lgrid%prim(i_rho,i-1,j,k)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+           lgrid%temp(i+2,j,k) = rp3*lgrid%temp(i,j,k)-rp2*lgrid%temp(i-1,j,k)
+#endif
+#ifdef USE_FASTEOS
+           lgrid%gammaf(i_gammae,i+2,j,k) = rp3*lgrid%gammaf(i_gammae,i,j,k)-rp2*lgrid%gammaf(i_gammae,i-1,j,k)
+           lgrid%gammaf(i_gammac,i+2,j,k) = rp3*lgrid%gammaf(i_gammac,i,j,k)-rp2*lgrid%gammaf(i_gammac,i-1,j,k)
+#endif
 #endif
 
           endif
@@ -7276,7 +8226,7 @@ contains
           slope=prod/(slopef+slopeb)
          endif
          
-         tmp = rph*slope
+         tmp = slope
          qLbuf(iv) = qc - tmp
          qRbuf(iv) = qc + tmp
          
@@ -7462,7 +8412,7 @@ contains
           slope=prod/(slopef+slopeb)
          endif
          
-         tmp = rph*slope
+         tmp = slope
          bLbuf(iv) = qc - tmp
          bRbuf(iv) = qc + tmp
          
@@ -7632,7 +8582,7 @@ contains
          slope=prod/(slopef+slopeb)
         endif
         
-        tmp = rph*slope
+        tmp = slope
         eosLbuf = qc - tmp
         eosRbuf = qc + tmp
  
@@ -7662,7 +8612,7 @@ contains
          slope=prod/(slopef+slopeb)
         endif
         
-        tmp = rph*slope
+        tmp = slope
         eosLbuf = qc - tmp
         eosRbuf = qc + tmp
 
@@ -7876,7 +8826,7 @@ contains
             slope=prod/(slopef+slopeb)
            endif
 
-           tmp = rph*slope
+           tmp = slope
            qLbuf(iv) = qc - tmp
            qRbuf(iv) = qc + tmp
 
@@ -7924,7 +8874,7 @@ contains
             slope=prod/(slopef+slopeb)
            endif
 
-           tmp = rph*slope
+           tmp = slope
            bLbuf(iv) = qc - tmp
            bRbuf(iv) = qc + tmp
 
@@ -7961,7 +8911,7 @@ contains
             slope=prod/(slopef+slopeb)
            endif
 
-           tmp = rph*slope
+           tmp = slope
            qLbuf(iv) = qc - tmp
            qRbuf(iv) = qc + tmp
           
@@ -8114,6 +9064,24 @@ contains
 
 #endif
 
+#ifdef GEOMETRY_2D_CYLINDRICAL
+
+       do i=lx1,ux1+1
+ 
+        r = lgrid%r_x1(i,j,k)
+
+        do iv=1,nvars
+         lgrid%fx1(iv,i) = r*lgrid%fx1(iv,i)
+        end do
+
+#ifdef USE_WB
+        lgrid%ru%pn(1)%val(i) = lgrid%ru%pn(1)%val(i) - lgrid%eq_prim_x1(ieq_p,i,j,k) 
+#endif
+
+       end do
+
+#endif
+
 #if defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
 
        do i=lx1,ux1+1
@@ -8160,6 +9128,19 @@ contains
 #endif
 
 #ifdef GEOMETRY_2D_POLAR
+
+        r = lgrid%r(i,j,k)
+        inv_r = rp1/r
+        do iv=1,nvars
+         lgrid%res(iv,i,j,k) = lgrid%res(iv,i,j,k)*inv_r
+        end do
+
+        lgrid%res(i_rhovx1,i,j,k) = lgrid%res(i_rhovx1,i,j,k) + &
+        (lgrid%ru%pn(1)%val(i+1)-lgrid%ru%pn(1)%val(i))*inv_dl
+         
+#endif
+
+#ifdef GEOMETRY_2D_CYLINDRICAL
 
         r = lgrid%r(i,j,k)
         inv_r = rp1/r
@@ -8226,12 +9207,28 @@ contains
            lgrid%b_cc(iv,i,j-1,k) = bc_facb(iv)*lgrid%b_cc(iv,i,j,k)
           end do
 #endif
+
+#ifndef HSE_BCS
 #if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
           lgrid%temp(i,j-1,k) = lgrid%temp(i,j,k)
 #endif
 #ifdef USE_FASTEOS
           lgrid%gammaf(i_gammae,i,j-1,k) = lgrid%gammaf(i_gammae,i,j,k)
           lgrid%gammaf(i_gammac,i,j-1,k) = lgrid%gammaf(i_gammac,i,j,k)
+#endif
+#endif
+
+#ifdef HSE_BCS
+          rho = lgrid%prim(i_rho,i,j,k)
+          lgrid%prim(i_p,i,j-1,k) = lgrid%prim(i_p,i,j,k)-rho*lgrid%grav(2,i,j,k)*lgrid%dx2
+          lgrid%prim(i_rho,i,j-1,k) = rp2*rho-lgrid%prim(i_rho,i,j+1,k)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+          lgrid%temp(i,j-1,k) = rp2*lgrid%temp(i,j,k)-lgrid%temp(i,j+1,k)
+#endif
+#ifdef USE_FASTEOS
+          lgrid%gammaf(i_gammae,i,j-1,k) = rp2*lgrid%gammaf(i_gammae,i,j,k)-lgrid%gammaf(i_gammae,i,j+1,k)
+          lgrid%gammaf(i_gammac,i,j-1,k) = rp2*lgrid%gammaf(i_gammac,i,j,k)-lgrid%gammaf(i_gammac,i,j+1,k)
+#endif
 #endif
 
           if((lgrid%is_solid(i,j+1,k)==0) .and. (j>=lx2)) then
@@ -8244,12 +9241,28 @@ contains
             lgrid%b_cc(iv,i,j-2,k) = bc_facb(iv)*lgrid%b_cc(iv,i,j+1,k)
            end do
 #endif
+
+#ifndef HSE_BCS
 #if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
            lgrid%temp(i,j-2,k) = lgrid%temp(i,j+1,k)
 #endif
 #ifdef USE_FASTEOS
            lgrid%gammaf(i_gammae,i,j-2,k) = lgrid%gammaf(i_gammae,i,j+1,k)
            lgrid%gammaf(i_gammac,i,j-2,k) = lgrid%gammaf(i_gammac,i,j+1,k)
+#endif
+#endif
+
+#ifdef HSE_BCS
+           rho = lgrid%prim(i_rho,i,j,k)
+           lgrid%prim(i_p,i,j-2,k) = lgrid%prim(i_p,i,j,k)-rp2*rho*lgrid%grav(2,i,j,k)*lgrid%dx2
+           lgrid%prim(i_rho,i,j-2,k) = rp3*rho-rp2*lgrid%prim(i_rho,i,j+1,k)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+           lgrid%temp(i,j-2,k) = rp3*lgrid%temp(i,j,k)-lgrid%temp(i,j+1,k)
+#endif
+#ifdef USE_FASTEOS
+           lgrid%gammaf(i_gammae,i,j-2,k) = rp3*lgrid%gammaf(i_gammae,i,j,k)-rp2*lgrid%gammaf(i_gammae,i,j+1,k)
+           lgrid%gammaf(i_gammac,i,j-2,k) = rp3*lgrid%gammaf(i_gammac,i,j,k)-rp2*lgrid%gammaf(i_gammac,i,j+1,k)
+#endif
 #endif
 
           endif
@@ -8266,12 +9279,28 @@ contains
            lgrid%b_cc(iv,i,j+1,k) = bc_facb(iv)*lgrid%b_cc(iv,i,j,k)
           end do
 #endif
+
+#ifndef HSE_BCS
 #if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
           lgrid%temp(i,j+1,k) = lgrid%temp(i,j,k)
 #endif
 #ifdef USE_FASTEOS
           lgrid%gammaf(i_gammae,i,j+1,k) = lgrid%gammaf(i_gammae,i,j,k)
           lgrid%gammaf(i_gammac,i,j+1,k) = lgrid%gammaf(i_gammac,i,j,k)
+#endif
+#endif
+
+#ifdef HSE_BCS
+          rho = lgrid%prim(i_rho,i,j,k)
+          lgrid%prim(i_p,i,j+1,k) = lgrid%prim(i_p,i,j,k)+rho*lgrid%grav(2,i,j,k)*lgrid%dx2
+          lgrid%prim(i_rho,i,j+1,k) = rp2*rho-lgrid%prim(i_rho,i,j-1,k)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+          lgrid%temp(i,j+1,k) = rp2*lgrid%temp(i,j,k)-lgrid%temp(i,j-1,k)
+#endif
+#ifdef USE_FASTEOS
+          lgrid%gammaf(i_gammae,i,j+1,k) = rp2*lgrid%gammaf(i_gammae,i,j,k)-lgrid%gammaf(i_gammae,i,j-1,k)
+          lgrid%gammaf(i_gammac,i,j+1,k) = rp2*lgrid%gammaf(i_gammac,i,j,k)-lgrid%gammaf(i_gammac,i,j-1,k)
+#endif
 #endif
 
           if((lgrid%is_solid(i,j-1,k)==0) .and. (j<=ux2)) then
@@ -8284,12 +9313,28 @@ contains
             lgrid%b_cc(iv,i,j+2,k) = bc_facb(iv)*lgrid%b_cc(iv,i,j-1,k)
            end do
 #endif
+
+#ifndef HSE_BCS
 #if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
            lgrid%temp(i,j+2,k) = lgrid%temp(i,j-1,k)
 #endif
 #ifdef USE_FASTEOS
            lgrid%gammaf(i_gammae,i,j+2,k) = lgrid%gammaf(i_gammae,i,j-1,k)
            lgrid%gammaf(i_gammac,i,j+2,k) = lgrid%gammaf(i_gammac,i,j-1,k)
+#endif
+#endif
+
+#ifdef HSE_BCS
+           rho = lgrid%prim(i_rho,i,j,k)
+           lgrid%prim(i_p,i,j+2,k) = lgrid%prim(i_p,i,j,k)+rp2*rho*lgrid%grav(2,i,j,k)*lgrid%dx2
+           lgrid%prim(i_rho,i,j+2,k) = rp3*rho-rp2*lgrid%prim(i_rho,i,j-1,k)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+           lgrid%temp(i,j+2,k) = rp3*lgrid%temp(i,j,k)-rp2*lgrid%temp(i,j-1,k)
+#endif
+#ifdef USE_FASTEOS
+           lgrid%gammaf(i_gammae,i,j+2,k) = rp3*lgrid%gammaf(i_gammae,i,j,k)-rp2*lgrid%gammaf(i_gammae,i,j-1,k)
+           lgrid%gammaf(i_gammac,i,j+2,k) = rp3*lgrid%gammaf(i_gammac,i,j,k)-rp2*lgrid%gammaf(i_gammac,i,j-1,k)
+#endif
 #endif
 
           endif
@@ -8327,7 +9372,7 @@ contains
           slope=prod/(slopef+slopeb)
          endif
          
-         tmp = rph*slope
+         tmp = slope
          qLbuf(iv) = qc - tmp
          qRbuf(iv) = qc + tmp
 
@@ -8511,7 +9556,7 @@ contains
          slope=prod/(slopef+slopeb)
         endif
          
-        tmp = rph*slope
+        tmp = slope
         bLbuf(1) = qc - tmp
         bRbuf(1) = qc + tmp
 
@@ -8530,7 +9575,7 @@ contains
          slope=prod/(slopef+slopeb)
         endif
          
-        tmp = rph*slope
+        tmp = slope
         bLbuf(3) = qc - tmp
         bRbuf(3) = qc + tmp
 #endif
@@ -8737,7 +9782,7 @@ contains
             slope=prod/(slopef+slopeb)
            endif
 
-           tmp = rph*slope
+           tmp = slope
            qLbuf(iv) = qc - tmp
            qRbuf(iv) = qc + tmp
 
@@ -8773,7 +9818,7 @@ contains
             slope=prod/(slopef+slopeb)
            endif
 
-           tmp = rph*slope
+           tmp = slope
            bLbuf(iv) = qc - tmp
            bRbuf(iv) = qc + tmp
 
@@ -8879,7 +9924,7 @@ contains
          slope=prod/(slopef+slopeb)
         endif
         
-        tmp = rph*slope
+        tmp = slope
         eosLbuf = qc - tmp
         eosRbuf = qc + tmp
 
@@ -8909,7 +9954,7 @@ contains
          slope=prod/(slopef+slopeb)
         endif
         
-        tmp = rph*slope
+        tmp = slope
         eosLbuf = qc - tmp
         eosRbuf = qc + tmp
 
@@ -9097,7 +10142,7 @@ contains
             slope=prod/(slopef+slopeb)
            endif
 
-           tmp = rph*slope
+           tmp = slope
            qLbuf(iv) = qc - tmp
            qRbuf(iv) = qc + tmp
 
@@ -9274,6 +10319,16 @@ contains
 #endif
 #endif
 
+#ifdef GEOMETRY_2D_CYLINDRICAL
+#ifdef USE_WB
+
+       do j=lx2,ux2+1 
+         lgrid%ru%pn(2)%val(j) = lgrid%ru%pn(2)%val(j) - lgrid%eq_prim_x2(ieq_p,i,j,k) 
+       end do
+
+#endif
+#endif
+
 #if defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
  
        do j=lx2,ux2+1
@@ -9310,6 +10365,20 @@ contains
         
         lgrid%res(i_rhovx2,i,j,k) = lgrid%res(i_rhovx2,i,j,k) + &
         (lgrid%ru%pn(2)%val(j+1)-lgrid%ru%pn(2)%val(j))*inv_dl*inv_r
+
+#elif defined(GEOMETRY_2D_CYLINDRICAL)
+
+#ifdef NONUNIFORM_RADIAL_NODES
+        inv_dl = rp1/(lgrid%coords_x2(2,i,j+1,k)-lgrid%coords_x2(2,i,j,k))
+#endif
+
+        do iv=1,nvars
+         lgrid%res(iv,i,j,k) = lgrid%res(iv,i,j,k) + &
+         (lgrid%fx2(iv,j+1)-lgrid%fx2(iv,j))*inv_dl
+        end do       
+        
+        lgrid%res(i_rhovx2,i,j,k) = lgrid%res(i_rhovx2,i,j,k) + &
+        (lgrid%ru%pn(2)%val(j+1)-lgrid%ru%pn(2)%val(j))*inv_dl
 
 #elif defined(GEOMETRY_2D_SPHERICAL)
 
@@ -9400,12 +10469,28 @@ contains
            lgrid%b_cc(iv,i,j,k-1) = bc_facb(iv)*lgrid%b_cc(iv,i,j,k)
           end do
 #endif
+
+#ifndef HSE_BCS
 #if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
           lgrid%temp(i,j,k-1) = lgrid%temp(i,j,k)
 #endif
 #ifdef USE_FASTEOS
           lgrid%gammaf(i_gammae,i,j,k-1) = lgrid%gammaf(i_gammae,i,j,k)
           lgrid%gammaf(i_gammac,i,j,k-1) = lgrid%gammaf(i_gammac,i,j,k)
+#endif
+#endif
+
+#ifdef HSE_BCS
+          rho = lgrid%prim(i_rho,i,j,k)
+          lgrid%prim(i_p,i,j,k-1) = lgrid%prim(i_p,i,j,k)-rho*lgrid%grav(3,i,j,k)*lgrid%dx3
+          lgrid%prim(i_rho,i,j,k-1) = rp2*rho-lgrid%prim(i_rho,i,j,k+1)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+          lgrid%temp(i,j,k-1) = rp2*lgrid%temp(i,j,k)-lgrid%temp(i,j,k+1)
+#endif
+#ifdef USE_FASTEOS
+          lgrid%gammaf(i_gammae,i,j,k-1) = rp2*lgrid%gammaf(i_gammae,i,j,k)-lgrid%gammaf(i_gammae,i,j,k+1)
+          lgrid%gammaf(i_gammac,i,j,k-1) = rp2*lgrid%gammaf(i_gammac,i,j,k)-lgrid%gammaf(i_gammac,i,j,k+1)
+#endif
 #endif
 
           if((lgrid%is_solid(i,j,k+1)==0) .and. (k>=lx3)) then
@@ -9418,12 +10503,28 @@ contains
             lgrid%b_cc(iv,i,j,k-2) = bc_facb(iv)*lgrid%b_cc(iv,i,j,k+1)
            end do
 #endif
+
+#ifndef HSE_BCS
 #if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
            lgrid%temp(i,j,k-2) = lgrid%temp(i,j,k+1)
 #endif
 #ifdef USE_FASTEOS
            lgrid%gammaf(i_gammae,i,j,k-2) = lgrid%gammaf(i_gammae,i,j,k+1)
            lgrid%gammaf(i_gammac,i,j,k-2) = lgrid%gammaf(i_gammac,i,j,k+1)
+#endif
+#endif
+
+#ifdef HSE_BCS
+           rho = lgrid%prim(i_rho,i,j,k)
+           lgrid%prim(i_p,i,j,k-2) = lgrid%prim(i_p,i,j,k)-rp2*rho*lgrid%grav(3,i,j,k)*lgrid%dx3
+           lgrid%prim(i_rho,i,j,k-2) = rp3*rho-rp2*lgrid%prim(i_rho,i,j,k+1)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+           lgrid%temp(i,j,k-2) = rp3*lgrid%temp(i,j,k)-rp2*lgrid%temp(i,j,k+1)
+#endif
+#ifdef USE_FASTEOS
+           lgrid%gammaf(i_gammae,i,j,k-2) = rp3*lgrid%gammaf(i_gammae,i,j,k)-rp2*lgrid%gammaf(i_gammae,i,j,k+1)
+           lgrid%gammaf(i_gammac,i,j,k-2) = rp3*lgrid%gammaf(i_gammac,i,j,k)-rp2*lgrid%gammaf(i_gammac,i,j,k+1)
+#endif        
 #endif
 
           endif
@@ -9440,12 +10541,28 @@ contains
            lgrid%b_cc(iv,i,j,k+1) = bc_facb(iv)*lgrid%b_cc(iv,i,j,k)
           end do
 #endif
+
+#ifndef HSE_BCS
 #if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
           lgrid%temp(i,j,k+1) = lgrid%temp(i,j,k)
 #endif
 #ifdef USE_FASTEOS
           lgrid%gammaf(i_gammae,i,j,k+1) = lgrid%gammaf(i_gammae,i,j,k)
           lgrid%gammaf(i_gammac,i,j,k+1) = lgrid%gammaf(i_gammac,i,j,k)
+#endif
+#endif
+
+#ifdef HSE_BCS
+          rho = lgrid%prim(i_rho,i,j,k)
+          lgrid%prim(i_p,i,j,k+1) = lgrid%prim(i_p,i,j,k)+rho*lgrid%grav(3,i,j,k)*lgrid%dx3
+          lgrid%prim(i_rho,i,j,k+1) = rp2*rho-lgrid%prim(i_rho,i,j,k-1)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+          lgrid%temp(i,j,k+1) = rp2*lgrid%temp(i,j,k)-lgrid%temp(i,j,k-1)
+#endif
+#ifdef USE_FASTEOS
+          lgrid%gammaf(i_gammae,i,j,k+1) = rp2*lgrid%gammaf(i_gammae,i,j,k)-lgrid%gammaf(i_gammae,i,j,k-1)
+          lgrid%gammaf(i_gammac,i,j,k+1) = rp2*lgrid%gammaf(i_gammac,i,j,k)-lgrid%gammaf(i_gammac,i,j,k-1)
+#endif          
 #endif
 
           if((lgrid%is_solid(i,j,k-1)==0) .and. (k<=ux3)) then
@@ -9458,12 +10575,28 @@ contains
             lgrid%b_cc(iv,i,j,k+2) = bc_facb(iv)*lgrid%b_cc(iv,i,j,k-1)
            end do
 #endif
+
+#ifndef HSE_BCS
 #if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
            lgrid%temp(i,j,k+2) = lgrid%temp(i,j,k-1)
 #endif
 #ifdef USE_FASTEOS
            lgrid%gammaf(i_gammae,i,j,k+2) = lgrid%gammaf(i_gammae,i,j,k-1)
            lgrid%gammaf(i_gammac,i,j,k+2) = lgrid%gammaf(i_gammac,i,j,k-1)
+#endif
+#endif
+
+#ifdef HSE_BCS
+           rho = lgrid%prim(i_rho,i,j,k)
+           lgrid%prim(i_p,i,j,k+2) = lgrid%prim(i_p,i,j,k)+rp2*rho*lgrid%grav(3,i,j,k)*lgrid%dx3
+           lgrid%prim(i_rho,i,j,k+2) = rp3*rho-rp2*lgrid%prim(i_rho,i,j,k-1)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+           lgrid%temp(i,j,k+2) = rp3*lgrid%temp(i,j,k)-rp2*lgrid%temp(i,j,k-1)
+#endif
+#ifdef USE_FASTEOS
+           lgrid%gammaf(i_gammae,i,j,k+2) = rp3*lgrid%gammaf(i_gammae,i,j,k)-rp2*lgrid%gammaf(i_gammae,i,j,k-1)
+           lgrid%gammaf(i_gammac,i,j,k+2) = rp3*lgrid%gammaf(i_gammac,i,j,k)-rp2*lgrid%gammaf(i_gammac,i,j,k-1)
+#endif           
 #endif
 
           endif
@@ -9501,7 +10634,7 @@ contains
           slope=prod/(slopef+slopeb)
          endif
          
-         tmp = rph*slope
+         tmp = slope
          qLbuf(iv) = qc - tmp
          qRbuf(iv) = qc + tmp
 
@@ -9687,7 +10820,7 @@ contains
           slope=prod/(slopef+slopeb)
          endif
          
-         tmp = rph*slope
+         tmp = slope
          bLbuf(iv) = qc - tmp
          bRbuf(iv) = qc + tmp
 
@@ -9843,7 +10976,7 @@ contains
             slope=prod/(slopef+slopeb)
            endif
 
-           tmp = rph*slope
+           tmp = slope
            qLbuf(iv) = qc - tmp
            qRbuf(iv) = qc + tmp
 
@@ -9879,7 +11012,7 @@ contains
             slope=prod/(slopef+slopeb)
            endif
 
-           tmp = rph*slope
+           tmp = slope
            bLbuf(iv) = qc - tmp
            bRbuf(iv) = qc + tmp
 
@@ -9997,7 +11130,7 @@ contains
          slope=prod/(slopef+slopeb)
         endif
         
-        tmp = rph*slope
+        tmp = slope
         eosLbuf = qc - tmp
         eosRbuf = qc + tmp
 
@@ -10027,7 +11160,7 @@ contains
          slope=prod/(slopef+slopeb)
         endif
         
-        tmp = rph*slope
+        tmp = slope
         eosLbuf = qc - tmp
         eosRbuf = qc + tmp
 
@@ -10215,10 +11348,9 @@ contains
             slope=prod/(slopef+slopeb)
            endif
 
-           tmp = rph*slope
+           tmp = slope
            qLbuf(iv) = qc - tmp
            qRbuf(iv) = qc + tmp
-
 
           end do
 
@@ -10431,8 +11563,9 @@ contains
      a3rk = rk_coeff(irk,3)*lgrid%dt
 
 #ifdef USE_MHD
-
+#ifdef ENFORCE_BARRIERS
      call mpi_barrier(mgrid%comm_cart,ierr)
+#endif
      call communicate_ndarray(mgrid,3,lx1,ux1+1,lx2,ux2,lx3,ux3,1,lgrid%emf_x1,.false.)
      call communicate_ndarray(mgrid,3,lx1,ux1,lx2,ux2+1,lx3,ux3,1,lgrid%emf_x2,.false.)
 #if sdims_make==3
@@ -11287,6 +12420,16 @@ contains
         r = lgrid%r_x1(i,j,k)
         tmp = tmp/r
 
+#elif defined(GEOMETRY_2D_CYLINDRICAL)
+
+#ifdef NONUNIFORM_RADIAL_NODES 
+        tmp = &
+        (lgrid%emfx3_cor(i,j+1,k)-lgrid%emfx3_cor(i,j,k))/(lgrid%nodes(2,i,j+1,k)-lgrid%nodes(2,i,j,k))
+#else
+        tmp = &
+        (lgrid%emfx3_cor(i,j+1,k)-lgrid%emfx3_cor(i,j,k))*lgrid%inv_dx2
+#endif
+
 #elif defined(GEOMETRY_2D_SPHERICAL) 
 
         sin_theta_m = lgrid%sin_theta_cor(i,j,k)
@@ -11358,6 +12501,19 @@ contains
 
         tmp = &
         (lgrid%emfx3_cor(i,j,k)-lgrid%emfx3_cor(i+1,j,k))*inv_dl
+
+#elif defined(GEOMETRY_2D_CYLINDRICAL)
+
+        rmi = lgrid%nodes(1,i,j,k)
+        rpl = lgrid%nodes(1,i+1,j,k) 
+#ifdef NONUNIFORM_RADIAL_NODES
+        inv_dl = rp1/(rpl-rmi)
+#else
+        inv_dl = lgrid%inv_dx1
+#endif
+
+        tmp = &
+        (rmi*lgrid%emfx3_cor(i,j,k)-rpl*lgrid%emfx3_cor(i+1,j,k))*inv_dl/lgrid%coords_x2(1,i,j,k)
 
 #elif defined(GEOMETRY_2D_SPHERICAL)
 
@@ -11475,7 +12631,7 @@ contains
 
 #endif
 
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_2D_CYLINDRICAL)
     do k=lx3,ux3
      do j=lx2,ux2
       do i=lx1,ux1
@@ -11793,6 +12949,19 @@ contains
 
 #endif
 
+#ifdef GEOMETRY_2D_CYLINDRICAL
+
+         r = lgrid%r(i,j,k)
+         tmp = r*om3*om3
+         
+         lgrid%res(i_rhovx1,i,j,k) = lgrid%res(i_rhovx1,i,j,k) & 
+         -rho*tmp
+
+         lgrid%res(i_rhoe,i,j,k) = lgrid%res(i_rhoe,i,j,k) - &
+         rhovx1*tmp
+
+#endif
+
 #ifdef GEOMETRY_3D_SPHERICAL
          
          r = lgrid%r(i,j,k)
@@ -11877,7 +13046,7 @@ contains
       do j=lx2,ux2
        do i=lx1,ux1
 
-#if defined(USE_INTERNAL_BOUNDARIES) || defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_CUBED_SPHERE)
+#if defined(USE_INTERNAL_BOUNDARIES) || defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_CUBED_SPHERE) || defined(GEOMETRY_2D_CYLINDRICAL)
         r = lgrid%r(i,j,k)
 #else
         r = lgrid%coords(2,i,j,k)
@@ -12226,6 +13395,11 @@ contains
         lgrid%fe_x1(i) = lgrid%fe_x1(i)*r
 #endif
 
+#ifdef GEOMETRY_2D_CYLINDRICAL
+        r = lgrid%r_x1(i,j,k)
+        lgrid%fe_x1(i) = lgrid%fe_x1(i)*r
+#endif
+
 #if defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
         r = lgrid%r_x1(i,j,k)
         lgrid%fe_x1(i) = lgrid%fe_x1(i)*r*r
@@ -12246,6 +13420,10 @@ contains
 #endif
 
 #ifdef GEOMETRY_2D_POLAR
+        r = lgrid%r(i,j,k)
+        lgrid%res(i_rhoe,i,j,k) = lgrid%res(i_rhoe,i,j,k) - &
+        (lgrid%fe_x1(i+1)-lgrid%fe_x1(i))*inv_dl/r
+#elif defined(GEOMETRY_2D_CYLINDRICAL)
         r = lgrid%r(i,j,k)
         lgrid%res(i_rhoe,i,j,k) = lgrid%res(i_rhoe,i,j,k) - &
         (lgrid%fe_x1(i+1)-lgrid%fe_x1(i))*inv_dl/r
@@ -12339,13 +13517,20 @@ contains
 #ifdef GEOMETRY_CARTESIAN_NONUNIFORM
         inv_dl = rp1/(lgrid%coords(2,i,j,k)-lgrid%coords(2,i,j-1,k))
 #endif
+
+#ifdef GEOMETRY_2D_CYLINDRICAL
+#ifdef NONUNIFORM_RADIAL_NODES
+        inv_dl = rp1/(lgrid%coords(2,i,j,k)-lgrid%coords(2,i,j-1,k))
+#endif
+#endif
+
 #ifdef BALANCE_THERMAL_DIFFUSION
         Tplus = Tplus-lgrid%eq_prim_cc(ieq_T,i,j,k)
         Tminus = Tminus-lgrid%eq_prim_cc(ieq_T,i,j-1,k)
 #endif
         gradT = (Tplus-Tminus)*inv_dl
 
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) 
         r = lgrid%r_x2(i,j,k)
         gradT = gradT/r
 #endif
@@ -12362,7 +13547,12 @@ contains
        do j=lx2,ux2
 
 #ifdef GEOMETRY_CARTESIAN_NONUNIFORM
-        inv_dl = rp1/(lgrid%coords_x1(2,i,j+1,k)-lgrid%coords_x2(2,i,j,k))
+        inv_dl = rp1/(lgrid%coords_x2(2,i,j+1,k)-lgrid%coords_x2(2,i,j,k))
+#endif
+#ifdef GEOMETRY_2D_CYLINDRICAL
+#ifdef NONUNIFORM_RADIAL_NODES
+        inv_dl = rp1/(lgrid%coords_x2(2,i,j+1,k)-lgrid%coords_x2(2,i,j,k))
+#endif
 #endif
 #ifdef GEOMETRY_2D_POLAR
         r = lgrid%r(i,j,k)
@@ -12914,6 +14104,12 @@ contains
        inv_dl = rph*(tmp2+tmp1)*tmp
 #endif
 
+#ifdef GEOMETRY_2D_CYLINDRICAL
+#ifdef NONUNIFORM_RADIAL_NODES
+        inv_dl = rp1/(lgrid%coords_x2(2,i,j+1,k)-lgrid%coords_x2(2,i,j,k))
+#endif
+#endif
+
        sx2 = (abs(vx2) + c)*inv_dl
 
 #if sdims_make==3
@@ -13439,7 +14635,7 @@ contains
 #endif
 
         fL(i_rho) = rhoL*vx1L
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_2D_CYLINDRICAL)
         fL(i_rhovx1) = rhoL*vx1L*vx1L-bx1_2
 #else
         fL(i_rhovx1) = rhoL*vx1L*vx1L+ptL-bx1_2
@@ -13462,7 +14658,7 @@ contains
 #endif
 
         fR(i_rho) = rhoR*vx1R
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_2D_CYLINDRICAL)
         fR(i_rhovx1) = rhoR*vx1R*vx1R-bx1_2
 #else
         fR(i_rhovx1) = rhoR*vx1R*vx1R+ptR-bx1_2
@@ -13495,7 +14691,7 @@ contains
          fluxb(iv,idx) = dummy*(sR*fbL(iv)-sL*fbR(iv)+phi*(UbR(iv)-UbL(iv)))
         end do
 
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_2D_CYLINDRICAL)
         ru%pn(ru%dir)%val(idx) = dummy*(sR*ptL-sL*ptR)
 #endif
 
@@ -13641,7 +14837,7 @@ contains
       end if
 
       flux(i_rho,idx) = rho*vx1
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_2D_CYLINDRICAL)
       flux(i_rhovx1,idx) = rho*vx1*vx1-bx1_2
       ru%pn(ru%dir)%val(idx) = pres
 #else
@@ -13710,7 +14906,7 @@ contains
       end if
 
       flux(i_rho,idx) = rho*vx1
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_2D_CYLINDRICAL)
       flux(i_rhovx1,idx) = rho*vx1*vx1-bx1_2
       ru%pn(ru%dir)%val(idx) = pres
 #else
@@ -13767,7 +14963,7 @@ contains
 #endif
 
        f(i_rho) = rhoL*vx1L
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_2D_CYLINDRICAL)
        f(i_rhovx1) = rhoL*vx1L*vx1L-bx1_2
        ru%pn(ru%dir)%val(idx) = ptL
 #else
@@ -13905,7 +15101,7 @@ contains
 #endif
 
        f(i_rho) = rhoR*vx1R
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_2D_CYLINDRICAL)
        f(i_rhovx1) = rhoR*vx1R*vx1R-bx1_2
        ru%pn(ru%dir)%val(idx) = ptR
 #else
@@ -14984,7 +16180,7 @@ contains
 #endif
 
         fL(i_rho) = rhoL*vx1L
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_2D_CYLINDRICAL)
         fL(i_rhovx1) = rhoL*vx1L*vx1L
 #else
         fL(i_rhovx1) = rhoL*vx1L*vx1L+pL
@@ -15001,7 +16197,7 @@ contains
 #endif
    
         fR(i_rho) = rhoR*vx1R
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_2D_CYLINDRICAL)
         fR(i_rhovx1) = rhoR*vx1R*vx1R
 #else
         fR(i_rhovx1) = rhoR*vx1R*vx1R+pR
@@ -15024,7 +16220,7 @@ contains
          flux(iv,idx) = dummy*(sR*fL(iv)-sL*fR(iv)+phi*(UR(iv)-UL(iv)))
         end do
 
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_2D_CYLINDRICAL)
         ru%pn(ru%dir)%val(idx) = dummy*(sR*pL-sL*pR)
 #endif
 
@@ -15057,7 +16253,7 @@ contains
       if(sL>rp0) then
  
        flux(i_rho,idx) = rhoL*vx1L
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_2D_CYLINDRICAL)
        flux(i_rhovx1,idx) = rhoL*vx1L*vx1L
        ru%pn(ru%dir)%val(idx) = pL
 #else
@@ -15078,7 +16274,7 @@ contains
       else if(sR<rp0) then
 
        flux(i_rho,idx) = rhoR*vx1R
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_2D_CYLINDRICAL)
        flux(i_rhovx1,idx) = rhoR*vx1R*vx1R
        ru%pn(ru%dir)%val(idx) = pR
 #else
@@ -15099,7 +16295,7 @@ contains
       else
 
        flux(i_rho,idx) = rhostar*ustar
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_2D_CYLINDRICAL)
        flux(i_rhovx1,idx) = rhostar*ustar*ustar
        ru%pn(ru%dir)%val(idx) = pstar
 #else
@@ -15122,7 +16318,7 @@ contains
 #else
 
       flux(i_rho,idx) = rhostar*ustar
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_2D_CYLINDRICAL)
       flux(i_rhovx1,idx) = rhostar*ustar*ustar
       ru%pn(ru%dir)%val(idx) = pstar
 #else
@@ -15163,7 +16359,7 @@ contains
 #endif
 
         f(i_rho) = rhoL*vx1L
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_2D_CYLINDRICAL)
         f(i_rhovx1) = rhoL*vx1L*vx1L
         ru%pn(ru%dir)%val(idx) = pL
 #else
@@ -15225,7 +16421,7 @@ contains
 #endif
 
         f(i_rho) = rhoR*vx1R
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_2D_CYLINDRICAL)
         f(i_rhovx1) = rhoR*vx1R*vx1R
         ru%pn(ru%dir)%val(idx) = pR
 #else
@@ -15376,7 +16572,19 @@ contains
     end do
    end do
 #endif
- 
+
+#ifdef SAVE_RPROFS
+#ifdef USE_INTERNAL_BOUNDARIES
+  do i=1,lgrid%rprofs_nr+1
+   lgrid%rprofs_r(i) = real(lgrid%x1u/lgrid%rprofs_nr*(i-1),kind=rp)
+  end do
+#else
+  do j=1,nx2+1
+   lgrid%rprofs_r(j) = lgrid%x2l + (j-rp1)*lgrid%dx2
+  end do
+#endif
+#endif
+
    mgrid%dummy = rp1
 
  end subroutine create_geometry
@@ -15448,6 +16656,98 @@ contains
         lgrid%coords_x2(1,i,j,k) = r*cos(phi)
         lgrid%coords_x2(2,i,j,k) = r*sin(phi)
         lgrid%r_x2(i,j,k) = r
+
+     end do
+    end do
+   end do
+
+#ifdef USE_MHD 
+   do k=mgrid%i1(3),mgrid%i2(3)
+    do j=mgrid%i1(2),mgrid%i2(2)
+     do i=mgrid%i1(1),mgrid%i2(1)
+       rm = lgrid%r_x1(i,j,k)
+       rpl = lgrid%r_x1(i+1,j,k)
+       lgrid%cm(i,j,k) = (rpl+rp2*rm)/(rp3*(rpl+rm))
+     end do 
+    end do
+   end do
+#endif
+
+#ifdef SAVE_RPROFS
+   do i=1,nx1+1
+    lgrid%rprofs_r(i) = lgrid%x1l + real(i-1.0,kind=rp)*lgrid%dx1
+   end do
+#endif
+
+   mgrid%dummy = rp1
+
+ end subroutine create_geometry
+#endif
+ 
+#ifdef GEOMETRY_2D_CYLINDRICAL
+ subroutine create_geometry(lgrid,mgrid)
+   type(locgrid), intent(inout) :: lgrid
+   type(mpigrid), intent(inout) :: mgrid
+
+   real(kind=rp) :: r,z
+   integer :: i,j,k
+#ifdef USE_MHD
+   real(kind=rp) :: rpl,rm
+#endif
+
+   do k=lbound(lgrid%nodes,4),ubound(lgrid%nodes,4)
+    do j=lbound(lgrid%nodes,3),ubound(lgrid%nodes,3)
+     do i=lbound(lgrid%nodes,2),ubound(lgrid%nodes,2)
+
+       r = lgrid%x1l + real(i-1,kind=rp)*lgrid%dx1
+       z = lgrid%x2l + real(j-1,kind=rp)*lgrid%dx2
+
+       lgrid%nodes(1,i,j,k) = r
+       lgrid%nodes(2,i,j,k) = z
+
+     end do
+    end do
+   end do
+
+   do k=lbound(lgrid%coords,4),ubound(lgrid%coords,4)
+    do j=lbound(lgrid%coords,3),ubound(lgrid%coords,3)
+     do i=lbound(lgrid%coords,2),ubound(lgrid%coords,2)
+
+        r = lgrid%x1l + real(i-0.5,kind=rp)*lgrid%dx1
+        z = lgrid%x2l + real(j-0.5,kind=rp)*lgrid%dx2
+
+        lgrid%coords(1,i,j,k) = r
+        lgrid%coords(2,i,j,k) = z
+        lgrid%r(i,j,k) = r
+
+     end do
+    end do
+   end do
+
+   do k=lbound(lgrid%coords_x1,4),ubound(lgrid%coords_x1,4)
+    do j=lbound(lgrid%coords_x1,3),ubound(lgrid%coords_x1,3)
+     do i=lbound(lgrid%coords_x1,2),ubound(lgrid%coords_x1,2)
+
+        r = lgrid%x1l + real(i-1.0,kind=rp)*lgrid%dx1
+        z = lgrid%x2l + real(j-0.5,kind=rp)*lgrid%dx2
+
+        lgrid%coords_x1(1,i,j,k) = r
+        lgrid%coords_x1(2,i,j,k) = z
+        lgrid%r_x1(i,j,k) = r
+
+     end do
+    end do
+   end do
+
+   do k=lbound(lgrid%coords_x2,4),ubound(lgrid%coords_x2,4)
+    do j=lbound(lgrid%coords_x2,3),ubound(lgrid%coords_x2,3)
+     do i=lbound(lgrid%coords_x2,2),ubound(lgrid%coords_x2,2)
+
+        r = lgrid%x1l + real(i-0.5,kind=rp)*lgrid%dx1
+        z = lgrid%x2l + real(j-1.0,kind=rp)*lgrid%dx2
+
+        lgrid%coords_x2(1,i,j,k) = r
+        lgrid%coords_x2(2,i,j,k) = z
 
      end do
     end do
@@ -15574,6 +16874,12 @@ contains
 
      end do
     end do
+   end do
+#endif
+
+#ifdef SAVE_RPROFS
+   do i=1,nx1+1
+    lgrid%rprofs_r(i) = lgrid%x1l + real(i-1.0,kind=rp)*lgrid%dx1
    end do
 #endif
 
@@ -15725,6 +17031,12 @@ contains
    end do
 #endif
 
+#ifdef SAVE_RPROFS
+   do i=1,nx1+1
+    lgrid%rprofs_r(i) = lgrid%x1l + real(i-1.0,kind=rp)*lgrid%dx1
+   end do
+#endif
+
    mgrid%dummy = rp1
 
  end subroutine create_geometry
@@ -15859,6 +17171,12 @@ contains
      end do
     end do
    end do
+
+#ifdef SAVE_RPROFS
+    do i=1,lgrid%rprofs_nr+1
+     lgrid%rprofs_r(i) = real(cs_r1/lgrid%rprofs_nr*(i-1),kind=rp)
+    end do
+#endif
 
    mgrid%dummy = rp1
 
@@ -16141,6 +17459,12 @@ contains
     end do
    end do
 
+#ifdef SAVE_RPROFS
+   do i=1,lgrid%rprofs_nr+1
+    lgrid%rprofs_r(i) = real(cs_r1/lgrid%rprofs_nr*(i-1),kind=rp)
+   end do
+#endif
+
    mgrid%dummy = rp1
 
  end subroutine create_geometry
@@ -16296,7 +17620,7 @@ contains
   real(kind=rp) ::  rho, x, y, z, r, dV, dm, mass(1), mass_comm(1), dx, dy, dz
   real(kind=rp), dimension(3) :: rcom, rcom_comm, dr
 
-  real(kind=rp) :: res_L2(1),phicc,res_L2(1)_comm
+  real(kind=rp) :: res_L2(1),phicc,res_L2_comm(1)
 
   integer :: iter
 
@@ -16651,8 +17975,9 @@ contains
    end do
 
 #endif
-
+#ifdef ENFORCE_BARRIERS
   call mpi_barrier(mgrid%comm_cart,ierr)
+#endif
   call communicate_array(mgrid,lx1,ux1,lx2,ux2,lx3,ux3,ngc,lgrid%phi_cc,.false.)
 
   c2z = rp0
@@ -16810,8 +18135,9 @@ contains
   iter = 0
 
   do while(res_L2_comm(1) > gs_tol)
-
+#ifdef ENFORCE_BARRIERS
     call mpi_barrier(mgrid%comm_cart,ierr)
+#endif
     call communicate_array(mgrid,lx1,ux1,lx2,ux2,lx3,ux3,1,lgrid%p,.false.)
 
     do k=lx3,ux3
@@ -16921,8 +18247,9 @@ contains
       end do
      end do
     end do
-
+#ifdef ENFORCE_BARRIERS
     call mpi_barrier(mgrid%comm_cart,ierr)
+#endif
     call communicate_array(mgrid,lx1,ux1,lx2,ux2,lx3,ux3,1,lgrid%s,.false.)
  
     do k=lx3,ux3
@@ -17104,8 +18431,9 @@ contains
     if(mod(lgrid%step,info_terminal_rate)==0) write(*,'(" >> gs: niter=",I8.8," | L2=",E9.3)') &
     iter, res_L2_comm(1)
   endif
-
+#ifdef ENFORCE_BARRIERS
   call mpi_barrier(mgrid%comm_cart,ierr)
+#endif
   call communicate_array(mgrid,lx1,ux1,lx2,ux2,lx3,ux3,ngc,lgrid%phi_cc,.false.)
 
   do k=lx3,ux3
@@ -17696,8 +19024,9 @@ contains
   endif
 
 #endif
-
+#ifdef ENFORCE_BARRIERS
   call mpi_barrier(mgrid%comm_cart,ierr)
+#endif
   call communicate_array(mgrid,lx1,ux1,lx2,ux2,lx3,ux3,ngc,lgrid%phi_cc,.false.)
   call fill_ghost_potential(mgrid,lgrid)
  
@@ -17821,8 +19150,9 @@ contains
   iter = 0
 
   do while(res_L2_comm(1) > gs_tol)
-
+#ifdef ENFORCE_BARRIERS
     call mpi_barrier(mgrid%comm_cart,ierr)
+#endif
     call communicate_array(mgrid,lx1,ux1,lx2,ux2,lx3,ux3,1,lgrid%p,.false.)
     
     if(mgrid%coords_dd(1)==0) then
@@ -17949,8 +19279,9 @@ contains
       end do
      end do
     end do
-
+#ifdef ENFORCE_BARRIERS
     call mpi_barrier(mgrid%comm_cart,ierr)
+#endif
     call communicate_array(mgrid,lx1,ux1,lx2,ux2,lx3,ux3,1,lgrid%s,.false.)
     
     if(mgrid%coords_dd(1)==0) then
@@ -18149,8 +19480,9 @@ contains
     if(mod(lgrid%step,info_terminal_rate)==0) write(*,'(" >> gs: niter=",I8.8," | L2=",E9.3)') &
     iter, res_L2_comm(1)
   endif
-
+#ifdef ENFORCE_BARRIERS
   call mpi_barrier(mgrid%comm_cart,ierr)
+#endif
   call communicate_array(mgrid,lx1,ux1,lx2,ux2,lx3,ux3,ngc,lgrid%phi_cc,.false.)
   call fill_ghost_potential(mgrid,lgrid)
 
@@ -18422,7 +19754,7 @@ contains
   ov     = 0.0_rp
   zbar   = 0.0_rp
   ytot1  = 0.0_rp
-  w      = 0.0_rp
+  w(:)   = 0.0_rp
 
 ! -------------------------------------------------------------------
 ! composition
@@ -18779,6 +20111,13 @@ contains
       inv_dl2 = inv_dx1*inv_dx1+inv_dx2*inv_dx2
 #endif
 
+#ifdef GEOMETRY_2D_CYLINDRICAL
+#ifdef NONUNIFORM_RADIAL_NODES
+      inv_dx2 = rp1/(lgrid%coords_x2(2,i,j+1,k)-lgrid%coords_x2(2,i,j,k))
+#endif
+      inv_dl2 = inv_dx1*inv_dx1+inv_dx2*inv_dx2
+#endif
+
 #ifdef GEOMETRY_3D_SPHERICAL
       r = lgrid%r(i,j,k)
       inv_dx2 = rp1/r*inv_dx2
@@ -18819,6 +20158,8 @@ contains
 
   real(kind=rp) :: T2,T3,T4
   integer :: ierr
+
+  ierr = 0
 
   gm = lgrid%gm
   gmm1 = gm-rp1
@@ -18957,8 +20298,9 @@ contains
     end do
    end do
   end do
-
+#ifdef ENFORCE_BARRIERS
   call mpi_barrier(mgrid%comm_cart,ierr) 
+#endif
   call communicate_ndarray(mgrid,nvars,lx1,ux1,lx2,ux2,lx3,ux3,ngc,lgrid%prim,.false.)
   call bcs_thermal_diffusion(mgrid,lgrid)
   call residuals_thermal_diffusion(mgrid,lgrid)
@@ -19395,6 +20737,11 @@ contains
      lgrid%fe_x1(i) = lgrid%fe_x1(i)*r
 #endif
 
+#ifdef GEOMETRY_2D_CYLINDRICAL
+     r = lgrid%r_x1(i,j,k)
+     lgrid%fe_x1(i) = lgrid%fe_x1(i)*r
+#endif
+
 #if defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
      r = lgrid%r_x1(i,j,k)
      lgrid%fe_x1(i) = lgrid%fe_x1(i)*r*r
@@ -19415,6 +20762,9 @@ contains
 #endif
 
 #ifdef GEOMETRY_2D_POLAR
+     r = lgrid%r(i,j,k)
+     lgrid%Me_jm1(i,j,k) = (lgrid%fe_x1(i+1)-lgrid%fe_x1(i))*inv_dl/r
+#elif defined(GEOMETRY_2D_CYLINDRICAL)
      r = lgrid%r(i,j,k)
      lgrid%Me_jm1(i,j,k) = (lgrid%fe_x1(i+1)-lgrid%fe_x1(i))*inv_dl/r
 #elif defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
@@ -19505,10 +20855,18 @@ contains
 #ifdef GEOMETRY_CARTESIAN_NONUNIFORM
      inv_dl = rp1/(lgrid%coords(2,i,j,k)-lgrid%coords(2,i,j-1,k))
 #endif
+
+#ifdef GEOMETRY_2D_CYLINDRICAL
+#ifdef NONUNIFORM_RADIAL_NODES
+     inv_dl = rp1/(lgrid%coords(2,i,j,k)-lgrid%coords(2,i,j-1,k))
+#endif
+#endif
+
 #ifdef BALANCE_THERMAL_DIFFUSION
      Tplus = Tplus-lgrid%eq_prim_cc(ieq_T,i,j,k)
      Tminus = Tminus-lgrid%eq_prim_cc(ieq_T,i,j-1,k)
 #endif
+
      gradT = (Tplus-Tminus)*inv_dl
 
 #if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
@@ -19528,8 +20886,15 @@ contains
     do j=lx2,ux2
 
 #ifdef GEOMETRY_CARTESIAN_NONUNIFORM
-     inv_dl = rp1/(lgrid%coords_x1(2,i,j+1,k)-lgrid%coords_x2(2,i,j,k))
+     inv_dl = rp1/(lgrid%coords_x2(2,i,j+1,k)-lgrid%coords_x2(2,i,j,k))
 #endif
+
+#ifdef GEOMETRY_2D_CYLINDRICAL
+#ifdef NONUNIFORM_RADIAL_NODES
+     inv_dl = rp1/(lgrid%coords_x2(2,i,j+1,k)-lgrid%coords_x2(2,i,j,k))
+#endif
+#endif
+
 #ifdef GEOMETRY_2D_POLAR
      r = lgrid%r(i,j,k)
      lgrid%Me_jm1(i,j,k) = lgrid%Me_jm1(i,j,k) + (lgrid%fe_x2(j+1)-lgrid%fe_x2(j))*inv_dl/r
@@ -19696,6 +21061,8 @@ contains
   integer :: lx1,ux1,lx2,ux2,lx3,ux3
   integer :: ierr
   
+  ierr = 0
+
   i=0
   j=0
   k=0
@@ -19706,8 +21073,9 @@ contains
   ux2 = mgrid%i2(2)
   lx3 = mgrid%i1(3)
   ux3 = mgrid%i2(3)
-
+#ifdef ENFORCE_BARRIERS
   call mpi_barrier(mgrid%comm_cart,ierr)
+#endif
   call communicate_array(mgrid,lx1,ux1,lx2,ux2,lx3,ux3,ngc,lgrid%temp,.false.)
 
 #ifndef USE_INTERNAL_BOUNDARIES
@@ -22291,6 +23659,249 @@ contains
 
 #endif
 
+ subroutine helm_rhoT_given_entropy(rho,T,abar,zbar,stot)
+ real(kind=rp), intent(in) :: rho,T,abar,zbar
+ real(kind=rp), intent(inout) :: stot
+
+ real(kind=rp) :: &
+ loc_eos1, &
+ loc_eos2, &
+ loc_eos3, &
+ loc_eos4, &
+ loc_eos5, &
+ loc_eos6, &
+ loc_eos7, &
+ loc_eos8, &
+ loc_eos9, &
+ loc_eos10, &
+ loc_eos11, &
+ loc_eos12, &
+ loc_eos13, &
+ loc_eos14, &
+ loc_eos15, &
+ loc_eos16, &
+ loc_eos17, &
+ loc_eos18, &
+ loc_eos19, &
+ loc_eos20, &
+ loc_eos21, &
+ loc_eos22, &
+ loc_eos23, &
+ loc_eos24, &
+ loc_eos25, &
+ loc_eos26, &
+ loc_eos27, &
+ loc_eos28, &
+ loc_eos29, &
+ loc_eos30, &
+ loc_eos31, &
+ loc_eos32, &
+ loc_eos33, &
+ loc_eos34, &
+ loc_eos35, &
+ loc_eos36
+
+ integer :: ih,jh
+
+ real(kind=rp) :: df_dT
+ real(kind=rp) :: s,T4,Ye,rhos
+ real(kind=rp) :: z
+
+ real(kind=rp) :: x,y,drho,drho2,dT,tmp
+ real(kind=rp) :: p0r,p0mr,p1r,p1mr,p2r,p2mr,idT
+ real(kind=rp) :: dp0t,dp1t,dp2t,dp0mt,dp1mt,dp2mt
+ real(kind=rp) :: omx,omy
+ real(kind=rp) :: x2,x3,x4,x5,y2,y3,y4,omx2,omx3,omx4,omx5,omy2,omy3,omy4
+
+ real(kind=rp) :: Eid,Erad,lswot15,Pid,Prad,sep,sid,srad,ywot
+
+#ifdef USE_COULOMB_CORRECTIONS
+
+ real(kind=rp) :: &
+ xni, &
+ ktinv, &
+ lami, &
+ inv_lami, &
+ plasg
+
+#endif
+
+ s = rp0
+ z = rp0
+
+ Ye = zbar/abar
+ rhos = rho*Ye
+
+ ih = int((log10(rhos)-log10(helm_rho(1)))/helm_drho) + 1
+ jh = int((log10(T)-log10(helm_T(1)))/helm_dT) + 1
+
+ tmp = helm_rho(ih)
+ drho = helm_rho(ih+1)-tmp
+ x = (rhos-tmp)/drho
+ omx = rp1-x
+
+ tmp = helm_T(jh)
+ dT = helm_T(jh+1)-tmp
+ y = (T-tmp)/dT
+ omy = rp1-y
+
+ drho2 = drho*drho
+ idT = rp1/dT
+
+ loc_eos1 = helm_table_var(1,ih,jh)
+ loc_eos2 = helm_table_var(1,ih+1,jh)
+ loc_eos3 = helm_table_var(1,ih,jh+1)
+ loc_eos4 = helm_table_var(1,ih+1,jh+1)
+ loc_eos5 = helm_table_var(2,ih,jh)
+ loc_eos6 = helm_table_var(2,ih+1,jh)
+ loc_eos7 = helm_table_var(2,ih,jh+1)
+ loc_eos8 = helm_table_var(2,ih+1,jh+1)
+ loc_eos9 = helm_table_var(3,ih,jh)
+ loc_eos10 = helm_table_var(3,ih+1,jh)
+ loc_eos11 = helm_table_var(3,ih,jh+1)
+ loc_eos12 = helm_table_var(3,ih+1,jh+1)
+ loc_eos13 = helm_table_var(4,ih,jh)
+ loc_eos14 = helm_table_var(4,ih+1,jh)
+ loc_eos15 = helm_table_var(4,ih,jh+1)
+ loc_eos16 = helm_table_var(4,ih+1,jh+1)
+ loc_eos17 = helm_table_var(5,ih,jh)
+ loc_eos18 = helm_table_var(5,ih+1,jh)
+ loc_eos19 = helm_table_var(5,ih,jh+1)
+ loc_eos20 = helm_table_var(5,ih+1,jh+1)
+ loc_eos21 = helm_table_var(6,ih,jh)
+ loc_eos22 = helm_table_var(6,ih+1,jh)
+ loc_eos23 = helm_table_var(6,ih,jh+1)
+ loc_eos24 = helm_table_var(6,ih+1,jh+1)
+ loc_eos25 = helm_table_var(7,ih,jh)
+ loc_eos26 = helm_table_var(7,ih+1,jh)
+ loc_eos27 = helm_table_var(7,ih,jh+1)
+ loc_eos28 = helm_table_var(7,ih+1,jh+1)
+ loc_eos29 = helm_table_var(8,ih,jh)
+ loc_eos30 = helm_table_var(8,ih+1,jh)
+ loc_eos31 = helm_table_var(8,ih,jh+1)
+ loc_eos32 = helm_table_var(8,ih+1,jh+1)
+ loc_eos33 = helm_table_var(9,ih,jh)
+ loc_eos34 = helm_table_var(9,ih+1,jh)
+ loc_eos35 = helm_table_var(9,ih,jh+1)
+ loc_eos36 = helm_table_var(9,ih+1,jh+1)
+
+ x2 = x*x
+ x3 = x2*x
+ x4 = x3*x
+ x5 = x4*x
+ p0r = -rp6*x5 + rp15*x4 - rp10*x3 + rp1
+ p1r = (-rp3*x5 + rp8*x4 - rp6*x3 + x)*drho
+ p2r = (rph*(-x5 + rp3*x4 - rp3*x3 + x2))*drho2
+
+ omx2 = omx*omx
+ omx3 = omx2*omx
+ omx4 = omx3*omx
+ omx5 = omx4*omx
+ p0mr = -rp6*omx5 + rp15*omx4 - rp10*omx3 + rp1
+ p1mr =  (rp3*omx5 - rp8*omx4 + rp6*omx3 - omx)*drho
+ p2mr =  (rph*(-omx5 + rp3*omx4 - rp3*omx3 + omx2))*drho2
+
+ y2 = y*y
+ y3 = y2*y
+ y4 = y3*y
+
+ omy2 = omy*omy
+ omy3 = omy2*omy
+ omy4 = omy3*omy
+
+ dp0t =  (-rp30*y4 + rp60*y3 - rp30*y2)*idT
+ dp1t =  (-rp15*y4 + rp32*y3 - rp18*y2 + rp1)
+ dp2t =  (rph*(-rp5*y4 + rp12*y3 - rp9*y2 + rp2*y))*dT
+
+ dp0mt = -(-rp30*omy4 + rp60*omy3 - rp30*omy2)*idT
+ dp1mt =  (-rp15*omy4 + rp32*omy3 - rp18*omy2 + rp1)
+ dp2mt = -(rph*(-rp5*omy4 + rp12*omy3 - rp9*omy2 + rp2*omy))*dT
+
+ df_dT = &
+ loc_eos1*p0r*dp0t + &
+ loc_eos2*p0mr*dp0t + &
+ loc_eos3*p0r*dp0mt + &
+ loc_eos4*p0mr*dp0mt + &
+ loc_eos5*p0r*dp1t + &
+ loc_eos6*p0mr*dp1t + &
+ loc_eos7*p0r*dp1mt + &
+ loc_eos8*p0mr*dp1mt + &
+ loc_eos9*p0r*dp2t + &
+ loc_eos10*p0mr*dp2t + &
+ loc_eos11*p0r*dp2mt + &
+ loc_eos12*p0mr*dp2mt + &
+ loc_eos13*p1r*dp0t + &
+ loc_eos14*p1mr*dp0t + &
+ loc_eos15*p1r*dp0mt + &
+ loc_eos16*p1mr*dp0mt + &
+ loc_eos17*p2r*dp0t + &
+ loc_eos18*p2mr*dp0t + &
+ loc_eos19*p2r*dp0mt + &
+ loc_eos20*p2mr*dp0mt + &
+ loc_eos21*p1r*dp1t + &
+ loc_eos22*p1mr*dp1t + &
+ loc_eos23*p1r*dp1mt + &
+ loc_eos24*p1mr*dp1mt + &
+ loc_eos25*p2r*dp1t + &
+ loc_eos26*p2mr*dp1t + &
+ loc_eos27*p2r*dp1mt + &
+ loc_eos28*p2mr*dp1mt + &
+ loc_eos29*p1r*dp2t + &
+ loc_eos30*p1mr*dp2t + &
+ loc_eos31*p1r*dp2mt + &
+ loc_eos32*p1mr*dp2mt + &
+ loc_eos33*p2r*dp2t + &
+ loc_eos34*p2mr*dp2t + &
+ loc_eos35*p2r*dp2mt + &
+ loc_eos36*p2mr*dp2mt
+
+ sep = -Ye*df_dT
+
+ tmp = rp1/abar
+ Pid = CONST_RGAS*rho*T*tmp
+ Eid = rpoh*CONST_RGAS*T*tmp
+ lswot15 = rpoh*log((rp2*CONST_PI*CONST_MU*CONST_KB)/(CONST_H*CONST_H))
+ ywot = log(abar*abar*sqrt(abar)/(rho*CONST_AV))
+ y = ywot+lswot15+rpoh*log(T)
+ sid = (Pid/rho+Eid)/T + CONST_KB*CONST_AV*tmp*y
+
+ T4 = T*T*T*T
+ Prad = CONST_RAD*T4*othird
+ Erad = CONST_RAD*T4/rho
+ srad = (Prad/rho+Erad)/T
+
+ stot = sid + srad + sep
+
+#ifdef USE_COULOMB_CORRECTIONS
+
+ xni = CONST_AV*tmp*rho
+ ktinv = rp1/(CONST_KB*T)
+ z = fthirds*CONST_PI
+ s = z*xni
+ lami = rp1/s**othird
+ inv_lami = rp1/lami
+ plasg = zbar*zbar*CONST_QE*CONST_QE*ktinv*inv_lami
+
+ if (plasg>=rp1) then
+
+   x        = plasg**oquart
+   y        = CONST_AV*tmp*CONST_KB
+   stot = stot  &
+   -y * (rp3*cc_b1*x-rp5*cc_c1/x+cc_d1*(log(plasg)-rp1)-cc_e1)
+
+ else
+
+   x        = plasg*sqrt(plasg)
+   y        = plasg**cc_b2
+   stot = stot &
+   -CONST_AV*CONST_KB*tmp*(cc_c2*x-cc_a2*(cc_b2-rp1)/cc_b2*y)
+
+ endif 
+
+#endif
+
+ end subroutine helm_rhoT_given_entropy
+
  subroutine helm_rhoT_given_full(rho,T,abar,zbar,P,E,sound,cv)
  real(kind=rp), intent(in) :: rho,T,abar,zbar
  real(kind=rp), intent(inout) :: P,E,sound,cv
@@ -24506,6 +26117,198 @@ contains
  sound = CONST_C*sqrt(gam1/z)
 
  end subroutine pig_rhoT_given_full
+
+ subroutine pig_rhoT_given_entropy(rho,T,stot)
+ real(kind=rp), intent(in) :: rho,T
+ real(kind=rp), intent(inout) :: stot
+
+ real(kind=rp) :: &
+ loc_eos1, &
+ loc_eos2, &
+ loc_eos3, &
+ loc_eos4, &
+ loc_eos5, &
+ loc_eos6, &
+ loc_eos7, &
+ loc_eos8, &
+ loc_eos9, &
+ loc_eos10, &
+ loc_eos11, &
+ loc_eos12, &
+ loc_eos13, &
+ loc_eos14, &
+ loc_eos15, &
+ loc_eos16, &
+ loc_eos17, &
+ loc_eos18, &
+ loc_eos19, &
+ loc_eos20, &
+ loc_eos21, &
+ loc_eos22, &
+ loc_eos23, &
+ loc_eos24, &
+ loc_eos25, &
+ loc_eos26, &
+ loc_eos27, &
+ loc_eos28, &
+ loc_eos29, &
+ loc_eos30, &
+ loc_eos31, &
+ loc_eos32, &
+ loc_eos33, &
+ loc_eos34, &
+ loc_eos35, &
+ loc_eos36
+
+ integer :: ih,jh
+
+ real(kind=rp) :: df_dT
+ real(kind=rp) :: T4,Ye,rhos
+
+ real(kind=rp) :: x,y,drho,drho2,dT,tmp
+ real(kind=rp) :: p0r,p0mr,p1r,p1mr,p2r,p2mr,idT
+ real(kind=rp) :: dp0t,dp1t,dp2t,dp0mt,dp1mt,dp2mt
+ real(kind=rp) :: omx,omy
+ real(kind=rp) :: x2,x3,x4,x5,y2,y3,y4,omx2,omx3,omx4,omx5,omy2,omy3,omy4
+
+ real(kind=rp) :: Erad,Prad,sgas,srad
+
+ Ye = rp1
+ rhos = rho*Ye
+
+ ih = int((log10(rhos)-log10(pig_rho(1)))/pig_drho) + 1
+ jh = int((log10(T)-log10(pig_T(1)))/pig_dT) + 1
+
+ tmp = pig_rho(ih)
+ drho = pig_rho(ih+1)-tmp
+ x = (rhos-tmp)/drho
+ omx = rp1-x
+
+ tmp = pig_T(jh)
+ dT = pig_T(jh+1)-tmp
+ y = (T-tmp)/dT
+ omy = rp1-y
+
+ drho2 = drho*drho
+ idT = rp1/dT
+
+ loc_eos1 = pig_table_var(1,ih,jh)
+ loc_eos2 = pig_table_var(1,ih+1,jh)
+ loc_eos3 = pig_table_var(1,ih,jh+1)
+ loc_eos4 = pig_table_var(1,ih+1,jh+1)
+ loc_eos5 = pig_table_var(2,ih,jh)
+ loc_eos6 = pig_table_var(2,ih+1,jh)
+ loc_eos7 = pig_table_var(2,ih,jh+1)
+ loc_eos8 = pig_table_var(2,ih+1,jh+1)
+ loc_eos9 = pig_table_var(3,ih,jh)
+ loc_eos10 = pig_table_var(3,ih+1,jh)
+ loc_eos11 = pig_table_var(3,ih,jh+1)
+ loc_eos12 = pig_table_var(3,ih+1,jh+1)
+ loc_eos13 = pig_table_var(4,ih,jh)
+ loc_eos14 = pig_table_var(4,ih+1,jh)
+ loc_eos15 = pig_table_var(4,ih,jh+1)
+ loc_eos16 = pig_table_var(4,ih+1,jh+1)
+ loc_eos17 = pig_table_var(5,ih,jh)
+ loc_eos18 = pig_table_var(5,ih+1,jh)
+ loc_eos19 = pig_table_var(5,ih,jh+1)
+ loc_eos20 = pig_table_var(5,ih+1,jh+1)
+ loc_eos21 = pig_table_var(6,ih,jh)
+ loc_eos22 = pig_table_var(6,ih+1,jh)
+ loc_eos23 = pig_table_var(6,ih,jh+1)
+ loc_eos24 = pig_table_var(6,ih+1,jh+1)
+ loc_eos25 = pig_table_var(7,ih,jh)
+ loc_eos26 = pig_table_var(7,ih+1,jh)
+ loc_eos27 = pig_table_var(7,ih,jh+1)
+ loc_eos28 = pig_table_var(7,ih+1,jh+1)
+ loc_eos29 = pig_table_var(8,ih,jh)
+ loc_eos30 = pig_table_var(8,ih+1,jh)
+ loc_eos31 = pig_table_var(8,ih,jh+1)
+ loc_eos32 = pig_table_var(8,ih+1,jh+1)
+ loc_eos33 = pig_table_var(9,ih,jh)
+ loc_eos34 = pig_table_var(9,ih+1,jh)
+ loc_eos35 = pig_table_var(9,ih,jh+1)
+ loc_eos36 = pig_table_var(9,ih+1,jh+1)
+
+ x2 = x*x
+ x3 = x2*x
+ x4 = x3*x
+ x5 = x4*x
+ p0r = -rp6*x5 + rp15*x4 - rp10*x3 + rp1
+ p1r = (-rp3*x5 + rp8*x4 - rp6*x3 + x)*drho
+ p2r = (rph*(-x5 + rp3*x4 - rp3*x3 + x2))*drho2
+
+ omx2 = omx*omx
+ omx3 = omx2*omx
+ omx4 = omx3*omx
+ omx5 = omx4*omx
+ p0mr = -rp6*omx5 + rp15*omx4 - rp10*omx3 + rp1
+ p1mr =  (rp3*omx5 - rp8*omx4 + rp6*omx3 - omx)*drho
+ p2mr =  (rph*(-omx5 + rp3*omx4 - rp3*omx3 + omx2))*drho2
+
+ y2 = y*y
+ y3 = y2*y
+ y4 = y3*y
+
+ omy2 = omy*omy
+ omy3 = omy2*omy
+ omy4 = omy3*omy
+
+ dp0t =  (-rp30*y4 + rp60*y3 - rp30*y2)*idT
+ dp1t =  (-rp15*y4 + rp32*y3 - rp18*y2 + rp1)
+ dp2t =  (rph*(-rp5*y4 + rp12*y3 - rp9*y2 + rp2*y))*dT
+
+ dp0mt = -(-rp30*omy4 + rp60*omy3 - rp30*omy2)*idT
+ dp1mt =  (-rp15*omy4 + rp32*omy3 - rp18*omy2 + rp1)
+ dp2mt = -(rph*(-rp5*omy4 + rp12*omy3 - rp9*omy2 + rp2*omy))*dT
+
+ df_dT = &
+ loc_eos1*p0r*dp0t + &
+ loc_eos2*p0mr*dp0t + &
+ loc_eos3*p0r*dp0mt + &
+ loc_eos4*p0mr*dp0mt + &
+ loc_eos5*p0r*dp1t + &
+ loc_eos6*p0mr*dp1t + &
+ loc_eos7*p0r*dp1mt + &
+ loc_eos8*p0mr*dp1mt + &
+ loc_eos9*p0r*dp2t + &
+ loc_eos10*p0mr*dp2t + &
+ loc_eos11*p0r*dp2mt + &
+ loc_eos12*p0mr*dp2mt + &
+ loc_eos13*p1r*dp0t + &
+ loc_eos14*p1mr*dp0t + &
+ loc_eos15*p1r*dp0mt + &
+ loc_eos16*p1mr*dp0mt + &
+ loc_eos17*p2r*dp0t + &
+ loc_eos18*p2mr*dp0t + &
+ loc_eos19*p2r*dp0mt + &
+ loc_eos20*p2mr*dp0mt + &
+ loc_eos21*p1r*dp1t + &
+ loc_eos22*p1mr*dp1t + &
+ loc_eos23*p1r*dp1mt + &
+ loc_eos24*p1mr*dp1mt + &
+ loc_eos25*p2r*dp1t + &
+ loc_eos26*p2mr*dp1t + &
+ loc_eos27*p2r*dp1mt + &
+ loc_eos28*p2mr*dp1mt + &
+ loc_eos29*p1r*dp2t + &
+ loc_eos30*p1mr*dp2t + &
+ loc_eos31*p1r*dp2mt + &
+ loc_eos32*p1mr*dp2mt + &
+ loc_eos33*p2r*dp2t + &
+ loc_eos34*p2mr*dp2t + &
+ loc_eos35*p2r*dp2mt + &
+ loc_eos36*p2mr*dp2mt
+
+ sgas = -Ye*df_dT
+
+ T4 = T*T*T*T
+ Prad = CONST_RAD*T4*othird
+ Erad = CONST_RAD*T4/rho
+ srad = (Prad/rho+Erad)/T
+
+ stot = sgas + srad 
+
+ end subroutine pig_rhoT_given_entropy
 
  subroutine pig_rhoT_given1(rho,T,P,dP_dT,return_dP_dT)
  real(kind=rp), intent(in) :: rho,T

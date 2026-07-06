@@ -111,7 +111,7 @@ def read_data(file,n1):
 
 class Probe:
 
-    def __init__(self,nprobe=1,dire='./'):
+    def __init__(self,nprobe=1,dire='./pps'):
 
         self.nprobe = nprobe
         self.dir = dire
@@ -191,12 +191,12 @@ def spj_list(path=""):
  
 class h5spj:
 
-    def __init__(self,filename,path='./',path_to_grids='./',mode='i',data_path=data,helm_table='helm_table_timmes_x2.dat',pig_table='401x401_pig_table_h2_offset.dat',
+    def __init__(self,filename,path='./spjs',path_to_grids='./grids',mode='i',data_path=data,helm_table='helm_table_timmes_x2.dat',pig_table='401x401_pig_table_h2_offset.dat',
     NRHO=541,NT=201,LOGRHOMIN=-12.0,LOGRHOMAX=15.0,LOGTMIN=3.0,LOGTMAX=13.0):
 
         if(mode=='n'):
             filename = os.path.join(path, 'spj_n{:05}.h5'.format(filename))
-        if(mode=='i'):
+        elif(mode=='i'):
             filename = spj_list(path=path)[filename][1]
         else:
           raise ValueError('Unknown mode' + str(mode),': mode must be n or i')
@@ -581,6 +581,432 @@ class h5spj:
      rc('text', usetex=False)
 
 #######################################################################################
+# h5rprof class
+#######################################################################################
+
+ir_rho = 0
+ir_P = 1
+ir_T = 2
+ir_eint = 3
+
+def rprof_list(path=""):
+
+   filelist = glob.glob(os.path.join(path,'*.h5'))
+   files = []
+
+   for file in filelist:
+     f = os.path.basename(file)
+     m = re.search('rprofs_n([0-9]{5,})\\.(h5)$', f)
+     if m:
+       files.append((int(m.group(1)), f))
+
+   files.sort(key=lambda x: x[0])
+
+   return files
+
+class h5rprof:
+
+    def __init__(self,filename,eval_eos=False,path='./rprofs',path_to_grids='./grids',mode='i',data_path=data,helm_table='helm_table_timmes_x2.dat',pig_table='401x401_pig_table_h2_offset.dat',
+    NRHO=541,NT=201,LOGRHOMIN=-12.0,LOGRHOMAX=15.0,LOGTMIN=3.0,LOGTMAX=13.0):
+        if(mode=='n'):
+            filename = os.path.join(path, 'rprofs_n{:05}.h5'.format(filename))
+        elif(mode=='i'):
+            filename = rprof_list(path=path)[filename][1]
+        else:
+          raise ValueError('Unknown mode' + str(mode),': mode must be n or i')
+
+        filename = os.path.join(path, filename)
+        self.grid = h5py.File(filename,"r")['grid']
+
+        self.time = self.grid['time'][()]
+        self.step = self.grid['step'][()]
+        self.dt = self.grid['dt'][()]
+        self.nas = self.grid['nas'][()]
+        self.nspecies = self.grid['nspecies'][()]
+        self.nreacs = self.grid['nreacs'][()]
+        havg = self.grid['havg'][()]
+        self.rf = self.grid['rf'][()]
+        self.r = 0.5*(self.rf[1:]+self.rf[:-1])
+        self.nr = len(self.r)
+        self.area = havg[:,0]
+ 
+        self.dd = {}
+ 
+        self.dd['gr'] = havg[:,1]
+        self.dd['epot'] = havg[:,2]
+        self.dd['kappa'] = havg[:,3]
+        self.dd['edot'] = havg[:,4]
+        self.dd['rho'] = havg[:,5]
+        self.dd['P'] = havg[:,6]
+        self.dd['T'] = havg[:,7]
+        self.dd['s'] = havg[:,8]
+        self.dd['abar'] = havg[:,9]
+        self.dd['ye'] = havg[:,10]
+        self.dd['zbar'] = havg[:,11]
+        self.dd['rho_rho'] = havg[:,12]
+        self.dd['T_T'] = havg[:,13]
+        self.dd['P_P'] = havg[:,14]
+        self.dd['s_s'] = havg[:,15]
+        self.dd['abs_vel'] = havg[:,16]
+        self.dd['abs_vh'] = havg[:,17]
+        self.dd['rho_vr'] = havg[:,18]
+        self.dd['rho_eint'] = havg[:,19]
+        self.dd['rho_ekin'] = havg[:,20]
+        self.dd['rho_etot'] = havg[:,21]
+        self.dd['rho_h'] = havg[:,22]
+        self.dd['rho_s'] = havg[:,23]
+        self.dd['rho_eint_vr'] = havg[:,24]
+        self.dd['rho_ekin_vr'] = havg[:,25]
+        self.dd['rho_h_vr'] = havg[:,26]
+        self.dd['rho_s_vr'] = havg[:,27]
+        self.dd['div_vel'] = havg[:,28]
+        self.dd['P_div_vel'] = havg[:,29]
+        self.dd['inv_T'] = havg[:,30]
+        self.dd['vr'] = havg[:,31]
+        self.dd['abar_vr'] = havg[:,32]
+        self.dd['zbar_vr'] = havg[:,33]
+        self.dd['P_vr'] = havg[:,34]
+        self.dd['T_vr'] = havg[:,35]
+        self.dd['rho_vel_dot_grav'] = havg[:,36] 
+        self.dd['vel_dot_grav'] = havg[:,37]
+        self.dd['dTdr'] = havg[:,38]
+        self.dd['Kth'] = havg[:,39]
+        self.dd['Kth_dTdr'] = havg[:,40]
+        self.dd['abar_abar'] = havg[:,41]
+        self.dd['edot_nuc'] = havg[:,42]
+        self.dd['edot_neu'] = havg[:,43]
+        off = 43
+        if(self.nreacs>0):
+         self.dd['edot_reacs'] = np.zeros((self.nreacs,self.nr))
+         for i in range(self.nreacs):
+          self.dd['edot_reacs'][i] = havg[:,off+1+i]
+        off = 43+self.nreacs
+        self.dd['edot_nuc_inv_T'] = havg[:,off+1]
+        self.dd['edot_neu_inv_T'] = havg[:,off+2]
+        off = 45+self.nreacs
+        if(self.nas>0):
+         self.dd['rho_X'] = np.zeros((self.nas,self.nr))
+         for i in range(self.nas):
+          self.dd['rho_X'][i] = havg[:,off+1+i]
+        off = 45+self.nreacs+self.nas
+        if(self.nas>0):
+         self.dd['rho_X_X'] = np.zeros((self.nas,self.nr))
+         for i in range(self.nas):
+          self.dd['rho_X_X'][i] = havg[:,off+1+i]
+        off = 45+self.nreacs+2*self.nas
+        if(self.nas>0):
+         self.dd['rho_X_vr'] = np.zeros((self.nas,self.nr))
+         for i in range(self.nas):
+          self.dd['rho_X_vr'][i] = havg[:,off+1+i]
+        off = 45+self.nreacs+3*self.nas
+        if(self.nspecies>0 and self.nreacs>0) :
+         self.dd['rho_Xdot'] = np.zeros((self.nspecies,self.nr))
+         for i in range(self.nspecies):
+          self.dd['rho_Xdot'][i] = havg[:,off+1+i]
+        off = 45+self.nreacs+3*self.nas+self.nspecies
+        if(self.nspecies>0 and self.nreacs>0) :
+         self.dd['rho_X_Xdot'] = np.zeros((self.nspecies,self.nr))
+         for i in range(self.nspecies):
+          self.dd['rho_X_Xdot'][i] = havg[:,off+1+i]  
+        off = 45+self.nreacs+3*self.nas+2*self.nspecies
+        self.dd['rho_vr_vr'] = havg[:,off+1]
+        self.dd['rho_vt1'] = havg[:,off+2]
+        self.dd['rho_vt1_vt1'] = havg[:,off+3]
+        self.dd['rho_vt2'] = havg[:,off+4]
+        self.dd['rho_vt2_vt2'] = havg[:,off+5]
+        self.dd['emag'] = havg[:,off+6]
+        self.dd['br'] = havg[:,off+7]
+        self.dd['abs_b'] = havg[:,off+8]
+        self.dd['abs_bh'] = havg[:,off+9]
+        self.dd['br_br'] =  havg[:,off+10]
+        self.dd['bt1'] =  havg[:,off+11]
+        self.dd['bt2'] =  havg[:,off+12]
+        self.dd['bt1_bt1'] = havg[:,off+13]
+        self.dd['bt2_bt2'] = havg[:,off+14]
+        self.dd['rho_vr_vt1'] = havg[:,off+15]
+        self.dd['rho_vr_vt2'] = havg[:,off+16]
+        self.dd['rho_vt1_vt2'] = havg[:,off+17]
+        self.dd['br_bt1'] = havg[:,off+18]
+        self.dd['br_bt2'] = havg[:,off+19]
+        self.dd['bt1_bt2'] = havg[:,off+20]
+        self.dd['fpoy'] = havg[:,off+21]
+        self.dd['two_rho_ov1'] = havg[:,off+22]
+        self.dd['rho_oor1'] = havg[:,off+23]
+        self.dd['two_rho_ov2'] = havg[:,off+24]
+        self.dd['rho_oor2'] = havg[:,off+25]
+        self.dd['two_rho_ov3'] = havg[:,off+26]
+        self.dd['rho_oor3'] = havg[:,off+27]
+        self.dd['rho_vel_dot_oor'] = havg[:,off+28]
+        self.dd['emag_vr'] = havg[:,off+29]
+        self.dd['emag_div_vel'] = havg[:,off+30]
+        self.dd['b_dot_b_dot_nabla_vel'] = havg[:,off+31]
+        self.dd['WL'] = havg[:,off+32]
+
+        self.dd['mu'] = self.dd['abar']/(self.dd['zbar']+1.0)
+        self.dd['nabla'] = \
+        np.gradient(np.log(self.dd['T']))/np.gradient(np.log(self.dd['P']))
+        self.dd['nabla_mu'] = \
+        np.gradient(np.log(self.dd['mu']))/np.gradient(np.log(self.dd['P']))
+
+        self.grid0 = h5grid(0,path=path_to_grids,data_path=data_path,helm_table=helm_table,pig_table=pig_table,NRHO=NRHO,NT=NT,LOGRHOMIN=LOGRHOMIN,LOGRHOMAX=LOGRHOMAX,LOGTMIN=LOGTMIN,LOGTMAX=LOGTMAX)
+
+        if(eval_eos):
+
+         self.full = rhoT_given(self.grid0.eos_table,self.dd['rho'],self.dd['T'],abar=self.dd['abar'],zbar=self.dd['zbar'],
+         gamma_ideal=self.grid0.gamma_gas,eos_mode=self.grid0.eos_mode)
+
+         self.dd['dPdrho'] = self.full[id_dPdrho]
+         self.dd['dPdT'] = self.full[id_dPdT]
+         self.dd['dEdrho'] = self.full[id_dEdrho]
+         self.dd['dEdT'] = self.full[id_dEdT]
+         self.dd['cv'] = self.full[id_cv]
+         self.dd['chiT'] = self.full[id_chiT]
+         self.dd['chirho'] = self.full[id_chirho]
+         self.dd['gam1'] = self.full[id_gam1]
+         self.dd['sound'] = self.full[id_sound]
+         self.dd['cp'] = self.full[id_cp]
+         self.dd['gam2'] = self.full[id_gam2]
+         self.dd['gam3'] = self.full[id_gam3]
+         self.dd['nabla_ad'] = self.full[id_nabla_ad]
+         self.dd['dsdrho'] = self.full[id_dsdrho]
+         self.dd['dsdT'] = self.full[id_dsdT]
+         self.dd['delta'] = self.full[id_delta]
+         self.dd['eta'] = self.full[id_eta]
+         self.dd['nep'] = self.full[id_nep]
+         self.dd['phi'] = self.full[id_phi]
+         self.dd['dPdA'] = self.full[id_dPdA]
+
+         self.dd['Schwarzschild'] = self.dd['nabla']-self.dd['nabla_ad']
+         self.dd['Ledoux'] = self.dd['nabla']-self.dd['nabla_ad']-self.dd['phi']/self.dd['delta']*self.dd['nabla_mu']
+ 
+         self.dd['game'] = self.dd['P']/self.dd['rho_eint']+1
+         self.dd['gamc'] = self.dd['rho']*self.dd['sound']**2/self.dd['P']
+
+
+def ra_iles(i1,i2,delta=1,path='./rprofs',filename=None,
+path_to_grids='./grids',mode='i',data_path=data,helm_table='helm_table_timmes_x2.dat',pig_table='401x401_pig_table_h2_offset.dat',
+NRHO=541,NT=201,LOGRHOMIN=-12.0,LOGRHOMAX=15.0,LOGTMIN=3.0,LOGTMAX=13.0):
+    
+  r1 = h5rprof(i1,path=path,
+  path_to_grids=path_to_grids,data_path=data_path,helm_table=helm_table,pig_table=pig_table,
+  NRHO=NRHO,NT=NT,LOGRHOMIN=LOGRHOMIN,LOGRHOMAX=LOGRHOMAX,LOGTMIN=LOGTMIN,LOGTMAX=LOGTMAX)
+
+  r2 = h5rprof(i2,path=path,
+  path_to_grids=path_to_grids,data_path=data_path,helm_table=helm_table,pig_table=pig_table,
+  NRHO=NRHO,NT=NT,LOGRHOMIN=LOGRHOMIN,LOGRHOMAX=LOGRHOMAX,LOGTMIN=LOGTMIN,LOGTMAX=LOGTMAX)
+              
+  dd = {}
+  dd['t1'] = r1.time
+  dd['t2'] = r2.time
+
+  for key in r1.dd.keys():
+   dd[key] = 0.0
+
+  cnt = 0
+  for i in range(i1,i2+1,delta):
+ 
+    rpr = h5rprof(i,path=path,
+    path_to_grids=path_to_grids,data_path=data_path,helm_table=helm_table,pig_table=pig_table,
+    NRHO=NRHO,NT=NT,LOGRHOMIN=LOGRHOMIN,LOGRHOMAX=LOGRHOMAX,LOGTMIN=LOGTMIN,LOGTMAX=LOGTMAX)
+              
+    for key in r1.dd.keys():
+     dd[key] += rpr.dd[key]
+
+    cnt += 1
+  
+  for key in r1.dd.keys():
+   dd[key] /= cnt
+
+  dd['r'] = rpr.r
+  dd['area'] = rpr.area
+
+  nas = r2.nas
+  nr = r2.nr
+  geometry = r2.grid0.geometry 
+  use_internal_boundaries = r2.grid0.use_internal_boundaries
+
+  #-------------------------------------------#
+  #time derivatives 
+
+  eint_tildep = r2.dd['rho_eint']/dd['rho']
+  ekin_tildep = r2.dd['rho_ekin']/dd['rho']
+  etot_tildep = r2.dd['rho_etot']/dd['rho']
+  s_tildep = r2.dd['rho_s']/dd['rho']
+  emagp = r2.dd['emag']
+
+  try:
+   X_tildep = np.zeros((nas,nr))
+   for i in range(nas):
+    X_tildep[i] = r2.dd['rho_X'][i]/dd['rho']
+  except:
+    dummy = 1
+
+  eint_tildem = r1.dd['rho_eint']/dd['rho']
+  ekin_tildem = r1.dd['rho_ekin']/dd['rho']
+  etot_tildem = r1.dd['rho_etot']/dd['rho']
+  s_tildem = r1.dd['rho_s']/dd['rho']
+  emagm = r1.dd['emag']
+
+  try:
+   X_tildem = np.zeros((nas,nr))
+   for i in range(nas):
+    X_tildem[i] = r1.dd['rho_X'][i]/dd['rho']
+  except:
+    dummy = 1
+
+  dd['d_eint_tilde_dt'] = (eint_tildep-eint_tildem)/(dd['t2']-dd['t1'])
+  dd['d_ekin_tilde_dt'] = (ekin_tildep-ekin_tildem)/(dd['t2']-dd['t1'])
+  dd['d_etot_tilde_dt'] = (etot_tildep-etot_tildem)/(dd['t2']-dd['t1'])
+  dd['d_s_tilde_dt'] = (s_tildep-s_tildem)/(dd['t2']-dd['t1'])
+  dd['d_emag_dt'] = (emagp-emagm)/(dd['t2']-dd['t1'])
+
+  try:
+   dd['d_X_tilde_dt'] = np.zeros((nas,nr))
+   for i in range(nas):
+    dd['d_X_tilde_dt'][i] = (X_tildep[i]-X_tildem[i])/(dd['t2']-dd['t1'])
+  except:
+   dd['d_X_tilde_dt'] = 0.0
+ 
+  #-------------------------------------------#
+
+  dd['vr_tilde'] = dd['rho_vr']/dd['rho']
+  dd['eint_tilde'] = dd['rho_eint']/dd['rho']
+  dd['ekin_tilde'] = dd['rho_ekin']/dd['rho']
+  dd['etot_tilde'] = dd['rho_etot']/dd['rho']
+  dd['s_tilde'] = dd['rho_s']/dd['rho']
+  dd['h_tilde'] = dd['rho_h']/dd['rho']
+ 
+  try:
+   dd['X_tilde'] = np.zeros((nas,nr))
+   for i in range(nas):
+    dd['X_tilde'][i] = dd['rho_X'][i]/dd['rho']
+  except:
+   dd['X_tilde'] = 0.0
+
+  dd['eint_vr_tilde'] = dd['rho_eint_vr']/dd['rho']
+  dd['ekin_vr_tilde'] = dd['rho_ekin_vr']/dd['rho']
+  dd['h_vr_tilde'] = dd['rho_h_vr']/dd['rho']
+  dd['s_vr_tilde'] = dd['rho_s_vr']/dd['rho']
+
+  #-------------------------------------------#
+  #continuity equation
+
+  dd['vr_tilde_d_rho_bar_dr'] = dd['vr_tilde']*np.gradient(dd['rho'],dd['r'])
+  dd['rho_bar_gradr_vr_tilde'] = dd['rho']*gradr(dd['r'],dd['vr_tilde'],geometry,use_internal_boundaries)
+
+  #-------------------------------------------#
+  #internal energy equation
+
+  dd['vr_tilde_d_eint_tilde_dr'] = dd['vr_tilde']*np.gradient(dd['eint_tilde'],dd['r'])
+  dd['eintpp_vrpp_tilde'] = dd['eint_vr_tilde']-dd['eint_tilde']*dd['vr_tilde']
+  dd['gradr_rho_bar_eintpp_vrpp_tilde'] = gradr(dd['r'],dd['rho']*dd['eintpp_vrpp_tilde'],geometry,use_internal_boundaries)
+  dd['gradr_vr_bar'] = gradr(dd['r'],dd['vr'],geometry,use_internal_boundaries)
+  dd['P_bar_gradr_vr_bar'] = dd['P']*dd['gradr_vr_bar']
+  dd['Pp_div_velp_bar'] = dd['P_div_vel']-dd['P']*dd['div_vel']
+  try:
+   dd['gradr_Kth_dTdr_bar'] = gradr(dd['r'],dd['Kth_dTdr'],geometry,use_internal_boundaries)
+   dd['Kthp_dTdrp_bar'] = dd['Kth_dTdr']-dd['Kth']*dd['dTdr']
+   dd['gradr_Kthp_dTdrp_bar'] = gradr(dd['r'],dd['Kth_dTdr'],geometry,use_internal_boundaries)
+  except:
+   dd['gradr_Kth_dTdr_bar'] = 0.0
+   dd['Kthp_dTdrp_bar'] = 0.0
+   dd['gradr_Kthp_dTdrp_bar'] = 0.0
+
+  #-------------------------------------------#
+  #kinetic energy equation
+
+  dd['vr_tilde_d_ekin_tilde_dr'] = dd['vr_tilde']*np.gradient(dd['ekin_tilde'],dd['r'])
+  dd['ekinpp_vrpp_tilde'] = dd['ekin_vr_tilde']-dd['ekin_tilde']*dd['vr_tilde']
+  dd['gradr_rho_bar_ekinpp_vrpp_tilde'] = gradr(dd['r'],dd['rho']*dd['ekinpp_vrpp_tilde'],geometry,use_internal_boundaries)
+  dd['Pp_vrp_bar'] = dd['P_vr']-dd['P']*dd['vr']
+  dd['gradr_Pp_vrp_bar'] = gradr(dd['r'],dd['Pp_vrp_bar'],geometry,use_internal_boundaries)
+  dd['rhop_g_velp_bar'] = dd['rho_vel_dot_grav']-dd['rho']*dd['vel_dot_grav']
+
+  #-------------------------------------------#
+  #total energy equation
+
+  dd['vr_tilde_d_etot_tilde_dr'] = dd['vr_tilde']*np.gradient(dd['etot_tilde'],dd['r'])
+  dd['hpp_vrpp_tilde'] = dd['h_vr_tilde']-dd['h_tilde']*dd['vr_tilde']
+  dd['gradr_rho_bar_hpp_vrpp_tilde'] = gradr(dd['r'],dd['rho']*dd['hpp_vrpp_tilde'],geometry,use_internal_boundaries)
+  dd['P_bar_vr_tilde'] = dd['P']*dd['vr_tilde']
+  dd['gradr_P_bar_vr_tilde'] = gradr(dd['r'],dd['P_bar_vr_tilde'],geometry,use_internal_boundaries)
+  dd['gradr_fpoy_bar'] = gradr(dd['r'],dd['fpoy'],geometry,use_internal_boundaries)
+
+  #-------------------------------------------#
+  #entropy equation
+
+  dd['vr_tilde_d_s_tilde_dr'] = dd['vr_tilde']*np.gradient(dd['s_tilde'],dd['r'])
+  dd['spp_vrpp_tilde'] = dd['s_vr_tilde']-dd['s_tilde']*dd['vr_tilde']
+  dd['gradr_rho_bar_spp_vrpp_tilde'] = gradr(dd['r'],dd['rho']*dd['spp_vrpp_tilde'],geometry,use_internal_boundaries)
+  dd['edot_iT_bar'] = dd['edot']*dd['inv_T']
+
+  #-------------------------------------------#
+  #species fluxes and variance
+
+  try:
+   dd['vr_tilde_d_X_tilde_dr'] = np.zeros((nas,nr))
+   dd['Xpp_vrpp_tilde'] = np.zeros((nas,nr))
+   dd['rho_bar_Xpp_vrpp_tilde'] = np.zeros((nas,nr))
+   dd['Xpp_Xpp_tilde'] = np.zeros((nas,nr))
+   for i in range(nas):
+    dd['vr_tilde_d_X_tilde_dr'][i] = dd['vr_tilde']*np.gradient(dd['X_tilde'][i],dd['r'])
+    dd['Xpp_vrpp_tilde'][i] = dd['rho_X'][i]/dd['rho']-dd['X_tilde'][i]*dd['vr_tilde'][i]
+    dd['rho_bar_Xpp_vrpp_tilde'][i] = dd['rho']*dd['Xpp_vrpp_tilde'][i]
+    dd['Xpp_Xpp_tilde'][i] = dd['rho_X_X'][i]/dd['rho']-dd['X_tilde'][i]**2
+  except:
+   dd['vr_tilde_d_X_tilde_dr'] = 0.0
+   dd['Xpp_vrpp_tilde'] = 0.0
+   dd['rho_bar_Xpp_vrpp_tilde'] = 0.0
+   dd['Xpp_Xpp_tilde'] = 0.0
+
+  #-------------------------------------------#
+  #magnetic energy equation
+
+  dd['gradr_emag_vr_bar'] = gradr(dd['r'],dd['emag_vr'],geometry,use_internal_boundaries)
+  
+  #-------------------------------------------#
+
+  dd['vrpp_vrpp_tilde'] = dd['rho_vr_vr']/dd['rho']-dd['vr_tilde']**2
+  dd['vt1pp_vt1pp_tilde'] = dd['rho_vt1_vt1']/dd['rho']-dd['rho_vt1']**2/dd['rho']**2
+  dd['vt2pp_vt2pp_tilde'] = dd['rho_vt2_vt2']/dd['rho']-dd['rho_vt2']**2/dd['rho']**2
+
+  dd['rhop_vrp'] = dd['rho_vr']-dd['rho']*dd['vr']
+  dd['Tp_vrp'] = dd['T_vr']-dd['T']*dd['vr']
+  dd['abarp_vrp'] = dd['abar_vr']-dd['abar']*dd['vr']
+  dd['zbarp_vrp'] = dd['zbar_vr']-dd['zbar']*dd['vr']
+
+  dd['rhop_rms'] = np.sqrt(dd['rho_rho']-dd['rho']**2)
+  dd['Pp_rms']   = np.sqrt(dd['P_P']-dd['P']**2)
+  dd['Tp_rms']   = np.sqrt(dd['T_T']-dd['T']**2)
+  dd['sp_rms']   = np.sqrt(dd['s_s']-dd['s']**2)
+
+  #-------------------------------------------#
+
+  if(filename!=None):
+   np.savez(filename,dd=dd)
+
+  return dd
+
+def gradr(r,q,geometry,use_internal_boundaries):
+
+   if(geometry!='cartesian'):
+    if(geometry=='2d-polar'):
+     gradr_q = np.gradient(r*q,r)/r
+    elif(pg.geometry=='2d-spherical'):
+     gradr_q = np.gradient(r*r*q,r)/(r*r)
+    elif(geometry=='3d-spherical-3d'):
+     gradr_q = np.gradient(r*r*q,r)/(r*r)
+   elif(geometry=='cartesian' and use_internal_boundaries=='true'):
+     if(sdims==2):
+      gradr_q = np.gradient(r*q,r)/r
+     if(sdims==3):
+      gradr_q = np.gradient(r*r*q,r)/(r*r)
+   else:
+      gradr_q = np.gradient(q,r)
+
+   return gradr_q
+
+#######################################################################################
 # h5plane class
 #######################################################################################
 
@@ -601,11 +1027,11 @@ def plane_list(path=""):
 
 class h5plane:
 
-    def __init__(self,filename,path='./',path_to_grids='./',mode='i',data_path=data,helm_table='helm_table_timmes_x2.dat',pig_table='401x401_pig_table_h2_offset.dat',
+    def __init__(self,filename,path='./planes',path_to_grids='./grids',mode='i',data_path=data,helm_table='helm_table_timmes_x2.dat',pig_table='401x401_pig_table_h2_offset.dat',
     NRHO=541,NT=201,LOGRHOMIN=-12.0,LOGRHOMAX=15.0,LOGTMIN=3.0,LOGTMAX=13.0):
         if(mode=='n'):
             filename = os.path.join(path, 'planes_n{:05}.h5'.format(filename))
-        if(mode=='i'):
+        elif(mode=='i'):
             filename = plane_list(path=path)[filename][1]
         else:
           raise ValueError('Unknown mode' + str(mode),': mode must be n or i')
@@ -626,14 +1052,17 @@ class h5plane:
         self.planes['x2'] = {}
         self.planes['x3'] = {}
 
+        self.planes['x1']['coords'] = []
         self.planes['x1']['prim'] = []
         self.planes['x1']['temp'] = []
         self.planes['x1']['bfield'] = []
 
+        self.planes['x2']['coords'] = []
         self.planes['x2']['prim'] = []
         self.planes['x2']['temp'] = []
         self.planes['x2']['bfield'] = []
 
+        self.planes['x3']['coords'] = []
         self.planes['x3']['prim'] = []
         self.planes['x3']['temp'] = []
         self.planes['x3']['bfield'] = []
@@ -683,6 +1112,49 @@ class h5plane:
         self.eos_evaluated = False
  
         self.grid0 = h5grid(0,path=path_to_grids,data_path=data_path,helm_table=helm_table,pig_table=pig_table,NRHO=NRHO,NT=NT,LOGRHOMIN=LOGRHOMIN,LOGRHOMAX=LOGRHOMAX,LOGTMIN=LOGTMIN,LOGTMAX=LOGTMAX)
+
+        try:
+
+         filename = os.path.join(path, 'planes_n{:05}.h5'.format(0))
+         self.plane0 = h5py.File(filename,"r")['grid']
+
+         #coords
+         #x1-slices
+         for ip in range(self.nplanes_x1):
+          self.planes['x1']['coords'].append(self.plane0['coords_x1_n{:05d}'.format(ip+1)][()])
+
+         #x2-slices
+         for ip in range(self.nplanes_x2):
+          self.planes['x2']['coords'].append(self.plane0['coords_x2_n{:05d}'.format(ip+1)][()])
+
+         #x3-slices
+         for ip in range(self.nplanes_x3):
+          self.planes['x3']['coords'].append(self.plane0['coords_x3_n{:05d}'.format(ip+1)][()])
+
+        except:
+
+         dummy = 1
+
+    def coords(self,ix=-1,iy=-1,iz=-1):
+
+     try:
+
+      self.ix = ix
+      self.iy = iy
+      self.iz = iz
+      if(ix>=0):
+       ik = np.where((self.planes_x1_index-1)==ix)[0][0]
+       return self.planes['x1']['coords'][ik].transpose(2,1,0)
+      if(iy>=0):
+       ik = np.where((self.planes_x2_index-1)==iy)[0][0]
+       return self.planes['x2']['coords'][ik].transpose(2,1,0)
+      if(iz>=0):
+       ik = np.where((self.planes_x3_index-1)==iz)[0][0]
+       return self.planes['x3']['coords'][ik].transpose(2,1,0)
+
+     except:
+
+       print('coordinates not available in this plane')
 
     def prim(self,ix=-1,iy=-1,iz=-1):
      self.ix = ix
@@ -741,26 +1213,47 @@ class h5plane:
     def vr(self,ix=-1,iy=-1,iz=-1):
 
       vel = self.vel(ix=ix,iy=iy,iz=iz)
-      coords = self.grid0.coords(ix=ix,iy=iy,iz=iz)
 
-      shape_plane = vel[0].shape
-      shape_grid = coords[0].shape
+      try:
 
-      if(shape_plane!=shape_grid):
-       coords = zoom(coords, zoom=2, order=1) 
+       coords = self.coords(ix=ix,iy=iy,iz=iz)
 
-      if(self.grid0.geometry!='cartesian'):
-       vr = vel[0]
-      elif(self.grid0.geometry=='cartesian') and (self.grid0.use_internal_boundaries=='true'):
-       r = self.grid0.r(ix=ix,iy=iy,iz=iz)
+       if(self.grid0.geometry!='cartesian'):
+        vr = vel[0]
+       elif(self.grid0.geometry=='cartesian') and (self.grid0.use_internal_boundaries=='true'):
+        if(self.grid0.sdims==2):
+         r = np.sqrt(coords[0]**2+coords[1]**2)
+        else:
+         r = np.sqrt(coords[0]**2+coords[1]**2+coords[2]**2)
+        if(self.grid0.sdims==2):
+          vr = (coords[0]*vel[0]+coords[1]*vel[1])/r
+        if(self.grid0.sdims==3):
+          vr = (coords[0]*vel[0]+coords[1]*vel[1]+coords[2]*vel[2])/r
+       else:
+        vr = vel[1]
+
+      except:
+
+       coords = self.grid0.coords(ix=ix,iy=iy,iz=iz)
+
+       shape_plane = vel[0].shape
+       shape_grid = coords[0].shape
+
        if(shape_plane!=shape_grid):
-        r = zoom(r, zoom=2, order=1) 
-       if(self.grid0.sdims==2):
-         vr = (coords[0]*vel[0]+coords[1]*vel[1])/r
-       if(self.grid0.sdims==3):
-         vr = (coords[0]*vel[0]+coords[1]*vel[1]+coords[2]*vel[2])/r
-      else:
-       vr = vel[1]
+        coords = zoom(coords, zoom=2, order=1) 
+
+       if(self.grid0.geometry!='cartesian'):
+        vr = vel[0]
+       elif(self.grid0.geometry=='cartesian') and (self.grid0.use_internal_boundaries=='true'):
+        r = self.grid0.r(ix=ix,iy=iy,iz=iz)
+        if(shape_plane!=shape_grid):
+         r = zoom(r, zoom=2, order=1) 
+        if(self.grid0.sdims==2):
+          vr = (coords[0]*vel[0]+coords[1]*vel[1])/r
+        if(self.grid0.sdims==3):
+          vr = (coords[0]*vel[0]+coords[1]*vel[1]+coords[2]*vel[2])/r
+       else:
+        vr = vel[1]
 
       return vr
  
@@ -839,26 +1332,47 @@ class h5plane:
     def br(self,ix=-1,iy=-1,iz=-1):
 
       b = self.bfield(ix=ix,iy=iy,iz=iz)
-      coords = self.grid0.coords(ix=ix,iy=iy,iz=iz)
+ 
+      try:
 
-      shape_plane = b[0].shape
-      shape_grid = coords[0].shape
+       coords = self.coords(ix=ix,iy=iy,iz=iz)
 
-      if(shape_plane!=shape_grid):
-       coords = zoom(coords, zoom=2, order=1) 
+       if(self.grid0.geometry!='cartesian'):
+        br = b[0]
+       elif(self.grid0.geometry=='cartesian') and (self.grid0.use_internal_boundaries=='true'):
+        if(self.grid0.sdims==2):
+         r = np.sqrt(coords[0]**2+coords[1]**2)
+        else:
+         r = np.sqrt(coords[0]**2+coords[1]**2+coords[2]**2)
+        if(self.grid0.sdims==2):
+          br = (coords[0]*b[0]+coords[1]*b[1])/r
+        if(self.grid0.sdims==3):
+          br = (coords[0]*b[0]+coords[1]*b[1]+coords[2]*b[2])/r
+       else:
+        br = b[1]
+ 
+      except:
+ 
+       coords = self.grid0.coords(ix=ix,iy=iy,iz=iz)
 
-      if(self.grid0.geometry!='cartesian'):
-       br = b[0]
-      elif(self.grid0.geometry=='cartesian') and (self.grid0.use_internal_boundaries=='true'):
-       r = self.grid0.r(ix=ix,iy=iy,iz=iz)
+       shape_plane = b[0].shape
+       shape_grid = coords[0].shape
+
        if(shape_plane!=shape_grid):
-        r = zoom(r, zoom=2, order=1) 
-       if(self.grid0.sdims==2):
-         br = (coords[0]*b[0]+coords[1]*b[1])/r
-       if(self.grid0.sdims==3):
-         br = (coords[0]*b[0]+coords[1]*b[1]+coords[2]*b[2])/r
-      else:
-       br = b[1]
+        coords = zoom(coords, zoom=2, order=1) 
+
+       if(self.grid0.geometry!='cartesian'):
+        br = b[0]
+       elif(self.grid0.geometry=='cartesian') and (self.grid0.use_internal_boundaries=='true'):
+        r = self.grid0.r(ix=ix,iy=iy,iz=iz)
+        if(shape_plane!=shape_grid):
+         r = zoom(r, zoom=2, order=1) 
+        if(self.grid0.sdims==2):
+          br = (coords[0]*b[0]+coords[1]*b[1])/r
+        if(self.grid0.sdims==3):
+          br = (coords[0]*b[0]+coords[1]*b[1]+coords[2]*b[2])/r
+       else:
+        br = b[1]
 
       return br
  
@@ -1078,7 +1592,10 @@ class h5plane:
 
      fig, axs = subplots(figsize=(ichx,ichy))
 
-     coords = self.grid0.coords(ix=self.ix,iy=self.iy,iz=self.iz)
+     try:
+      coords = np.copy(self.coords(ix=self.ix,iy=self.iy,iz=self.iz))
+     except:
+      coords = np.copy(self.grid0.coords(ix=self.ix,iy=self.iy,iz=self.iz))
 
      if(self.grid0.geometry=='cartesian'):
       if(self.ix>=0):
@@ -1102,6 +1619,12 @@ class h5plane:
        y = coords[1]
        xlbl = r'$x$'
        ylbl = r'$y$'
+
+     if(self.grid0.geometry=='2d-cylindrical'):
+       x = coords[0]
+       y = coords[1]
+       xlbl = r'$x$'
+       ylbl = r'$z$'
 
      if(self.grid0.geometry=='3d-spherical'):
       if(self.ix>=0):
@@ -1167,8 +1690,6 @@ class h5plane:
 
      cb = fig.colorbar(im,cax=cax,label=cb_lbl,orientation=orientation)
 
-     return fig,axs
-
      if(figname!=None):
       savefig(figname,dpi=figdpi)
 
@@ -1179,6 +1700,7 @@ class h5plane:
 
      rc('text', usetex=False)
 
+     return fig,axs
 #######################################################################################
 # h5grid class
 #######################################################################################
@@ -1200,11 +1722,11 @@ def file_list(path=""):
 
 class h5grid:
 
-    def __init__(self,filename,path='./',mode='i',data_path=data,helm_table='helm_table_timmes_x2.dat',pig_table='401x401_pig_table_h2_offset.dat',
+    def __init__(self,filename,path='./grids',mode='i',data_path=data,helm_table='helm_table_timmes_x2.dat',pig_table='401x401_pig_table_h2_offset.dat',
     NRHO=541,NT=201,LOGRHOMIN=-12.0,LOGRHOMAX=15.0,LOGTMIN=3.0,LOGTMAX=13.0):
         if(mode=='n'):
             filename = os.path.join(path, 'grid_n{:05}.h5'.format(filename))
-        if(mode=='i'):
+        elif(mode=='i'):
             filename = file_list(path=path)[filename][1]
         else:
           raise ValueError('Unknown mode' + str(mode),': mode must be n or i')
@@ -1260,17 +1782,17 @@ class h5grid:
          self.A = np.array(self.grid0['A'][()])
          self.Z = np.array(self.grid0['Z'][()])
          self.nspecies = len(self.A)
+         self.name_species = [s.decode('utf-8') for s in self.grid0.attrs['name_species']]
         except:
          self.A = 'mass numbers not available'
          self.Z = 'charge numbers not available'
          self.nspecies = 'species not available'
+         self.name_species = 'species not avaialble'
 
         try:
-          self.name_species = [s.decode('utf-8') for s in self.grid0.attrs['name_species']]
           self.name_reacs = [s.decode('utf-8') for s in self.grid0.attrs['name_reacs']]
           self.nreacs = len(self.name_reacs)
         except:
-          self.name_species = 'species not available'
           self.name_reacs = 'nuclear reactions not available'
 
         try: 
@@ -2078,6 +2600,12 @@ class h5grid:
        xlbl = r'$x$'
        ylbl = r'$y$'
  
+     if(self.geometry=='2d-cylindrical'):
+       x = coords[0]
+       y = coords[1]
+       xlbl = r'$r$'
+       ylbl = r'$z$'
+ 
      if(self.geometry=='3d-spherical'):
       if(self.ix>=0):
        x = coords[0]
@@ -2144,8 +2672,6 @@ class h5grid:
      if(figname!=None):
       savefig(figname,dpi=figdpi)
 
-     return fig,axs
-
      if(showfig):
       show()
      elif(multiplot):
@@ -2154,6 +2680,8 @@ class h5grid:
       close()
 
      rc('text', usetex=False)
+
+     return fig,axs
 
     def radialshow(self,quant,ib_bins=None,slices=False,s1=-1,s2=-1,s3=-1, \
                     figdpi=500,figname=None, \

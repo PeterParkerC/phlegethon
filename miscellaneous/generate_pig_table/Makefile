@@ -1,17 +1,18 @@
 SRC = ./source
 APPNAME = generate_pig_table
 
-OPTS = Nrho=400
-OPTS += NT=400
+OPTS = Nrho=100
+OPTS += NT=100
 OPTS += log10_T_min=1.0_rp
 OPTS += log10_T_max=8.0_rp
 OPTS += log10_rho_min=-20.0_rp
 OPTS += log10_rho_max=0.0_rp
 OPTS += thr_ne=1.0e-20_rp
 OPTS += eps_eta=1.0e-3_rp
-OPTS += ddx1=8
-OPTS += ddx2=8
+OPTS += ddx1=2
+OPTS += ddx2=2
 OPTS += USE_QUAD_PRECISION
+OPTS += USE_OPR_EQM
 OPTS += USE_H2
 
 #--------------------------------#

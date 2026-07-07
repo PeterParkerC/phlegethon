@@ -1158,7 +1158,7 @@ contains
    real(kind=rp) :: phij(nlev_max),Pj(nlev_max)
    real(kind=rp) :: nl(niso)
    integer :: nstages 
-   real(kind=rp) :: CI,Sl,T,ni,rho,tmp,a1,a2,a3,Zrot,Zh2ext,Zroto,Zrote,dZrotedT,dZrotodT
+   real(kind=rp) :: CI,Sl,T,ni,rho,tmp,a1,a2,a3,Zrot,Zh2ext,Zroto,Zrote,dZrotdT,dZrotedT,dZrotodT
 
    a1 = 0.0_rp
    a2 = 0.0_rp
@@ -1171,6 +1171,7 @@ contains
    Zrot = 0.0_rp
    Zrote = 0.0_rp
    Zroto = 0.0_rp
+   dZrotdT = 0.0_rp
    dZrotedT = 0.0_rp
    dZrotodT = 0.0_rp
  
@@ -1200,6 +1201,25 @@ contains
     kb*theta_vib*exp(-theta_vib/T)/(1.0_rp-exp(-theta_vib/T))
  
     !rotational part
+#ifdef USE_OPR_EQM
+     Zrot = 0.0_rp
+     dZrotdT = 0.0_rp
+     
+     do ir=0,101
+      Zrot = Zrot + &
+      (2.0_rp-(-1.0)**(ir))*(2.0_rp*ir+1.0_rp)*exp(-0.5_rp*ir*(ir+1)*theta_rot/T)
+     end do
+
+     do ir=0,101
+      dZrotdT = dZrotdT + &
+      (2.0_rp-(-1.0)**(ir))*(2.0_rp*ir+1.0_rp)*ir*(ir+1.0_rp)*exp(-0.5_rp*ir*(ir+1)*theta_rot/T) 
+     end do
+
+    Zh2ext = Zh2ext*Zrot 
+
+    Eh2 = Eh2 + kb*dZrotdT/Zrot 
+    
+#else
     Zroto = 0.0_rp
     Zrote = 0.0_rp
 
@@ -1232,8 +1252,9 @@ contains
 
     Zh2ext = Zh2ext*Zrot 
 
-    Eh2 = Eh2 + kb*0.25_rp*dZrotedT/Zrote + kb*0.75_rp*dZrotodT/Zroto - 0.75_rp*kb*theta_rot
-   
+    Eh2 = Eh2 + kb*0.25_rp*dZrotedT/Zrote + kb*0.75_rp*dZrotodT/Zroto - 0.75_rp*kb*theta_rot 
+#endif
+
     Zh2 = Zh2*Zh2ext
 
     a1 = (2.0_rp*pi*me*kb*T/h**2)**1.5_rp * &

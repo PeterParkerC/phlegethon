@@ -1815,12 +1815,12 @@ class h5rays:
         if(self.use_mhd=='true'):
          if(self.sdims==3):
           self.i_bx1 = self.nvars + 1
-          self.i_bx2 = self.bx1 + 1
-          self.i_bx3 = self.bx2 + 1
+          self.i_bx2 = self.i_bx1 + 1
+          self.i_bx3 = self.i_bx2 + 1
          else:
           self.i_bx1 = self.nvars + 1
-          self.i_bx2 = self.bx1 + 1
-          self.i_bx3 = self.bx2 
+          self.i_bx2 = self.i_bx1 + 1
+          self.i_bx3 = self.i_bx2 
 
         self.time = self.grid['time'][()]
         self.dt = self.grid['dt'][()]

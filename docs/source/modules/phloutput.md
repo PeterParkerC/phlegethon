@@ -8,8 +8,9 @@ It is designed for:
 - loading pre-extracted 2D planes (`planes_nXXXXX.h5`),
 - loading spherical projection outputs (`spj_nXXXXX.h5`),
 - loading rays (`rays_nXXXXX.h5`), 
-- loading user-defined outputs (`udo_nXXXXX.h5`),
+- loading user-defined outputs (`udo_XXXXX.dat`),
 - loading horizontally-averaged (radial) profiles (`rprofs_nXXXXX.h5`),
+- loading point probes (`ppX_XXXXX.dat`),
 - extracting radial/time diagnostics,
 - making publication-ready plots directly from Python.
 

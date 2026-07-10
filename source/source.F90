@@ -18289,25 +18289,6 @@ contains
    do j=lx2,ux2
     do i=lx1,ux1
        
-      xc = lgrid%coords(1,i,j,k)
-      yc = lgrid%coords(2,i,j,k)
-#if sdims_make==3
-      zc = lgrid%coords(3,i,j,k)
-#endif
-      h1x = xc - lgrid%coords(1,i-1,j,k)
-      h2x = lgrid%coords(1,i+1,j,k) - xc
-      c2x = -rp2/(h1x*h2x)
-
-      h1y = yc - lgrid%coords(2,i,j-1,k)
-      h2y = lgrid%coords(2,i,j+1,k) - yc
-      c2y = -rp2/(h1y*h2y)
-
-#if sdims_make==3
-      h1z = zc - lgrid%coords(3,i,j,k-1)
-      h2z = lgrid%coords(3,i,j,k+1) - zc
-      c2z = -rp2/(h1z*h2z)
-#endif
-
       res_L2(1) = res_L2(1) + ( lgrid%r0hat(i,j,k) /  &
       (rp4*CONST_PI*CONST_GRAV*max(abs(lgrid%prim(i_rho,i,j,k)-lgrid%gs_rho_bg),lgrid%gs_rho_bg)))**2
 
@@ -18596,25 +18577,6 @@ contains
      do j=lx2,ux2
       do i=lx1,ux1
        
-       xc = lgrid%coords(1,i,j,k)
-       yc = lgrid%coords(2,i,j,k)
-#if sdims_make==3
-       zc = lgrid%coords(3,i,j,k)
-#endif
-       h1x = xc - lgrid%coords(1,i-1,j,k)
-       h2x = lgrid%coords(1,i+1,j,k) - xc
-       c2x = -rp2/(h1x*h2x)
-
-       h1y = yc - lgrid%coords(2,i,j-1,k)
-       h2y = lgrid%coords(2,i,j+1,k) - yc
-       c2y = -rp2/(h1y*h2y)
-
-#if sdims_make==3
-       h1z = zc - lgrid%coords(3,i,j,k-1)
-       h2z = lgrid%coords(3,i,j,k+1) - zc
-       c2z = -rp2/(h1z*h2z)
-#endif
-
        res_L2(1) = res_L2(1) + ( lgrid%rgs(i,j,k) /  &
        (rp4*CONST_PI*CONST_GRAV*max(abs(lgrid%prim(i_rho,i,j,k)-lgrid%gs_rho_bg),lgrid%gs_rho_bg)))**2
 
@@ -19298,25 +19260,6 @@ contains
    do j=lx2,ux2
     do i=lx1,ux1
        
-      xc = lgrid%coords(1,i,j,k)
-      yc = lgrid%coords(2,i,j,k)
-#if sdims_make==3
-      zc = lgrid%coords(3,i,j,k)
-#endif
-      h1x = xc - lgrid%coords(1,i-1,j,k)
-      h2x = lgrid%coords(1,i+1,j,k) - xc
-      c2x = -rp2/(h1x*h2x)
-
-      h1y = yc - lgrid%coords(2,i,j-1,k)
-      h2y = lgrid%coords(2,i,j+1,k) - yc
-      c2y = -rp2/(h1y*h2y)
-
-#if sdims_make==3
-      h1z = zc - lgrid%coords(3,i,j,k-1)
-      h2z = lgrid%coords(3,i,j,k+1) - zc
-      c2z = -rp2/(h1z*h2z)
-#endif
-
 #ifdef CONST_GRAV_UNITY
       res_L2(1) = res_L2(1) + lgrid%r0hat(i,j,k)**2 
 #else
@@ -19719,25 +19662,6 @@ contains
      do j=lx2,ux2
       do i=lx1,ux1
        
-       xc = lgrid%coords(1,i,j,k)
-       yc = lgrid%coords(2,i,j,k)
-#if sdims_make==3
-       zc = lgrid%coords(3,i,j,k)
-#endif
-       h1x = xc - lgrid%coords(1,i-1,j,k)
-       h2x = lgrid%coords(1,i+1,j,k) - xc
-       c2x = -rp2/(h1x*h2x)
-
-       h1y = yc - lgrid%coords(2,i,j-1,k)
-       h2y = lgrid%coords(2,i,j+1,k) - yc
-       c2y = -rp2/(h1y*h2y)
-
-#if sdims_make==3
-       h1z = zc - lgrid%coords(3,i,j,k-1)
-       h2z = lgrid%coords(3,i,j,k+1) - zc
-       c2z = -rp2/(h1z*h2z)
-#endif
-
 #ifdef CONST_GRAV_UNITY
        res_L2(1) = res_L2(1) + lgrid%rgs(i,j,k)**2
 #else

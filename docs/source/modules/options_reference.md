@@ -200,7 +200,7 @@ Choose one of the following spatial reconstruction methods (see Sect. 2.5)
 | `PPH_REC`| Unlimited parabolic reconstruction for all variables except active scalars, for which limited parabolic reconstruction is used, based on [Leidi+24](https://ui.adsabs.harvard.edu/abs/2024A%26A...686A..34L/abstract). |
 | `LIM5TH_REC`| Limited fifth-order reconstruction, based on [Leidi+24](https://ui.adsabs.harvard.edu/abs/2024A%26A...686A..34L/abstract). |
 
-The option `USE_SHOCK_FLATTENING` will enable the shock-flattening procedure described in Sect. 2.7 (i.e., switch to a two-wave HLL Riemann solver and van Leer reconstruction in the presence of a shock). For this option to be used, the shock-flattening parameter needs to be defined by the user, e.g., `eps_sf_make=0.2`). This is such that the shock flattener will be activated if the relative jump in pressure at a certain cell location is larger than `eps_sf_make`.
+The option `USE_SHOCK_FLATTENING` will enable the shock-flattening procedure described in Sect. 2.7 (i.e., switch to a two-wave HLL Riemann solver and minmod slope-limited reconstruction in the presence of a shock). For this option to be used, the shock-flattening parameter needs to be defined by the user, e.g., `eps_sf_make=0.1`). This is such that the shock flattener will be activated if the relative jump in pressure at a certain cell location is larger than `eps_sf_make`.
 
 Riemann solvers (see Sect. 2.6). For hydrodynamic simulations, choose one of the following options:
 

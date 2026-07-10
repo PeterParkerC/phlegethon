@@ -178,7 +178,7 @@ module source
 #ifdef eps_sf_make
   eps_sf_make
 #else
-  0.25_rp
+  0.1_rp
 #endif
 
  real(kind=rp), parameter :: Mach_ct = &
@@ -282,7 +282,7 @@ module source
 #ifdef gs_tol_make
   gs_tol_make
 #else
-  1.0e-4_rp
+  1.0e-8_rp
 #endif
 
 #ifdef GMG_PRECONDITIONER
@@ -9047,10 +9047,10 @@ contains
            slope = rp0
 
            if(prod>rp0) then
-            slope=prod/(slopef+slopeb)
+            slope= sign(rp1,slopef)*min(abs(slopeb),abs(slopef))
            endif
 
-           tmp = slope
+           tmp = rph*slope
            qLbuf(iv) = qc - tmp
            qRbuf(iv) = qc + tmp
 
@@ -9095,10 +9095,10 @@ contains
            slope = rp0
 
            if(prod>rp0) then
-            slope=prod/(slopef+slopeb)
+            slope= sign(rp1,slopef)*min(abs(slopeb),abs(slopef))
            endif
 
-           tmp = slope
+           tmp = rph*slope
            bLbuf(iv) = qc - tmp
            bRbuf(iv) = qc + tmp
 
@@ -9132,10 +9132,11 @@ contains
            slope = rp0
 
            if(prod>rp0) then
-            slope=prod/(slopef+slopeb)
+            slope= sign(rp1,slopef)*min(abs(slopeb),abs(slopef))
            endif
 
-           tmp = slope
+           tmp = rph*slope
+
            qLbuf(iv) = qc - tmp
            qRbuf(iv) = qc + tmp
           
@@ -10003,10 +10004,11 @@ contains
            slope = rp0
 
            if(prod>rp0) then
-            slope=prod/(slopef+slopeb)
+            slope= sign(rp1,slopef)*min(abs(slopeb),abs(slopef))
            endif
 
-           tmp = slope
+           tmp = rph*slope
+
            qLbuf(iv) = qc - tmp
            qRbuf(iv) = qc + tmp
 
@@ -10039,10 +10041,11 @@ contains
            slope = rp0
 
            if(prod>rp0) then
-            slope=prod/(slopef+slopeb)
+            slope= sign(rp1,slopef)*min(abs(slopeb),abs(slopef))
            endif
 
-           tmp = slope
+           tmp = rph*slope
+
            bLbuf(iv) = qc - tmp
            bRbuf(iv) = qc + tmp
 
@@ -10363,13 +10366,13 @@ contains
            slope = rp0
 
            if(prod>rp0) then
-            slope=prod/(slopef+slopeb)
+            slope= sign(rp1,slopef)*min(abs(slopeb),abs(slopef))
            endif
 
-           tmp = slope
+           tmp = rph*slope
+
            qLbuf(iv) = qc - tmp
            qRbuf(iv) = qc + tmp
-
 
           end do
 
@@ -11197,10 +11200,11 @@ contains
            slope = rp0
 
            if(prod>rp0) then
-            slope=prod/(slopef+slopeb)
+            slope= sign(rp1,slopef)*min(abs(slopeb),abs(slopef))
            endif
 
-           tmp = slope
+           tmp = rph*slope
+
            qLbuf(iv) = qc - tmp
            qRbuf(iv) = qc + tmp
 
@@ -11233,10 +11237,11 @@ contains
            slope = rp0
 
            if(prod>rp0) then
-            slope=prod/(slopef+slopeb)
+            slope= sign(rp1,slopef)*min(abs(slopeb),abs(slopef))
            endif
 
-           tmp = slope
+           tmp = rph*slope
+
            bLbuf(iv) = qc - tmp
            bRbuf(iv) = qc + tmp
 
@@ -11569,10 +11574,11 @@ contains
            slope = rp0
 
            if(prod>rp0) then
-            slope=prod/(slopef+slopeb)
+            slope= sign(rp1,slopef)*min(abs(slopeb),abs(slopef))
            endif
 
-           tmp = slope
+           tmp = rph*slope
+
            qLbuf(iv) = qc - tmp
            qRbuf(iv) = qc + tmp
 

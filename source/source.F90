@@ -3133,7 +3133,7 @@ contains
     call read_ip(h5,group_id,"rprofs_inextoutput",lgrid%rprofs_inextoutput)
 #endif
 
-#ifdef RAYS_PLANES
+#ifdef SAVE_RAYS
     call read_ip(h5,group_id,"rays_dstep_dump",lgrid%rays_dstep_dump)
     call read_ip(h5,group_id,"rays_inextoutput",lgrid%rays_inextoutput)
 #endif

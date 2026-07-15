@@ -5644,28 +5644,32 @@ contains
 
  end subroutine hdf5_annotate_string
 
- subroutine hdf5_annotate_array_string(id,key,val,n)
-    integer(HID_T), intent(in) :: id
-    character(len=*), intent(in) :: key
-    character(len=filename_size), dimension(*), intent(in) :: val
-    integer, intent(in) :: n 
+ subroutine hdf5_annotate_array_string(id,name,val,n)
+   integer(HID_T), intent(in) :: id
+   character(len=*), intent(in) :: name
+   character(len=filename_size), dimension(*), intent(in) :: val
+   integer, intent(in) :: n
 
-    integer :: err
-    integer(HID_T) :: sid, aid, tid
-    integer(HSIZE_T), dimension(1) :: dims
-    integer(SIZE_T) :: strlen
+   integer :: err
+   integer(HID_T) :: sid, did, tid
+   integer(HSIZE_T), dimension(1) :: dims
+   integer(SIZE_T) :: strlen
 
-    strlen = filename_size 
-    dims(1) = n
+   strlen = filename_size
+   dims(1) = n
 
-    call h5tcopy_f(H5T_NATIVE_CHARACTER,tid,err)
-    call h5tset_size_f(tid,strlen,err)
-    call h5screate_simple_f(1,dims,sid,err)
-    call h5acreate_f(id,key,tid,sid,aid,err)
-    call h5awrite_f(aid,tid,val,dims,err)
-    call h5aclose_f(aid,err)
-    call h5sclose_f(sid,err)
-    call h5tclose_f(tid,err)
+   call h5tcopy_f(H5T_FORTRAN_S1, tid, err)
+   call h5tset_size_f(tid, strlen, err)
+
+   call h5screate_simple_f(1, dims, sid, err)
+
+   call h5dcreate_f(id, trim(name), tid, sid, did, err)
+
+   call h5dwrite_f(did, tid, val, dims, err)
+
+   call h5dclose_f(did, err)
+   call h5sclose_f(sid, err)
+   call h5tclose_f(tid, err)
 
  end subroutine hdf5_annotate_array_string
 

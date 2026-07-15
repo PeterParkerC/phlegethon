@@ -41,14 +41,6 @@ OPTS += cfl_make=0.8_rp
 OPTS += RK3_STEPPER
 
 #=================================#
-#STOPPING CRITERIA
-#=================================#
-
-OPTS += tmax_make=4000.0_rp
-OPTS += wctmax_make=85000.0_rp
-OPTS += stepmax_make=100000000
-
-#=================================#
 #GODUNOV
 #=================================#
 

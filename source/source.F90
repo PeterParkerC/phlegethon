@@ -487,6 +487,39 @@ module source
 #endif
 #endif
 
+#ifdef SAVE_RAYS
+ integer, parameter :: rays_nx1_comp = &
+#ifdef rays_nx1_comp_make
+  rays_nx1_comp_make
+#else
+  1
+#endif
+ integer, parameter :: rays_nx2_comp = &
+#ifdef rays_nx2_comp_make
+  rays_nx2_comp_make
+#else
+  1
+#endif
+ integer, parameter :: rays_nx3_comp = &
+#ifdef rays_nx3_comp_make
+  rays_nx3_comp_make
+#else
+  1
+#endif
+ real(kind=rp), parameter :: rays_dt_dump = &
+#ifdef rays_dt_dump_make
+  rays_dt_dump_make
+#else
+  1.5_rp
+#endif
+ integer, parameter :: rays_nvars = &
+#ifdef USE_MHD
+ nvars_make + 2*sdims + 1
+#else
+ nvars_make + sdims + 1
+#endif
+#endif
+
 #ifdef SAVE_SPHERICAL_PROJECTIONS
  integer, parameter :: nspj = &
 #ifdef nspj_make
@@ -905,6 +938,11 @@ module source
     real(kind=rp) :: wctgi    
     real(kind=rp) :: dummy
 
+#ifdef SAVE_RAYS
+    integer :: rays_i1(1:3),rays_i2(1:3)
+    integer :: rays_nx1,rays_nx2,rays_nx3
+#endif
+
  end type mpigrid
  
  !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
@@ -1208,6 +1246,11 @@ module source
 
 #ifdef USE_SHOCK_FLATTENING
     integer, allocatable, dimension(:,:,:) :: is_flattened
+#endif
+
+#ifdef SAVE_RAYS
+    real(kind=rp), allocatable, dimension(:,:,:,:) :: rays
+    integer :: rays_dstep_dump,rays_inextoutput
 #endif
 
  end type locgrid
@@ -2019,6 +2062,11 @@ contains
 
 #endif
 
+#ifdef SAVE_RAYS
+    lgrid%rays_dstep_dump = 0
+    lgrid%rays_inextoutput = 0
+#endif
+
 #ifdef SAVE_PLANES
     lgrid%planes_dstep_dump = 0
     lgrid%planes_inextoutput = 0
@@ -2035,6 +2083,28 @@ contains
 #if sdims_make==3
     allocate(lgrid%ru%is_flattened(3)%val(lx3:ux3+1))
 #endif
+#endif
+
+#ifdef SAVE_RAYS
+
+    mgrid%rays_nx1 = int((ux1-lx1+1)/rays_nx1_comp)
+    mgrid%rays_nx2 = int((ux2-lx2+1)/rays_nx2_comp)
+    mgrid%rays_nx3 = int((ux3-lx3+1)/rays_nx3_comp)
+
+    mgrid%rays_i1(1) = int(mgrid%coords_dd(1)*mgrid%rays_nx1+1)
+    mgrid%rays_i2(1) = int((mgrid%coords_dd(1)+1)*mgrid%rays_nx1)
+
+    mgrid%rays_i1(2) = int(mgrid%coords_dd(2)*mgrid%rays_nx2+1)
+    mgrid%rays_i2(2) = int((mgrid%coords_dd(2)+1)*mgrid%rays_nx2)
+
+    mgrid%rays_i1(3) = int(mgrid%coords_dd(3)*mgrid%rays_nx3+1)
+    mgrid%rays_i2(3) = int((mgrid%coords_dd(3)+1)*mgrid%rays_nx3)
+
+    allocate(lgrid%rays(1:rays_nvars, &
+    mgrid%rays_i1(1):mgrid%rays_i2(1), &
+    mgrid%rays_i1(2):mgrid%rays_i2(2), &
+    mgrid%rays_i1(3):mgrid%rays_i2(3)))
+     
 #endif
 
     call h5open_f(ierr)
@@ -2386,6 +2456,10 @@ contains
     deallocate(lgrid%rprofs_ir)
     deallocate(lgrid%rprofs_counts)
     deallocate(lgrid%rprofs_r)
+#endif
+
+#ifdef SAVE_RAYS
+    deallocate(lgrid%rays)
 #endif
 
  end subroutine finalize_simulation
@@ -2741,6 +2815,11 @@ contains
     call hdf5_annotate_ip(h5,id,"rprofs_dstep_dump",lgrid%rprofs_dstep_dump)
 #endif
 
+#ifdef SAVE_RAYS
+    call hdf5_annotate_ip(h5,id,"rays_inextoutput",lgrid%rays_inextoutput)
+    call hdf5_annotate_ip(h5,id,"rays_dstep_dump",lgrid%rays_dstep_dump)
+#endif
+
 #ifdef SAVE_PLANES
     call hdf5_annotate_ip(h5,id,"planes_inextoutput",lgrid%planes_inextoutput)
     call hdf5_annotate_ip(h5,id,"planes_dstep_dump",lgrid%planes_dstep_dump)
@@ -3054,6 +3133,11 @@ contains
     call read_ip(h5,group_id,"rprofs_inextoutput",lgrid%rprofs_inextoutput)
 #endif
 
+#ifdef SAVE_RAYS
+    call read_ip(h5,group_id,"rays_dstep_dump",lgrid%rays_dstep_dump)
+    call read_ip(h5,group_id,"rays_inextoutput",lgrid%rays_inextoutput)
+#endif
+
 #ifdef SAVE_PLANES
     call read_ip(h5,group_id,"planes_dstep_dump",lgrid%planes_dstep_dump)
     call read_ip(h5,group_id,"planes_inextoutput",lgrid%planes_inextoutput)
@@ -3341,6 +3425,147 @@ contains
     call h5fclose_f(h5%file_id,error)
 
  end subroutine write_output
+
+#ifdef SAVE_RAYS
+ 
+ subroutine write_rays(mgrid,lgrid)
+    type(mpigrid), intent(in) :: mgrid
+    type(locgrid), intent(inout) :: lgrid
+
+    type(h5_file) :: h5
+
+    integer :: error,i,j,k,iv
+    integer(HID_T) :: id,plist_id
+
+    write(h5%filename, "('./rays/rays_n',I0.5,'.h5')") lgrid%step
+
+    call h5pcreate_f(H5P_FILE_ACCESS_F,plist_id,error)
+
+    call h5pset_fapl_mpio_f(plist_id,mgrid%comm_cart,MPI_INFO_NULL,error)
+
+    call h5fcreate_f(h5%filename,H5F_ACC_TRUNC_F,h5%file_id,error,H5P_DEFAULT_F,plist_id)
+  
+    call h5pclose_f(plist_id,error)
+
+#ifdef USE_SINGLE_PRECISION 
+#ifdef LITTLE_ENDIAN
+    h5%pref_dtypef = H5T_IEEE_F32LE
+#endif
+#ifdef BIG_ENDIAN
+    h5%pref_dtypef = H5T_IEEE_F32BE
+#endif
+#endif
+
+#ifdef USE_DOUBLE_PRECISION
+#ifdef LITTLE_ENDIAN
+    h5%pref_dtypef = H5T_IEEE_F64LE
+#endif
+#ifdef BIG_ENDIAN
+    h5%pref_dtypef = H5T_IEEE_F64BE
+#endif
+#endif
+
+#ifdef LITTLE_ENDIAN
+    h5%pref_dtypei = H5T_STD_I32LE
+#endif
+#ifdef BIG_ENDIAN
+    h5%pref_dtypei = H5T_STD_I32BE
+#endif
+
+    call h5gcreate_f(h5%file_id,"grid", id, error)
+    call hdf5_annotate_rp(h5,id,"time",lgrid%time)
+    call hdf5_annotate_rp(h5,id,"dt",lgrid%dt)
+    call hdf5_annotate_ip(h5,id,"step",lgrid%step)
+
+    if(lgrid%step==0) then
+ 
+      call hdf5_annotate_rp(h5,id,"gamma_ad",lgrid%gm)
+      call hdf5_annotate_rp(h5,id,"mu",lgrid%mu)
+      call hdf5_annotate_rp(h5,id,"x1l",lgrid%x1l)
+      call hdf5_annotate_rp(h5,id,"x1u",lgrid%x1u)
+      call hdf5_annotate_rp(h5,id,"x2l",lgrid%x2l)
+      call hdf5_annotate_rp(h5,id,"x2u",lgrid%x2u)
+      call hdf5_annotate_rp(h5,id,"x3l",lgrid%x3l)
+      call hdf5_annotate_rp(h5,id,"x3u",lgrid%x3u)
+      call hdf5_annotate_ip(h5,id,"sdims",sdims)
+      call hdf5_annotate_ip(h5,id,"nx1",mgrid%rays_nx1)
+      call hdf5_annotate_ip(h5,id,"nx2",mgrid%rays_nx2)
+      call hdf5_annotate_ip(h5,id,"nx3",mgrid%rays_nx3)
+      call hdf5_annotate_ip(h5,id,"nvars",nvars)
+
+#ifdef GEOMETRY_2D_POLAR
+      call hdf5_annotate_string(id,"geometry-type","2d-polar")
+#endif
+
+#ifdef GEOMETRY_2D_SPHERICAL
+      call hdf5_annotate_string(id,"geometry-type","2d-spherical")
+#endif
+
+#ifdef GEOMETRY_3D_SPHERICAL
+      call hdf5_annotate_string(id,"geometry-type","3d-spherical")
+#endif
+
+#ifdef USE_MHD
+      call hdf5_annotate_string(id,"use_mhd","true")
+#else
+      call hdf5_annotate_string(id,"use_mhd","false")
+#endif
+
+    endif
+
+    do k=mgrid%rays_i1(3),mgrid%rays_i2(3)
+     do j=mgrid%rays_i1(2),mgrid%rays_i2(2)
+      do i=mgrid%rays_i1(1),mgrid%rays_i2(1)
+
+       do iv=1,nvars
+        lgrid%rays(iv,i,j,k) = lgrid%prim(iv, &
+        (i-1)*rays_nx1_comp+1, & 
+        (j-1)*rays_nx2_comp+1, & 
+        (k-1)*rays_nx3_comp+1 )
+       end do
+ 
+       lgrid%rays(nvars+1,i,j,k) = lgrid%temp( &
+       (i-1)*rays_nx1_comp+1, & 
+       (j-1)*rays_nx2_comp+1, & 
+       (k-1)*rays_nx3_comp+1 )
+ 
+#ifdef USE_MHD
+       do iv=1,sdims
+        lgrid%rays(nvars+1+iv,i,j,k) = lgrid%b_cc(iv, &
+        (i-1)*rays_nx1_comp+1, & 
+        (j-1)*rays_nx2_comp+1, & 
+        (k-1)*rays_nx3_comp+1 )
+       end do
+       
+       do iv=1,sdims
+        lgrid%rays(nvars+1+sdims+iv,i,j,k) = lgrid%coords(iv, &
+        (i-1)*rays_nx1_comp+1, & 
+        (j-1)*rays_nx2_comp+1, & 
+        (k-1)*rays_nx3_comp+1 )
+       end do
+#else
+       do iv=1,sdims
+        lgrid%rays(nvars+1+iv,i,j,k) = lgrid%coords(iv, &
+        (i-1)*rays_nx1_comp+1, & 
+        (j-1)*rays_nx2_comp+1, & 
+        (k-1)*rays_nx3_comp+1 )
+       end do
+#endif
+
+      end do
+     end do
+    end do
+
+    call hdf5_write_ndarray(h5,id,"rays",mgrid,rays_nvars, &
+    mgrid%rays_i1(1),mgrid%rays_i2(1),mgrid%rays_i1(2),mgrid%rays_i2(2), &
+    mgrid%rays_i1(3),mgrid%rays_i2(3),0,lgrid%rays(1,:,:,:),lgrid%rays,0)
+
+    call h5gclose_f(id,error)
+    call h5fclose_f(h5%file_id,error)
+
+ end subroutine write_rays
+
+#endif
 
 #ifdef SAVE_SPHERICAL_PROJECTIONS
  
@@ -6569,6 +6794,10 @@ contains
      lgrid%rprofs_dstep_dump = nint(rprofs_dt_dump/lgrid%dt)
 #endif
 
+#ifdef SAVE_RAYS
+     lgrid%rays_dstep_dump = nint(rays_dt_dump/lgrid%dt)
+#endif
+
 #ifdef SAVE_PLANES
      lgrid%planes_dstep_dump = nint(planes_dt_dump/lgrid%dt)
 #endif
@@ -6820,6 +7049,14 @@ contains
        end if
 #endif
 
+#ifdef SAVE_RAYS
+       if(lgrid%step==lgrid%rays_inextoutput) then
+        call mpi_barrier(mgrid%comm_cart,ierr)
+        call write_rays(mgrid,lgrid)
+        lgrid%rays_inextoutput = lgrid%rays_inextoutput + lgrid%rays_dstep_dump
+       end if
+#endif
+
 #ifdef SAVE_SPHERICAL_PROJECTIONS
        if(lgrid%step==lgrid%spj_inextoutput) then
 #ifndef SAVE_RPROFS
@@ -6979,6 +7216,13 @@ contains
     if((lgrid%step==lgrid%planes_inextoutput) .or. (lgrid%time>=tmax) .or. (lgrid%step==stepmax)) then
       call write_planes(mgrid,lgrid) 
       lgrid%planes_inextoutput = lgrid%planes_inextoutput + lgrid%planes_dstep_dump
+    end if
+#endif
+
+#ifdef SAVE_RAYS
+    if((lgrid%step==lgrid%rays_inextoutput) .or. (lgrid%time>=tmax) .or. (lgrid%step==stepmax)) then
+      call write_rays(mgrid,lgrid) 
+      lgrid%rays_inextoutput = lgrid%rays_inextoutput + lgrid%rays_dstep_dump
     end if
 #endif
 

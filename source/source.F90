@@ -22669,7 +22669,7 @@ contains
 
       do while(L2_def > nn_nltol)
 
-       call nuclear_network_bicgstab(res,jac,dY)
+       call nuclear_network_linsolver(res,jac,dY)
   
        do iv=1,nspecies
         Y(iv) = Y(iv) + dY(iv)
@@ -22746,7 +22746,7 @@ contains
 
       do while(L2_def > nn_nltol)
  
-       call nuclear_network_bicgstab(res,jac,dY)
+       call nuclear_network_linsolver(res,jac,dY)
  
        do iv=1,nspecies
         Y(iv) = Y(iv) + dY(iv)
@@ -22843,7 +22843,7 @@ contains
 
       do while(L2_def > nn_nltol)
 
-       call nuclear_network_bicgstab(res,jac,dY)
+       call nuclear_network_linsolver(res,jac,dY)
   
        do iv=1,nspecies
         Y(iv) = Y(iv) + dY(iv)
@@ -23007,7 +23007,114 @@ contains
 
  end subroutine nuclear_network_step
 
- subroutine nuclear_network_bicgstab(res,jac,dY)
+#ifdef NUCLEAR_NETWORK_LU
+
+ subroutine nuclear_network_linsolver(bc,A,x)
+    implicit none
+
+    real(kind=rp), intent(in) :: A(nspecies,nspecies), bc(nspecies)
+    real(kind=rp), intent(out) :: x(nspecies)
+
+    real(kind=rp) :: L(nspecies,nspecies), U(nspecies,nspecies), P(nspecies,nspecies),b(nspecies)
+    real(kind=rp) :: Pb(nspecies), y(nspecies)
+    real(kind=rp) :: factor, temp
+    integer :: i,j,k,pivot
+
+    ! Initialize
+    U = A
+    L = 0.0d0
+    P = 0.0d0
+
+    do i=1,nspecies
+        L(i,i)=1.0d0
+        P(i,i)=1.0d0
+        b(i) = -bc(i)
+    end do
+
+    ! LU factorization with partial pivoting
+    do k=1,nspecies-1
+
+        ! Find pivot
+        pivot = k
+        do i=k+1,nspecies
+            if (abs(U(i,k)) > abs(U(pivot,k))) then
+                pivot=i
+            end if
+        end do
+
+        if (abs(U(pivot,k)) < 1.0d-14) then
+            stop "Singular matrix"
+        end if
+
+        ! Swap rows in U and P
+        if (pivot /= k) then
+
+            do j=1,nspecies
+                temp = U(k,j)
+                U(k,j)=U(pivot,j)
+                U(pivot,j)=temp
+
+                temp=P(k,j)
+                P(k,j)=P(pivot,j)
+                P(pivot,j)=temp
+            end do
+
+            ! Swap previous L entries
+            do j=1,k-1
+                temp=L(k,j)
+                L(k,j)=L(pivot,j)
+                L(pivot,j)=temp
+            end do
+
+        end if
+
+        ! Elimination
+        do i=k+1,nspecies
+            factor = U(i,k)/U(k,k)
+
+            L(i,k)=factor
+
+            do j=k,nspecies
+                U(i,j)=U(i,j)-factor*U(k,j)
+            end do
+
+        end do
+
+    end do
+
+    ! Compute Pb
+    Pb = matmul(P,b)
+
+    ! Forward substitution: L*y = P*b
+    do i=1,nspecies
+        y(i)=Pb(i)
+
+        do j=1,i-1
+            y(i)=y(i)-L(i,j)*y(j)
+        end do
+
+    end do
+
+    ! Back substitution: U*x = y
+    do i=nspecies,1,-1
+
+        x(i)=y(i)
+
+        do j=i+1,nspecies
+            x(i)=x(i)-U(i,j)*x(j)
+        end do
+
+        x(i)=x(i)/U(i,i)
+
+    end do
+
+ end subroutine nuclear_network_linsolver
+
+#endif
+
+#ifdef NUCLEAR_NETWORK_BICGSTAB
+
+ subroutine nuclear_network_linsolver(res,jac,dY)
    real(kind=rp), dimension(1:nspecies), intent(in) :: res
    real(kind=rp), dimension(1:nspecies,1:nspecies), intent(in) :: jac
    real(kind=rp), dimension(1:nspecies), intent(inout) :: dY
@@ -23095,7 +23202,8 @@ contains
 
    end do
 
- end subroutine nuclear_network_bicgstab
+ end subroutine nuclear_network_linsolver
+#endif
 
 #endif
 

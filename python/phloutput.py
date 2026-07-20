@@ -788,12 +788,22 @@ class h5rprof:
         self.dd['emag_div_vel'] = havg[:,off+30]
         self.dd['b_dot_b_dot_nabla_vel'] = havg[:,off+31]
         self.dd['WL'] = havg[:,off+32]
+        
+        try:
+         self.dd['dXdt_reacs'] = (havg[:,off+33:]).reshape(self.nr,self.nreacs,self.nspecies).transpose(0,2,1)
+        except:
+         self.dd['dXdt_reacs'] = 0.0
 
         self.dd['mu'] = self.dd['abar']/(self.dd['zbar']+1.0)
-        self.dd['nabla'] = \
-        np.gradient(np.log(self.dd['T']))/np.gradient(np.log(self.dd['P']))
-        self.dd['nabla_mu'] = \
-        np.gradient(np.log(self.dd['mu']))/np.gradient(np.log(self.dd['P']))
+
+        try:
+         self.dd['nabla'] = \
+         np.gradient(np.log(self.dd['T']))/np.gradient(np.log(self.dd['P']))
+         self.dd['nabla_mu'] = \
+         np.gradient(np.log(self.dd['mu']))/np.gradient(np.log(self.dd['P']))
+        except:
+         self.dd['nabla'] = self.dd['rho']*0.0 
+         self.dd['nabla_mu'] = self.dd['rho']*0.0
 
         self.grid0 = h5grid(0,path=path_to_grids,data_path=data_path,helm_table=helm_table,pig_table=pig_table,NRHO=NRHO,NT=NT,LOGRHOMIN=LOGRHOMIN,LOGRHOMAX=LOGRHOMAX,LOGTMIN=LOGTMIN,LOGTMAX=LOGTMAX)
 
@@ -828,7 +838,6 @@ class h5rprof:
  
          self.dd['game'] = self.dd['P']/self.dd['rho_eint']+1
          self.dd['gamc'] = self.dd['rho']*self.dd['sound']**2/self.dd['P']
-
 
 def ra_iles(i1,i2,delta=1,path='./rprofs',filename=None,
 path_to_grids='./grids',mode='i',data_path=data,helm_table='helm_table_timmes_x2.dat',pig_table='401x401_pig_table_h2_offset.dat',
@@ -2184,9 +2193,6 @@ class h5grid:
    
     def edot_reacs(self,ix=-1,iy=-1,iz=-1):
         return self.vec4d(self.grid['edot_nuc'],ix=ix,iy=iy,iz=iz)[:self.nreacs]
- 
-    def dXdt_reacs(self,ix=-1,iy=-1,iz=-1):
-        return self.vec5d(self.grid['X_species_dot_reacs'],ix=ix,iy=iy,iz=iz)[:self.nspecies,:self.nreacs]
  
     def dXdt(self,ix=-1,iy=-1,iz=-1):
         return self.vec4d(self.grid['X_species_dot'],ix=ix,iy=iy,iz=iz)[:self.nspecies]

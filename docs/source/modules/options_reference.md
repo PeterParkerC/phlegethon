@@ -265,7 +265,7 @@ For `LHLL-type` solvers, if both low-Mach and supersonic flows need to be captur
 | `boost_reacs_make=100.0_rp` | Boost factor for the nuclear reactions rates. |
 | `BOOST_NEULOSS` | Activates boosting of non-nuclear neutrino losses. |
 | `boost_neuloss_make=10.0_rp` | Boost factor for non-nuclear neutrino losses. |
-| `SAVE_SPECIES_FLUXES` | Saves rate of change of each species due to each reaction (only for `sdims_make=2`). |
+| `SAVE_SPECIES_FLUXES` | Saves rate of change of each species due to each reaction (only for `SAVE_RPROFS`). |
 
 ### 12. Velocity damping
 

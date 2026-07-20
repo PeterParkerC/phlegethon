@@ -1194,7 +1194,7 @@ module source
     real(kind=rp), allocatable, dimension(:,:,:,:) :: X_species_dot
     character(len=filename_size), dimension(1:nreacs) :: name_reacs
 #ifdef SAVE_SPECIES_FLUXES
-    real(kind=rp), allocatable, dimension(:,:,:,:,:) :: X_species_dot_reacs
+    real(kind=rp), allocatable, dimension(:,:) :: X_species_dot_reacs
 #endif
 #endif
 
@@ -1900,7 +1900,7 @@ contains
 #endif   
     allocate(lgrid%X_species_dot(1:nspecies,lx1:ux1,lx2:ux2,lx3:ux3))
 #ifdef SAVE_SPECIES_FLUXES
-    allocate(lgrid%X_species_dot_reacs(1:nspecies,1:nreacs,lx1:ux1,lx2:ux2,lx3:ux3))
+    allocate(lgrid%X_species_dot_reacs(1:nspecies,1:nreacs))
 #endif
     call extract_network_information(lgrid)
 #endif
@@ -3412,13 +3412,6 @@ contains
     call hdf5_write_ndarray(h5,id,"X_species_dot",mgrid,nspecies, &
     mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),0,lgrid%ivol,lgrid%X_species_dot,0)
 
-#if sdims_make==2
-#ifdef SAVE_SPECIES_FLUXES
-    call hdf5_write_nd2array(h5,id,"X_species_dot_reacs",mgrid,nspecies,nreacs, &
-    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),0,lgrid%X_species_dot_reacs)
-#endif
-#endif
-
 #endif
 
     call h5gclose_f(id,error)
@@ -3869,7 +3862,7 @@ contains
     integer(HID_T) :: group_id,plist_id,dset_id
     integer(kind=HSIZE_T), dimension(2) :: gnc
 
-    integer :: error,isp,off
+    integer :: error,isp,off,irc
     integer :: i,j,k,ir,rnv_tot,ierr,rprofs_nv,rprofs_nr
     real(kind=rp), allocatable :: lbuff(:), gbuff(:), vars(:,:) 
     real(kind=rp) :: fac
@@ -3887,6 +3880,9 @@ contains
 #endif
 #ifndef ADVECT_SPECIES
     integer :: nspecies = 0
+#endif
+#ifdef SAVE_SPECIES_FLUXES
+    real(kind=rp) :: rates(1:nreacs),Y0(1:nspecies),T9
 #endif
 
     rho = rp0
@@ -3992,8 +3988,13 @@ contains
 #endif
 
     isp = 0
+    irc = 0
 
     rprofs_nv = 78+nreacs+nas+nas+nas+nspecies+nspecies
+#ifdef SAVE_SPECIES_FLUXES
+    rprofs_nv = rprofs_nv + nspecies*nreacs
+#endif
+
     rprofs_nr = lgrid%rprofs_nr
 
     rnv_tot = rprofs_nv*rprofs_nr
@@ -4619,6 +4620,47 @@ contains
         lbuff((off+30)*rprofs_nr+ir) = lbuff((off+30)*rprofs_nr+ir) + emag*div_vel
         lbuff((off+31)*rprofs_nr+ir) = lbuff((off+31)*rprofs_nr+ir) + b_dot_b_dot_nabla_vel
         lbuff((off+32)*rprofs_nr+ir) = lbuff((off+32)*rprofs_nr+ir) + WL
+
+#ifdef SAVE_SPECIES_FLUXES
+
+        T9 = T*em9
+        do isp=1,nspecies
+         Y0(isp) = lgrid%prim(i_as1+isp-1,i,j,k)/lgrid%A(isp)
+        end do
+        call compute_jina_rates(T9,rates)
+#ifdef USE_LMP_WEAK_RATES
+        ye = rp0
+        do isp=1,nspecies
+         ye = ye + Y0(isp)*lgrid%Z(isp)
+        end do    
+        call compute_weak_rates(rho*ye,T9,lgrid%dt,lgrid%weak_table,lgrid%weak_neu,lgrid%neu_rates,rates)
+#endif
+
+#ifdef PARTITION_FUNCTIONS_FOR_REVERSE_RATES
+        call use_partition_functions(T9,lgrid%temp_part,lgrid%part,rates)
+#endif
+
+#ifdef USE_ELECTRON_SCREENING
+        call screen_rates(rho,T,Y0,rates)
+#endif
+
+#ifdef BOOST_NUCLEAR_REACTIONS
+        do irc=1,nreacs
+         rates(irc) = rates(irc)*boost_reacs 
+        end do
+#endif
+
+        call species_residuals_per_reac(Y0,rho,rates,lgrid%X_species_dot_reacs(:,:))
+
+        error = 1
+        do irc=1,nreacs
+         do isp=1,nspecies
+          lbuff((off+32+error)*rprofs_nr+ir) = lbuff((off+32+error)*rprofs_nr+ir) + lgrid%X_species_dot_reacs(isp,irc)
+          error = error + 1
+         end do
+        end do
+
+#endif
 
        endif
 
@@ -5858,114 +5900,6 @@ contains
     call h5pclose_f(plist_id,err)
 
  end subroutine hdf5_write_ndarray
-
-#if sdims_make==2
-#ifdef SAVE_SPECIES_FLUXES
-
- subroutine hdf5_write_nd2array(h5,group_id,dsetname,mgrid,nv,nr,lx1,ux1,lx2,ux2,lx3,ux3,ghost,vec)
-    type(h5_file) :: h5
-    integer(kind=HID_T), intent(in) :: group_id
-    character(len=*) :: dsetname
-    type(mpigrid), intent(in) :: mgrid
-    integer, intent(in) :: nv,nr
-    integer, intent(in) :: lx1,ux1,lx2,ux2,lx3,ux3,ghost
-    real(kind=rp), dimension(1:nv,1:nr, &
-    lx1-ghost:ux1+ghost, &
-    lx2-ghost:ux2+ghost, &
-#if sdims_make==2
-    lx3:ux3), intent(in) :: vec
-#endif
-#if sdims_make==3
-    lx3-ghost:ux3+ghost), intent(in) :: vec
-#endif
-    integer(kind=HID_T) :: dset_id,filespace,memspace,plist_id
-    integer(kind=HSIZE_T), dimension(5) :: gnc,cnt,off
-    integer(kind=HSIZE_T), dimension(5) :: memcnt,memcnt2,memoff
-    integer :: err
-
-    integer :: nx1l,nx2l,nx3l
-
-    nx1l = ux1-lx1+1
-    nx2l = ux2-lx2+1
-    nx3l = ux3-lx3+1
- 
-    gnc(1) = nv
-    gnc(2) = nr
-    gnc(3) = nx1l*mgrid%bricks(1)
-    gnc(4) = nx2l*mgrid%bricks(2)
-    gnc(5) = nx3l*mgrid%bricks(3)
-
-    call h5screate_simple_f(5,gnc,filespace,err)
-
-    call h5dcreate_f(group_id,dsetname,h5%pref_dtypef,filespace,dset_id,err)
-
-    call h5sclose_f(filespace,err)
-
-    memcnt(1) = nv
-    memcnt(2) = nr
-    memcnt(3) = nx1l + 2*ghost
-    memcnt(4) = nx2l + 2*ghost
-    memcnt(5) = nx3l
-#if sdims_make==3
-    memcnt(5) = nx3l + 2*ghost
-#endif
-
-    call h5screate_simple_f(5,memcnt,memspace,err)
-
-    memcnt2(1) = nv
-    memcnt2(2) = nr
-    memcnt2(3) = nx1l
-    memcnt2(4) = nx2l
-    memcnt2(5) = nx3l
-
-    memoff(1) = 0
-    memoff(2) = 0
-    memoff(3) = ghost
-    memoff(4) = ghost
-#if sdims_make==2
-    memoff(5) = 0
-#endif
-#if sdims_make==3
-    memoff(5) = ghost
-#endif
-
-    call h5sselect_hyperslab_f(memspace,H5S_SELECT_SET_F,memoff,memcnt2,err)
-    
-    cnt(1) = nv
-    cnt(2) = nr
-    cnt(3) = nx1l 
-    cnt(4) = nx2l
-    cnt(5) = nx3l
-
-    off(1) = 0
-    off(2) = 0
-    off(3) = nx1l*mgrid%coords_dd(1)
-    off(4) = nx2l*mgrid%coords_dd(2)
-    off(5) = nx3l*mgrid%coords_dd(3)
-
-    call h5dget_space_f(dset_id,filespace,err)
-    call h5sselect_hyperslab_f(filespace,H5S_SELECT_SET_F,off,cnt,err)
-
-    call h5pcreate_f(H5P_DATASET_XFER_F,plist_id,err)
-    call h5pset_dxpl_mpio_f(plist_id,H5FD_MPIO_COLLECTIVE_F,err)
-
-    call h5dwrite_f(dset_id,h5%pref_dtypef, &
-    vec(1, &
-    1, &
-    lbound(vec,3), &
-    lbound(vec,4), &
-    lbound(vec,5) ), &
-    gnc,err,memspace,filespace,plist_id)
-
-    call h5sclose_f(filespace,err)
-    call h5sclose_f(memspace,err)
-    call h5dclose_f(dset_id,err)
-    call h5pclose_f(plist_id,err)
-
- end subroutine hdf5_write_nd2array
-
-#endif
-#endif
 
  subroutine hdf5_annotate_rp(h5,id,key,val)
     type(h5_file) :: h5
@@ -23826,10 +23760,6 @@ contains
       do iv=1,nreacs
        rates(iv) = rates(iv)*boost_reacs 
       end do
-#endif
-
-#ifdef SAVE_SPECIES_FLUXES
-      call species_residuals_per_reac(Y,rho,rates,lgrid%X_species_dot_reacs(:,:,i,j,k))
 #endif
 
       do iv=1,nreacs

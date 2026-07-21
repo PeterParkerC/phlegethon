@@ -22604,7 +22604,7 @@ contains
 #endif 
      grad_P = sqrt(grad_P)
      rcell = sqrt(rcell)
-     if(div_vel < rp0 .and.  grad_P*rcell / lgrid%prim(i_p,i,j,k) < tthirds) then
+     if((div_vel < rp0) .and.  ((grad_P*rcell / lgrid%prim(i_p,i,j,k)) < tthirds)) then
       exit
      endif
 #endif

@@ -22583,7 +22583,6 @@ contains
 #else
      if(T>nn_Tmin) then
 #endif
-
 #if USE_BURNING_LIMITER
      div_vel = (lgrid%prim(i_vx1,i+1,j,k)-lgrid%prim(i_vx1,i-1,j,k)) / &
         (lgrid%coords(1,i+1,j,k)-lgrid%coords(1,i-1,j,k)) + &
@@ -22605,7 +22604,7 @@ contains
 #endif 
      grad_P = sqrt(grad_P)
      rcell = sqrt(rcell)
-     if((T>nn_Tmin) .and. .not.(div_vel < rp0 .and.  grad_P*rcell / lgrid%prim(i_p,i,j,k) < tthirds)) then
+     if(div_vel < rp0 .and.  grad_P*rcell / lgrid%prim(i_p,i,j,k) < tthirds) then
       exit
      endif
 #endif

@@ -178,7 +178,7 @@ module source
 #ifdef eps_sf_make
   eps_sf_make
 #else
-  0.25_rp
+  0.1_rp
 #endif
 
  real(kind=rp), parameter :: Mach_ct = &
@@ -276,11 +276,54 @@ module source
 #endif
 #endif
 
+#ifdef USE_GRAVITY_SOLVER
+
  real(kind=rp), parameter :: gs_tol = &
 #ifdef gs_tol_make
   gs_tol_make
 #else
-  1.0e-4_rp
+  1.0e-8_rp
+#endif
+
+#ifdef GMG_PRECONDITIONER
+
+ integer, parameter :: gmg_max_level = &
+#ifdef gmg_max_level_make
+  gmg_max_level_make
+#else
+  1
+#endif
+
+ integer, parameter :: gmg_niter_coarse = &
+#ifdef gmg_niter_coarse_make
+  gmg_niter_coarse_make
+#else
+  1
+#endif
+
+ integer, parameter :: gmg_niter_presmooth = &
+#ifdef gmg_niter_presmooth_make
+  gmg_niter_presmooth_make
+#else
+  1
+#endif
+
+ integer, parameter :: gmg_niter_postsmooth = &
+#ifdef gmg_niter_postsmooth_make
+  gmg_niter_postsmooth_make
+#else
+  1
+#endif
+
+ real(kind=rp) :: gmg_omega = &
+#ifdef gmg_omega_make
+  gmg_omega_make
+#else
+  0.85_rp
+#endif
+
+#endif
+
 #endif
 
 #ifdef USE_NUCLEAR_NETWORK
@@ -444,6 +487,39 @@ module source
 #endif
 #endif
 
+#ifdef SAVE_RAYS
+ integer, parameter :: rays_nx1_comp = &
+#ifdef rays_nx1_comp_make
+  rays_nx1_comp_make
+#else
+  1
+#endif
+ integer, parameter :: rays_nx2_comp = &
+#ifdef rays_nx2_comp_make
+  rays_nx2_comp_make
+#else
+  1
+#endif
+ integer, parameter :: rays_nx3_comp = &
+#ifdef rays_nx3_comp_make
+  rays_nx3_comp_make
+#else
+  1
+#endif
+ real(kind=rp), parameter :: rays_dt_dump = &
+#ifdef rays_dt_dump_make
+  rays_dt_dump_make
+#else
+  1.5_rp
+#endif
+ integer, parameter :: rays_nvars = &
+#ifdef USE_MHD
+ nvars_make + 2*sdims + 1
+#else
+ nvars_make + sdims + 1
+#endif
+#endif
+
 #ifdef SAVE_SPHERICAL_PROJECTIONS
  integer, parameter :: nspj = &
 #ifdef nspj_make
@@ -466,6 +542,15 @@ module source
   nprobes_make
 #else
   2
+#endif
+#endif
+
+#ifdef USERDEF_OUTPUT
+ integer, parameter :: nudvars = &
+#ifdef nudvars_make
+  nudvars_make
+#else
+  1
 #endif
 #endif
 
@@ -755,6 +840,29 @@ module source
 #endif
 
  !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+ ! GRAVITY SOLVER UTILS
+ !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+#ifdef GMG_PRECONDITIONER
+
+ type gmg_vecs
+
+    real(kind=rp), allocatable, dimension(:,:,:) :: eh
+    real(kind=rp), allocatable, dimension(:,:,:) :: rh
+    real(kind=rp), allocatable, dimension(:,:,:) :: tmp
+    real(kind=rp), allocatable, dimension(:,:,:,:) :: coords
+    real(kind=rp), allocatable, dimension(:,:,:,:) :: nodes
+    real(kind=rp), allocatable, dimension(:,:,:) :: coords_x1
+    real(kind=rp), allocatable, dimension(:,:,:) :: coords_x2
+    real(kind=rp), allocatable, dimension(:,:,:) :: coords_x3
+    real(kind=rp), allocatable, dimension(:,:,:) :: vol
+    integer, dimension(3) :: i1,i2
+
+ end type
+
+#endif
+
+ !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
  ! RIEMANN SOLVER UTILS
  !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
@@ -829,6 +937,11 @@ module source
     integer :: comm_cart,wsize,rankl,nx1l,nx2l,nx3l
     real(kind=rp) :: wctgi    
     real(kind=rp) :: dummy
+
+#ifdef SAVE_RAYS
+    integer :: rays_i1(1:3),rays_i2(1:3)
+    integer :: rays_nx1,rays_nx2,rays_nx3
+#endif
 
  end type mpigrid
  
@@ -917,6 +1030,10 @@ module source
 
     type(r_utils) :: ru
 
+#ifdef GMG_PRECONDITIONER
+    type(gmg_vecs) :: gmgv(1:gmg_max_level)
+#endif
+
 #ifdef USE_GRAVITY
 
     real(kind=rp), allocatable, dimension(:,:,:,:) :: grav
@@ -949,7 +1066,7 @@ module source
 
 #ifdef USE_GRAVITY_SOLVER
     real(kind=rp), allocatable, dimension(:,:,:) :: &
-    r0hat,rgs,v,t,p,s
+    r0hat,rgs,v,t,p,s,y,z
 #endif
 
 #endif
@@ -1077,7 +1194,7 @@ module source
     real(kind=rp), allocatable, dimension(:,:,:,:) :: X_species_dot
     character(len=filename_size), dimension(1:nreacs) :: name_reacs
 #ifdef SAVE_SPECIES_FLUXES
-    real(kind=rp), allocatable, dimension(:,:,:,:,:) :: X_species_dot_reacs
+    real(kind=rp), allocatable, dimension(:,:) :: X_species_dot_reacs
 #endif
 #endif
 
@@ -1085,6 +1202,10 @@ module source
     integer, dimension(1:nprobes,1:3) :: pp_index
     logical, dimension(1:nprobes) :: pp_inside_domain
     real(kind=rp), dimension(1:nprobes,10000,i_rho:i_p+n_probe_vars) :: pp_state
+#endif
+
+#ifdef USERDEF_OUTPUT
+    real(kind=rp), dimension(10000,nudvars) :: ud_state
 #endif
 
 #ifdef SAVE_RPROFS
@@ -1125,6 +1246,11 @@ module source
 
 #ifdef USE_SHOCK_FLATTENING
     integer, allocatable, dimension(:,:,:) :: is_flattened
+#endif
+
+#ifdef SAVE_RAYS
+    real(kind=rp), allocatable, dimension(:,:,:,:) :: rays
+    integer :: rays_dstep_dump,rays_inextoutput
 #endif
 
  end type locgrid
@@ -1504,6 +1630,82 @@ contains
     lx3-1:ux3+1))
 #endif 
 
+    allocate(lgrid%y(lx1-1:ux1+1,lx2-1:ux2+1, &
+#if sdims_make==2
+    lx3:ux3))
+#endif
+#if sdims_make==3
+    lx3-1:ux3+1))
+#endif 
+
+    allocate(lgrid%z(lx1-1:ux1+1,lx2-1:ux2+1, &
+#if sdims_make==2
+    lx3:ux3))
+#endif
+#if sdims_make==3
+    lx3-1:ux3+1))
+#endif 
+
+#ifdef GMG_PRECONDITIONER
+
+    do ierr=1,gmg_max_level
+
+     lgrid%gmgv(ierr)%i1(1) = int((lx1-1)/2**(ierr-1))+1
+     lgrid%gmgv(ierr)%i1(2) = int((lx2-1)/2**(ierr-1))+1
+     lgrid%gmgv(ierr)%i1(3) = int((lx3-1)/2**(ierr-1))+1
+     lgrid%gmgv(ierr)%i2(1) = int(ux1/2**(ierr-1))
+     lgrid%gmgv(ierr)%i2(2) = int(ux2/2**(ierr-1))
+     lgrid%gmgv(ierr)%i2(3) = int(ux3/2**(ierr-1))
+
+     allocate(lgrid%gmgv(ierr)%eh( &
+     lgrid%gmgv(ierr)%i1(1)-1:lgrid%gmgv(ierr)%i2(1)+1, &
+     lgrid%gmgv(ierr)%i1(2)-1:lgrid%gmgv(ierr)%i2(2)+1, &
+     lgrid%gmgv(ierr)%i1(3)-1:lgrid%gmgv(ierr)%i2(3)+1 ) )
+
+     allocate(lgrid%gmgv(ierr)%rh( &
+     lgrid%gmgv(ierr)%i1(1)-1:lgrid%gmgv(ierr)%i2(1)+1, &
+     lgrid%gmgv(ierr)%i1(2)-1:lgrid%gmgv(ierr)%i2(2)+1, &
+     lgrid%gmgv(ierr)%i1(3)-1:lgrid%gmgv(ierr)%i2(3)+1 ) )
+
+     allocate(lgrid%gmgv(ierr)%tmp( &
+     lgrid%gmgv(ierr)%i1(1)-1:lgrid%gmgv(ierr)%i2(1)+1, &
+     lgrid%gmgv(ierr)%i1(2)-1:lgrid%gmgv(ierr)%i2(2)+1, &
+     lgrid%gmgv(ierr)%i1(3)-1:lgrid%gmgv(ierr)%i2(3)+1 ) )
+
+     allocate(lgrid%gmgv(ierr)%coords(1:3, &
+     lgrid%gmgv(ierr)%i1(1)-1:lgrid%gmgv(ierr)%i2(1)+1, &
+     lgrid%gmgv(ierr)%i1(2)-1:lgrid%gmgv(ierr)%i2(2)+1, &
+     lgrid%gmgv(ierr)%i1(3)-1:lgrid%gmgv(ierr)%i2(3)+1 ) )
+
+     allocate(lgrid%gmgv(ierr)%nodes(1:3, &
+     lgrid%gmgv(ierr)%i1(1)-1:lgrid%gmgv(ierr)%i2(1)+1+1, &
+     lgrid%gmgv(ierr)%i1(2)-1:lgrid%gmgv(ierr)%i2(2)+1+1, &
+     lgrid%gmgv(ierr)%i1(3)-1:lgrid%gmgv(ierr)%i2(3)+1+1 ) )
+
+     allocate(lgrid%gmgv(ierr)%coords_x1( &
+     lgrid%gmgv(ierr)%i1(1)-1:lgrid%gmgv(ierr)%i2(1)+1+1, &
+     lgrid%gmgv(ierr)%i1(2)-1:lgrid%gmgv(ierr)%i2(2)+1, &
+     lgrid%gmgv(ierr)%i1(3)-1:lgrid%gmgv(ierr)%i2(3)+1 ) )
+
+     allocate(lgrid%gmgv(ierr)%coords_x2( &
+     lgrid%gmgv(ierr)%i1(1)-1:lgrid%gmgv(ierr)%i2(1)+1, &
+     lgrid%gmgv(ierr)%i1(2)-1:lgrid%gmgv(ierr)%i2(2)+1+1, &
+     lgrid%gmgv(ierr)%i1(3)-1:lgrid%gmgv(ierr)%i2(3)+1 ) )
+
+     allocate(lgrid%gmgv(ierr)%coords_x3( &
+     lgrid%gmgv(ierr)%i1(1)-1:lgrid%gmgv(ierr)%i2(1)+1, &
+     lgrid%gmgv(ierr)%i1(2)-1:lgrid%gmgv(ierr)%i2(2)+1, &
+     lgrid%gmgv(ierr)%i1(3)-1:lgrid%gmgv(ierr)%i2(3)+1+1 ) )
+
+     allocate(lgrid%gmgv(ierr)%vol( &
+     lgrid%gmgv(ierr)%i1(1)-1:lgrid%gmgv(ierr)%i2(1)+1, &
+     lgrid%gmgv(ierr)%i1(2)-1:lgrid%gmgv(ierr)%i2(2)+1, &
+     lgrid%gmgv(ierr)%i1(3)-1:lgrid%gmgv(ierr)%i2(3)+1 ) )
+
+    end do
+
+#endif
+
 #endif
 
 #endif
@@ -1698,7 +1900,7 @@ contains
 #endif   
     allocate(lgrid%X_species_dot(1:nspecies,lx1:ux1,lx2:ux2,lx3:ux3))
 #ifdef SAVE_SPECIES_FLUXES
-    allocate(lgrid%X_species_dot_reacs(1:nspecies,1:nreacs,lx1:ux1,lx2:ux2,lx3:ux3))
+    allocate(lgrid%X_species_dot_reacs(1:nspecies,1:nreacs))
 #endif
     call extract_network_information(lgrid)
 #endif
@@ -1860,6 +2062,11 @@ contains
 
 #endif
 
+#ifdef SAVE_RAYS
+    lgrid%rays_dstep_dump = 0
+    lgrid%rays_inextoutput = 0
+#endif
+
 #ifdef SAVE_PLANES
     lgrid%planes_dstep_dump = 0
     lgrid%planes_inextoutput = 0
@@ -1876,6 +2083,28 @@ contains
 #if sdims_make==3
     allocate(lgrid%ru%is_flattened(3)%val(lx3:ux3+1))
 #endif
+#endif
+
+#ifdef SAVE_RAYS
+
+    mgrid%rays_nx1 = int((ux1-lx1+1)/rays_nx1_comp)
+    mgrid%rays_nx2 = int((ux2-lx2+1)/rays_nx2_comp)
+    mgrid%rays_nx3 = int((ux3-lx3+1)/rays_nx3_comp)
+
+    mgrid%rays_i1(1) = int(mgrid%coords_dd(1)*mgrid%rays_nx1+1)
+    mgrid%rays_i2(1) = int((mgrid%coords_dd(1)+1)*mgrid%rays_nx1)
+
+    mgrid%rays_i1(2) = int(mgrid%coords_dd(2)*mgrid%rays_nx2+1)
+    mgrid%rays_i2(2) = int((mgrid%coords_dd(2)+1)*mgrid%rays_nx2)
+
+    mgrid%rays_i1(3) = int(mgrid%coords_dd(3)*mgrid%rays_nx3+1)
+    mgrid%rays_i2(3) = int((mgrid%coords_dd(3)+1)*mgrid%rays_nx3)
+
+    allocate(lgrid%rays(1:rays_nvars, &
+    mgrid%rays_i1(1):mgrid%rays_i2(1), &
+    mgrid%rays_i1(2):mgrid%rays_i2(2), &
+    mgrid%rays_i1(3):mgrid%rays_i2(3)))
+     
 #endif
 
     call h5open_f(ierr)
@@ -1957,6 +2186,21 @@ contains
     deallocate(lgrid%t)
     deallocate(lgrid%p)
     deallocate(lgrid%s)
+    deallocate(lgrid%y)
+    deallocate(lgrid%z)
+#ifdef GMG_PRECONDITIONER
+    do ierr=1,gmg_max_level
+     deallocate(lgrid%gmgv(ierr)%eh)
+     deallocate(lgrid%gmgv(ierr)%rh)
+     deallocate(lgrid%gmgv(ierr)%tmp)
+     deallocate(lgrid%gmgv(ierr)%coords)
+     deallocate(lgrid%gmgv(ierr)%nodes)
+     deallocate(lgrid%gmgv(ierr)%coords_x1)
+     deallocate(lgrid%gmgv(ierr)%coords_x2)
+     deallocate(lgrid%gmgv(ierr)%coords_x3)
+     deallocate(lgrid%gmgv(ierr)%vol)
+    end do
+#endif
 #endif
 
 #endif
@@ -2212,6 +2456,10 @@ contains
     deallocate(lgrid%rprofs_ir)
     deallocate(lgrid%rprofs_counts)
     deallocate(lgrid%rprofs_r)
+#endif
+
+#ifdef SAVE_RAYS
+    deallocate(lgrid%rays)
 #endif
 
  end subroutine finalize_simulation
@@ -2567,6 +2815,11 @@ contains
     call hdf5_annotate_ip(h5,id,"rprofs_dstep_dump",lgrid%rprofs_dstep_dump)
 #endif
 
+#ifdef SAVE_RAYS
+    call hdf5_annotate_ip(h5,id,"rays_inextoutput",lgrid%rays_inextoutput)
+    call hdf5_annotate_ip(h5,id,"rays_dstep_dump",lgrid%rays_dstep_dump)
+#endif
+
 #ifdef SAVE_PLANES
     call hdf5_annotate_ip(h5,id,"planes_inextoutput",lgrid%planes_inextoutput)
     call hdf5_annotate_ip(h5,id,"planes_dstep_dump",lgrid%planes_dstep_dump)
@@ -2880,6 +3133,11 @@ contains
     call read_ip(h5,group_id,"rprofs_inextoutput",lgrid%rprofs_inextoutput)
 #endif
 
+#ifdef SAVE_RAYS
+    call read_ip(h5,group_id,"rays_dstep_dump",lgrid%rays_dstep_dump)
+    call read_ip(h5,group_id,"rays_inextoutput",lgrid%rays_inextoutput)
+#endif
+
 #ifdef SAVE_PLANES
     call read_ip(h5,group_id,"planes_dstep_dump",lgrid%planes_dstep_dump)
     call read_ip(h5,group_id,"planes_inextoutput",lgrid%planes_inextoutput)
@@ -3154,19 +3412,153 @@ contains
     call hdf5_write_ndarray(h5,id,"X_species_dot",mgrid,nspecies, &
     mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),0,lgrid%ivol,lgrid%X_species_dot,0)
 
-#if sdims_make==2
-#ifdef SAVE_SPECIES_FLUXES
-    call hdf5_write_nd2array(h5,id,"X_species_dot_reacs",mgrid,nspecies,nreacs, &
-    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),0,lgrid%X_species_dot_reacs)
-#endif
-#endif
-
 #endif
 
     call h5gclose_f(id,error)
     call h5fclose_f(h5%file_id,error)
 
  end subroutine write_output
+
+#ifdef SAVE_RAYS
+ 
+ subroutine write_rays(mgrid,lgrid)
+    type(mpigrid), intent(in) :: mgrid
+    type(locgrid), intent(inout) :: lgrid
+
+    type(h5_file) :: h5
+
+    integer :: error,i,j,k,iv
+    integer(HID_T) :: id,plist_id
+
+    write(h5%filename, "('./rays/rays_n',I0.5,'.h5')") lgrid%step
+
+    call h5pcreate_f(H5P_FILE_ACCESS_F,plist_id,error)
+
+    call h5pset_fapl_mpio_f(plist_id,mgrid%comm_cart,MPI_INFO_NULL,error)
+
+    call h5fcreate_f(h5%filename,H5F_ACC_TRUNC_F,h5%file_id,error,H5P_DEFAULT_F,plist_id)
+  
+    call h5pclose_f(plist_id,error)
+
+#ifdef USE_SINGLE_PRECISION 
+#ifdef LITTLE_ENDIAN
+    h5%pref_dtypef = H5T_IEEE_F32LE
+#endif
+#ifdef BIG_ENDIAN
+    h5%pref_dtypef = H5T_IEEE_F32BE
+#endif
+#endif
+
+#ifdef USE_DOUBLE_PRECISION
+#ifdef LITTLE_ENDIAN
+    h5%pref_dtypef = H5T_IEEE_F64LE
+#endif
+#ifdef BIG_ENDIAN
+    h5%pref_dtypef = H5T_IEEE_F64BE
+#endif
+#endif
+
+#ifdef LITTLE_ENDIAN
+    h5%pref_dtypei = H5T_STD_I32LE
+#endif
+#ifdef BIG_ENDIAN
+    h5%pref_dtypei = H5T_STD_I32BE
+#endif
+
+    call h5gcreate_f(h5%file_id,"grid", id, error)
+    call hdf5_annotate_rp(h5,id,"time",lgrid%time)
+    call hdf5_annotate_rp(h5,id,"dt",lgrid%dt)
+    call hdf5_annotate_ip(h5,id,"step",lgrid%step)
+
+    if(lgrid%step==0) then
+ 
+      call hdf5_annotate_rp(h5,id,"gamma_ad",lgrid%gm)
+      call hdf5_annotate_rp(h5,id,"mu",lgrid%mu)
+      call hdf5_annotate_rp(h5,id,"x1l",lgrid%x1l)
+      call hdf5_annotate_rp(h5,id,"x1u",lgrid%x1u)
+      call hdf5_annotate_rp(h5,id,"x2l",lgrid%x2l)
+      call hdf5_annotate_rp(h5,id,"x2u",lgrid%x2u)
+      call hdf5_annotate_rp(h5,id,"x3l",lgrid%x3l)
+      call hdf5_annotate_rp(h5,id,"x3u",lgrid%x3u)
+      call hdf5_annotate_ip(h5,id,"sdims",sdims)
+      call hdf5_annotate_ip(h5,id,"nx1",mgrid%rays_nx1)
+      call hdf5_annotate_ip(h5,id,"nx2",mgrid%rays_nx2)
+      call hdf5_annotate_ip(h5,id,"nx3",mgrid%rays_nx3)
+      call hdf5_annotate_ip(h5,id,"nvars",nvars)
+
+#ifdef GEOMETRY_2D_POLAR
+      call hdf5_annotate_string(id,"geometry-type","2d-polar")
+#endif
+
+#ifdef GEOMETRY_2D_SPHERICAL
+      call hdf5_annotate_string(id,"geometry-type","2d-spherical")
+#endif
+
+#ifdef GEOMETRY_3D_SPHERICAL
+      call hdf5_annotate_string(id,"geometry-type","3d-spherical")
+#endif
+
+#ifdef USE_MHD
+      call hdf5_annotate_string(id,"use_mhd","true")
+#else
+      call hdf5_annotate_string(id,"use_mhd","false")
+#endif
+
+    endif
+
+    do k=mgrid%rays_i1(3),mgrid%rays_i2(3)
+     do j=mgrid%rays_i1(2),mgrid%rays_i2(2)
+      do i=mgrid%rays_i1(1),mgrid%rays_i2(1)
+
+       do iv=1,nvars
+        lgrid%rays(iv,i,j,k) = lgrid%prim(iv, &
+        (i-1)*rays_nx1_comp+1, & 
+        (j-1)*rays_nx2_comp+1, & 
+        (k-1)*rays_nx3_comp+1 )
+       end do
+ 
+       lgrid%rays(nvars+1,i,j,k) = lgrid%temp( &
+       (i-1)*rays_nx1_comp+1, & 
+       (j-1)*rays_nx2_comp+1, & 
+       (k-1)*rays_nx3_comp+1 )
+ 
+#ifdef USE_MHD
+       do iv=1,sdims
+        lgrid%rays(nvars+1+iv,i,j,k) = lgrid%b_cc(iv, &
+        (i-1)*rays_nx1_comp+1, & 
+        (j-1)*rays_nx2_comp+1, & 
+        (k-1)*rays_nx3_comp+1 )
+       end do
+       
+       do iv=1,sdims
+        lgrid%rays(nvars+1+sdims+iv,i,j,k) = lgrid%coords(iv, &
+        (i-1)*rays_nx1_comp+1, & 
+        (j-1)*rays_nx2_comp+1, & 
+        (k-1)*rays_nx3_comp+1 )
+       end do
+#else
+       do iv=1,sdims
+        lgrid%rays(nvars+1+iv,i,j,k) = lgrid%coords(iv, &
+        (i-1)*rays_nx1_comp+1, & 
+        (j-1)*rays_nx2_comp+1, & 
+        (k-1)*rays_nx3_comp+1 )
+       end do
+#endif
+
+      end do
+     end do
+    end do
+
+    call hdf5_write_ndarray(h5,id,"rays",mgrid,rays_nvars, &
+    mgrid%rays_i1(1),mgrid%rays_i2(1),mgrid%rays_i1(2),mgrid%rays_i2(2), &
+    mgrid%rays_i1(3),mgrid%rays_i2(3),0,lgrid%rays(1,:,:,:),lgrid%rays,0)
+
+    call h5gclose_f(id,error)
+    call h5fclose_f(h5%file_id,error)
+
+ end subroutine write_rays
+
+#endif
 
 #ifdef SAVE_SPHERICAL_PROJECTIONS
  
@@ -3470,7 +3862,7 @@ contains
     integer(HID_T) :: group_id,plist_id,dset_id
     integer(kind=HSIZE_T), dimension(2) :: gnc
 
-    integer :: error,isp,off
+    integer :: error,isp,off,irc
     integer :: i,j,k,ir,rnv_tot,ierr,rprofs_nv,rprofs_nr
     real(kind=rp), allocatable :: lbuff(:), gbuff(:), vars(:,:) 
     real(kind=rp) :: fac
@@ -3488,6 +3880,9 @@ contains
 #endif
 #ifndef ADVECT_SPECIES
     integer :: nspecies = 0
+#endif
+#ifdef SAVE_SPECIES_FLUXES
+    real(kind=rp) :: rates(1:nreacs),Y0(1:nspecies),T9
 #endif
 
     rho = rp0
@@ -3593,8 +3988,13 @@ contains
 #endif
 
     isp = 0
+    irc = 0
 
     rprofs_nv = 78+nreacs+nas+nas+nas+nspecies+nspecies
+#ifdef SAVE_SPECIES_FLUXES
+    rprofs_nv = rprofs_nv + nspecies*nreacs
+#endif
+
     rprofs_nr = lgrid%rprofs_nr
 
     rnv_tot = rprofs_nv*rprofs_nr
@@ -4220,6 +4620,47 @@ contains
         lbuff((off+30)*rprofs_nr+ir) = lbuff((off+30)*rprofs_nr+ir) + emag*div_vel
         lbuff((off+31)*rprofs_nr+ir) = lbuff((off+31)*rprofs_nr+ir) + b_dot_b_dot_nabla_vel
         lbuff((off+32)*rprofs_nr+ir) = lbuff((off+32)*rprofs_nr+ir) + WL
+
+#ifdef SAVE_SPECIES_FLUXES
+
+        T9 = T*em9
+        do isp=1,nspecies
+         Y0(isp) = lgrid%prim(i_as1+isp-1,i,j,k)/lgrid%A(isp)
+        end do
+        call compute_jina_rates(T9,rates)
+#ifdef USE_LMP_WEAK_RATES
+        ye = rp0
+        do isp=1,nspecies
+         ye = ye + Y0(isp)*lgrid%Z(isp)
+        end do    
+        call compute_weak_rates(rho*ye,T9,lgrid%dt,lgrid%weak_table,lgrid%weak_neu,lgrid%neu_rates,rates)
+#endif
+
+#ifdef PARTITION_FUNCTIONS_FOR_REVERSE_RATES
+        call use_partition_functions(T9,lgrid%temp_part,lgrid%part,rates)
+#endif
+
+#ifdef USE_ELECTRON_SCREENING
+        call screen_rates(rho,T,Y0,rates)
+#endif
+
+#ifdef BOOST_NUCLEAR_REACTIONS
+        do irc=1,nreacs
+         rates(irc) = rates(irc)*boost_reacs 
+        end do
+#endif
+
+        call species_residuals_per_reac(Y0,rho,rates,lgrid%X_species_dot_reacs(:,:))
+
+        error = 1
+        do irc=1,nreacs
+         do isp=1,nspecies
+          lbuff((off+32+error)*rprofs_nr+ir) = lbuff((off+32+error)*rprofs_nr+ir) + lgrid%X_species_dot_reacs(isp,irc)
+          error = error + 1
+         end do
+        end do
+
+#endif
 
        endif
 
@@ -5460,114 +5901,6 @@ contains
 
  end subroutine hdf5_write_ndarray
 
-#if sdims_make==2
-#ifdef SAVE_SPECIES_FLUXES
-
- subroutine hdf5_write_nd2array(h5,group_id,dsetname,mgrid,nv,nr,lx1,ux1,lx2,ux2,lx3,ux3,ghost,vec)
-    type(h5_file) :: h5
-    integer(kind=HID_T), intent(in) :: group_id
-    character(len=*) :: dsetname
-    type(mpigrid), intent(in) :: mgrid
-    integer, intent(in) :: nv,nr
-    integer, intent(in) :: lx1,ux1,lx2,ux2,lx3,ux3,ghost
-    real(kind=rp), dimension(1:nv,1:nr, &
-    lx1-ghost:ux1+ghost, &
-    lx2-ghost:ux2+ghost, &
-#if sdims_make==2
-    lx3:ux3), intent(in) :: vec
-#endif
-#if sdims_make==3
-    lx3-ghost:ux3+ghost), intent(in) :: vec
-#endif
-    integer(kind=HID_T) :: dset_id,filespace,memspace,plist_id
-    integer(kind=HSIZE_T), dimension(5) :: gnc,cnt,off
-    integer(kind=HSIZE_T), dimension(5) :: memcnt,memcnt2,memoff
-    integer :: err
-
-    integer :: nx1l,nx2l,nx3l
-
-    nx1l = ux1-lx1+1
-    nx2l = ux2-lx2+1
-    nx3l = ux3-lx3+1
- 
-    gnc(1) = nv
-    gnc(2) = nr
-    gnc(3) = nx1l*mgrid%bricks(1)
-    gnc(4) = nx2l*mgrid%bricks(2)
-    gnc(5) = nx3l*mgrid%bricks(3)
-
-    call h5screate_simple_f(5,gnc,filespace,err)
-
-    call h5dcreate_f(group_id,dsetname,h5%pref_dtypef,filespace,dset_id,err)
-
-    call h5sclose_f(filespace,err)
-
-    memcnt(1) = nv
-    memcnt(2) = nr
-    memcnt(3) = nx1l + 2*ghost
-    memcnt(4) = nx2l + 2*ghost
-    memcnt(5) = nx3l
-#if sdims_make==3
-    memcnt(5) = nx3l + 2*ghost
-#endif
-
-    call h5screate_simple_f(5,memcnt,memspace,err)
-
-    memcnt2(1) = nv
-    memcnt2(2) = nr
-    memcnt2(3) = nx1l
-    memcnt2(4) = nx2l
-    memcnt2(5) = nx3l
-
-    memoff(1) = 0
-    memoff(2) = 0
-    memoff(3) = ghost
-    memoff(4) = ghost
-#if sdims_make==2
-    memoff(5) = 0
-#endif
-#if sdims_make==3
-    memoff(5) = ghost
-#endif
-
-    call h5sselect_hyperslab_f(memspace,H5S_SELECT_SET_F,memoff,memcnt2,err)
-    
-    cnt(1) = nv
-    cnt(2) = nr
-    cnt(3) = nx1l 
-    cnt(4) = nx2l
-    cnt(5) = nx3l
-
-    off(1) = 0
-    off(2) = 0
-    off(3) = nx1l*mgrid%coords_dd(1)
-    off(4) = nx2l*mgrid%coords_dd(2)
-    off(5) = nx3l*mgrid%coords_dd(3)
-
-    call h5dget_space_f(dset_id,filespace,err)
-    call h5sselect_hyperslab_f(filespace,H5S_SELECT_SET_F,off,cnt,err)
-
-    call h5pcreate_f(H5P_DATASET_XFER_F,plist_id,err)
-    call h5pset_dxpl_mpio_f(plist_id,H5FD_MPIO_COLLECTIVE_F,err)
-
-    call h5dwrite_f(dset_id,h5%pref_dtypef, &
-    vec(1, &
-    1, &
-    lbound(vec,3), &
-    lbound(vec,4), &
-    lbound(vec,5) ), &
-    gnc,err,memspace,filespace,plist_id)
-
-    call h5sclose_f(filespace,err)
-    call h5sclose_f(memspace,err)
-    call h5dclose_f(dset_id,err)
-    call h5pclose_f(plist_id,err)
-
- end subroutine hdf5_write_nd2array
-
-#endif
-#endif
-
  subroutine hdf5_annotate_rp(h5,id,key,val)
     type(h5_file) :: h5
     integer(kind=HID_T), intent(in) :: id
@@ -5700,7 +6033,7 @@ contains
 #ifdef RESTART_LAST
     integer :: step_tmp(1)
 #endif
-    integer :: ierr,iv,res_nr,iflush,max_T_met,step0
+    integer :: ierr,iv,res_nr,iflush,max_T_met,step0,iudflush
     integer :: i,j,k,ipr,iter
     integer :: lx1,ux1,lx2,ux2,lx3,ux3
     real(kind=rp) :: abar,eint,gm,gmm1,igmm1,p,rho,sound,sound2,T,ye,zbar,dp_drho,dp_deps
@@ -5753,7 +6086,7 @@ contains
     iv = idummy
     res_nr = idummy
     iflush = idummy
-
+    iudflush = idummy
     ipr = idummy
     iter = idummy
 
@@ -5862,6 +6195,10 @@ contains
       end do
      end do
     end do
+
+#ifdef GMG_PRECONDITIONER
+    call fill_gmg_grids(mgrid,lgrid)
+#endif
 
 #ifdef USE_POINT_PROBES
     
@@ -6391,6 +6728,10 @@ contains
      lgrid%rprofs_dstep_dump = nint(rprofs_dt_dump/lgrid%dt)
 #endif
 
+#ifdef SAVE_RAYS
+     lgrid%rays_dstep_dump = nint(rays_dt_dump/lgrid%dt)
+#endif
+
 #ifdef SAVE_PLANES
      lgrid%planes_dstep_dump = nint(planes_dt_dump/lgrid%dt)
 #endif
@@ -6524,6 +6865,33 @@ contains
 
     do while((lgrid%time<tmax).and.(lgrid%step<stepmax).and.(wctg<wctmax).and.(max_T_met<1))
 
+#ifdef USERDEF_OUTPUT
+
+       iudflush = iudflush + 1
+ 
+       call extract_userdef_quantities(mgrid,lgrid,iudflush)
+ 
+       if(mgrid%rankl==master_rank) then
+
+          if(iudflush==10000) then
+
+           open(newunit=iv,file='./udos/udo_'//trim(str(lgrid%step))//'.dat', &
+           status='replace',action='write',form='unformatted',access='stream')
+
+           do i=1,10000
+            write(iv) (lgrid%ud_state(i,ipr),ipr=1,nudvars)
+           end do
+ 
+           close(iv)
+
+          end if
+
+       end if
+
+       if(iudflush==10000) iudflush=0
+
+#endif
+
 #ifdef USE_POINT_PROBES
  
        iflush = iflush + 1
@@ -6612,6 +6980,14 @@ contains
         call mpi_barrier(mgrid%comm_cart,ierr)
         call write_planes(mgrid,lgrid)
         lgrid%planes_inextoutput = lgrid%planes_inextoutput + lgrid%planes_dstep_dump
+       end if
+#endif
+
+#ifdef SAVE_RAYS
+       if(lgrid%step==lgrid%rays_inextoutput) then
+        call mpi_barrier(mgrid%comm_cart,ierr)
+        call write_rays(mgrid,lgrid)
+        lgrid%rays_inextoutput = lgrid%rays_inextoutput + lgrid%rays_dstep_dump
        end if
 #endif
 
@@ -6777,6 +7153,13 @@ contains
     end if
 #endif
 
+#ifdef SAVE_RAYS
+    if((lgrid%step==lgrid%rays_inextoutput) .or. (lgrid%time>=tmax) .or. (lgrid%step==stepmax)) then
+      call write_rays(mgrid,lgrid) 
+      lgrid%rays_inextoutput = lgrid%rays_inextoutput + lgrid%rays_dstep_dump
+    end if
+#endif
+
 #ifdef SAVE_SPHERICAL_PROJECTIONS
     if((lgrid%step==lgrid%spj_inextoutput) .or. (lgrid%time>=tmax) .or. (lgrid%step==stepmax)) then
 #ifndef SAVE_RPROFS
@@ -6794,6 +7177,27 @@ contains
     end if
 #endif
 
+#ifdef USERDEF_OUTPUT
+
+    if(iudflush>0) then    
+
+     if(mgrid%rankl==master_rank) then
+
+      open(newunit=iv,file='./udos/udo_'//trim(str(lgrid%step-1))//'.dat', &
+      status='replace',action='write',form='unformatted',access='stream')
+
+      do i=1,iudflush
+       write(iv) (lgrid%ud_state(i,ipr),ipr=1,nudvars)
+      end do
+ 
+      close(iv)
+
+     end if
+
+    end if
+
+#endif
+ 
 #ifdef USE_POINT_PROBES
 
     if(iflush>0) then    
@@ -6818,6 +7222,7 @@ contains
     end if
 
 #endif
+
     call mpi_barrier(mgrid%comm_cart,ierr)
     call write_restart(mgrid,lgrid)
 
@@ -6833,7 +7238,8 @@ contains
       wct_hydro/real(lgrid%step-step0,kind=rp)/real(mgrid%nx1l*mgrid%nx2l*mgrid%nx3l,kind=rp)*1.0e6_rp
       write(*,'("updated cells/s = ",E9.3)') & 
       (lgrid%step-step0)*(real(nx1,kind=rp)*real(nx2,kind=rp)*real(nx3,kind=rp))/wct_hydro 
-      write(*,'("total wct (no output) = ",E9.3," s")') wct_hydro
+      write(*,'("total wct time step (no output) = ",E9.3," s")') wct_hydro
+      write(*,'("total wct = ",E9.3," s")') wctg 
       write(*,'("wct single output = ",E9.3," s")') wctof-wctoi
 
     endif
@@ -8823,10 +9229,10 @@ contains
            slope = rp0
 
            if(prod>rp0) then
-            slope=prod/(slopef+slopeb)
+            slope= sign(rp1,slopef)*min(abs(slopeb),abs(slopef))
            endif
 
-           tmp = slope
+           tmp = rph*slope
            qLbuf(iv) = qc - tmp
            qRbuf(iv) = qc + tmp
 
@@ -8871,10 +9277,10 @@ contains
            slope = rp0
 
            if(prod>rp0) then
-            slope=prod/(slopef+slopeb)
+            slope= sign(rp1,slopef)*min(abs(slopeb),abs(slopef))
            endif
 
-           tmp = slope
+           tmp = rph*slope
            bLbuf(iv) = qc - tmp
            bRbuf(iv) = qc + tmp
 
@@ -8908,10 +9314,11 @@ contains
            slope = rp0
 
            if(prod>rp0) then
-            slope=prod/(slopef+slopeb)
+            slope= sign(rp1,slopef)*min(abs(slopeb),abs(slopef))
            endif
 
-           tmp = slope
+           tmp = rph*slope
+
            qLbuf(iv) = qc - tmp
            qRbuf(iv) = qc + tmp
           
@@ -9779,10 +10186,11 @@ contains
            slope = rp0
 
            if(prod>rp0) then
-            slope=prod/(slopef+slopeb)
+            slope= sign(rp1,slopef)*min(abs(slopeb),abs(slopef))
            endif
 
-           tmp = slope
+           tmp = rph*slope
+
            qLbuf(iv) = qc - tmp
            qRbuf(iv) = qc + tmp
 
@@ -9815,10 +10223,11 @@ contains
            slope = rp0
 
            if(prod>rp0) then
-            slope=prod/(slopef+slopeb)
+            slope= sign(rp1,slopef)*min(abs(slopeb),abs(slopef))
            endif
 
-           tmp = slope
+           tmp = rph*slope
+
            bLbuf(iv) = qc - tmp
            bRbuf(iv) = qc + tmp
 
@@ -10139,13 +10548,13 @@ contains
            slope = rp0
 
            if(prod>rp0) then
-            slope=prod/(slopef+slopeb)
+            slope= sign(rp1,slopef)*min(abs(slopeb),abs(slopef))
            endif
 
-           tmp = slope
+           tmp = rph*slope
+
            qLbuf(iv) = qc - tmp
            qRbuf(iv) = qc + tmp
-
 
           end do
 
@@ -10973,10 +11382,11 @@ contains
            slope = rp0
 
            if(prod>rp0) then
-            slope=prod/(slopef+slopeb)
+            slope= sign(rp1,slopef)*min(abs(slopeb),abs(slopef))
            endif
 
-           tmp = slope
+           tmp = rph*slope
+
            qLbuf(iv) = qc - tmp
            qRbuf(iv) = qc + tmp
 
@@ -11009,10 +11419,11 @@ contains
            slope = rp0
 
            if(prod>rp0) then
-            slope=prod/(slopef+slopeb)
+            slope= sign(rp1,slopef)*min(abs(slopeb),abs(slopef))
            endif
 
-           tmp = slope
+           tmp = rph*slope
+
            bLbuf(iv) = qc - tmp
            bRbuf(iv) = qc + tmp
 
@@ -11345,10 +11756,11 @@ contains
            slope = rp0
 
            if(prod>rp0) then
-            slope=prod/(slopef+slopeb)
+            slope= sign(rp1,slopef)*min(abs(slopeb),abs(slopef))
            endif
 
-           tmp = slope
+           tmp = rph*slope
+
            qLbuf(iv) = qc - tmp
            qRbuf(iv) = qc + tmp
 
@@ -17674,7 +18086,7 @@ contains
   dz = rp1
 #endif
 
-  dV = dz*dy*dz
+  dV = dx*dy*dz
 
 #ifdef GS_QUADRUPOLE_BCS
 
@@ -18049,7 +18461,7 @@ contains
       c3z = rp2/(h2z*(h1z+h2z))
 #endif
 
-      tmp = rp1/(c2x+c2y+c2z)*(rp1-real(lgrid%is_solid(i,j,k),kind=rp))
+      tmp = rp1-real(lgrid%is_solid(i,j,k),kind=rp)
 
       phicc = lgrid%phi_cc(i,j,k)
 
@@ -18083,29 +18495,8 @@ contains
    do j=lx2,ux2
     do i=lx1,ux1
        
-      xc = lgrid%coords(1,i,j,k)
-      yc = lgrid%coords(2,i,j,k)
-#if sdims_make==3
-      zc = lgrid%coords(3,i,j,k)
-#endif
-      h1x = xc - lgrid%coords(1,i-1,j,k)
-      h2x = lgrid%coords(1,i+1,j,k) - xc
-      c2x = -rp2/(h1x*h2x)
-
-      h1y = yc - lgrid%coords(2,i,j-1,k)
-      h2y = lgrid%coords(2,i,j+1,k) - yc
-      c2y = -rp2/(h1y*h2y)
-
-#if sdims_make==3
-      h1z = zc - lgrid%coords(3,i,j,k-1)
-      h2z = lgrid%coords(3,i,j,k+1) - zc
-      c2z = -rp2/(h1z*h2z)
-#endif
-
-      tmp = rp1/(c2x+c2y+c2z)
-
       res_L2(1) = res_L2(1) + ( lgrid%r0hat(i,j,k) /  &
-      (tmp*rp4*CONST_PI*CONST_GRAV*max(abs(lgrid%prim(i_rho,i,j,k)-lgrid%gs_rho_bg),lgrid%gs_rho_bg)))**2
+      (rp4*CONST_PI*CONST_GRAV*max(abs(lgrid%prim(i_rho,i,j,k)-lgrid%gs_rho_bg),lgrid%gs_rho_bg)))**2
 
     end do
    end do
@@ -18207,7 +18598,7 @@ contains
        c3z = rp2/(h2z*(h1z+h2z))
 #endif
 
-       tmp = rp1/(c2x+c2y+c2z)*(rp1-real(lgrid%is_solid(i,j,k),kind=rp))
+       tmp = rp1-real(lgrid%is_solid(i,j,k),kind=rp)
 
        phicc = lgrid%p(i,j,k)
 
@@ -18319,7 +18710,7 @@ contains
        c3z = rp2/(h2z*(h1z+h2z))
 #endif
 
-       tmp = rp1/(c2x+c2y+c2z)*(rp1-real(lgrid%is_solid(i,j,k),kind=rp))
+       tmp = rp1-real(lgrid%is_solid(i,j,k),kind=rp)
 
        phicc = lgrid%s(i,j,k)
 
@@ -18392,29 +18783,8 @@ contains
      do j=lx2,ux2
       do i=lx1,ux1
        
-       xc = lgrid%coords(1,i,j,k)
-       yc = lgrid%coords(2,i,j,k)
-#if sdims_make==3
-       zc = lgrid%coords(3,i,j,k)
-#endif
-       h1x = xc - lgrid%coords(1,i-1,j,k)
-       h2x = lgrid%coords(1,i+1,j,k) - xc
-       c2x = -rp2/(h1x*h2x)
-
-       h1y = yc - lgrid%coords(2,i,j-1,k)
-       h2y = lgrid%coords(2,i,j+1,k) - yc
-       c2y = -rp2/(h1y*h2y)
-
-#if sdims_make==3
-       h1z = zc - lgrid%coords(3,i,j,k-1)
-       h2z = lgrid%coords(3,i,j,k+1) - zc
-       c2z = -rp2/(h1z*h2z)
-#endif
-
-       tmp = rp1/(c2x+c2y+c2z)
-
        res_L2(1) = res_L2(1) + ( lgrid%rgs(i,j,k) /  &
-       (tmp*rp4*CONST_PI*CONST_GRAV*max(abs(lgrid%prim(i_rho,i,j,k)-lgrid%gs_rho_bg),lgrid%gs_rho_bg)))**2
+       (rp4*CONST_PI*CONST_GRAV*max(abs(lgrid%prim(i_rho,i,j,k)-lgrid%gs_rho_bg),lgrid%gs_rho_bg)))**2
 
       end do
      end do
@@ -18596,7 +18966,7 @@ contains
   dz = rp1
 #endif
 
-  dV = dz*dy*dz
+  dV = dx*dy*dz
 
 #ifdef GS_QUADRUPOLE_BCS
 
@@ -19064,11 +19434,9 @@ contains
       c3z = rp2/(h2z*(h1z+h2z))
 #endif
 
-      tmp = rp1/(c2x+c2y+c2z)
-
       phicc = lgrid%phi_cc(i,j,k)
 
-      lgrid%rgs(i,j,k) = tmp*(rp4*CONST_PI*CONST_GRAV*(lgrid%prim(i_rho,i,j,k) - lgrid%gs_rho_bg) - ( &
+      lgrid%rgs(i,j,k) = (rp4*CONST_PI*CONST_GRAV*(lgrid%prim(i_rho,i,j,k) - lgrid%gs_rho_bg) - ( &
 #if sdims_make==3
       c3z*lgrid%phi_cc(i,j,k+1)+c2z*phicc+c1z*lgrid%phi_cc(i,j,k-1) + &
 #endif
@@ -19098,29 +19466,12 @@ contains
    do j=lx2,ux2
     do i=lx1,ux1
        
-      xc = lgrid%coords(1,i,j,k)
-      yc = lgrid%coords(2,i,j,k)
-#if sdims_make==3
-      zc = lgrid%coords(3,i,j,k)
-#endif
-      h1x = xc - lgrid%coords(1,i-1,j,k)
-      h2x = lgrid%coords(1,i+1,j,k) - xc
-      c2x = -rp2/(h1x*h2x)
-
-      h1y = yc - lgrid%coords(2,i,j-1,k)
-      h2y = lgrid%coords(2,i,j+1,k) - yc
-      c2y = -rp2/(h1y*h2y)
-
-#if sdims_make==3
-      h1z = zc - lgrid%coords(3,i,j,k-1)
-      h2z = lgrid%coords(3,i,j,k+1) - zc
-      c2z = -rp2/(h1z*h2z)
-#endif
-
-      tmp = rp1/(c2x+c2y+c2z)
-
+#ifdef CONST_GRAV_UNITY
+      res_L2(1) = res_L2(1) + lgrid%r0hat(i,j,k)**2 
+#else
       res_L2(1) = res_L2(1) + ( lgrid%r0hat(i,j,k) /  &
-      (tmp*rp4*CONST_PI*CONST_GRAV*max(abs(lgrid%prim(i_rho,i,j,k)-lgrid%gs_rho_bg),lgrid%gs_rho_bg)))**2
+      (rp4*CONST_PI*CONST_GRAV*max(abs(lgrid%prim(i_rho,i,j,k)-lgrid%gs_rho_bg),lgrid%gs_rho_bg)))**2
+#endif
 
     end do
    end do
@@ -19150,15 +19501,55 @@ contains
   iter = 0
 
   do while(res_L2_comm(1) > gs_tol)
+
+#ifdef GMG_PRECONDITIONER
+
+    do k=lx3,ux3
+     do j=lx2,ux2
+      do i=lx1,ux1
+
+       lgrid%gmgv(1)%eh(i,j,k) = rp0
+       lgrid%gmgv(1)%rh(i,j,k) = lgrid%p(i,j,k)
+
+      end do
+     end do
+    end do
+
+    call gmg_Vcycle(mgrid,lgrid,1)
+
+    do k=lx3,ux3
+     do j=lx2,ux2
+      do i=lx1,ux1
+
+       lgrid%y(i,j,k) = lgrid%gmgv(1)%eh(i,j,k) 
+
+      end do
+     end do
+    end do
+
+#else
+
+    do k=lx3,ux3
+     do j=lx2,ux2
+      do i=lx1,ux1
+
+       lgrid%y(i,j,k) = lgrid%p(i,j,k)
+
+      end do
+     end do
+    end do
+
+#endif
+
 #ifdef ENFORCE_BARRIERS
     call mpi_barrier(mgrid%comm_cart,ierr)
 #endif
-    call communicate_array(mgrid,lx1,ux1,lx2,ux2,lx3,ux3,1,lgrid%p,.false.)
+    call communicate_array(mgrid,lx1,ux1,lx2,ux2,lx3,ux3,1,lgrid%y,.false.)
     
     if(mgrid%coords_dd(1)==0) then
       do k=lx3,ux3
        do j=lx2,ux2
-         lgrid%p(lx1-1,j,k) = -lgrid%p(lx1,j,k)
+         lgrid%y(lx1-1,j,k) = -lgrid%y(lx1,j,k)
        end do
       end do
     end if
@@ -19166,7 +19557,7 @@ contains
     if(mgrid%coords_dd(1)==mgrid%bricks(1)-1) then
       do k=lx3,ux3
        do j=lx2,ux2
-         lgrid%p(ux1+1,j,k) = -lgrid%p(ux1,j,k)
+         lgrid%y(ux1+1,j,k) = -lgrid%y(ux1,j,k)
        end do
       end do
     end if
@@ -19174,7 +19565,7 @@ contains
     if(mgrid%coords_dd(2)==0) then
       do k=lx3,ux3
        do i=lx1,ux1
-         lgrid%p(i,lx2-1,k) = -lgrid%p(i,lx2,k)
+         lgrid%y(i,lx2-1,k) = -lgrid%y(i,lx2,k)
        end do
       end do
     end if
@@ -19182,7 +19573,7 @@ contains
     if(mgrid%coords_dd(2)==mgrid%bricks(2)-1) then
       do k=lx3,ux3
        do i=lx1,ux1
-         lgrid%p(i,ux2+1,k) = -lgrid%p(i,ux2,k)
+         lgrid%y(i,ux2+1,k) = -lgrid%y(i,ux2,k)
        end do
       end do
     end if
@@ -19192,7 +19583,7 @@ contains
     if(mgrid%coords_dd(3)==0) then
       do j=lx2,ux2
        do i=lx1,ux1
-         lgrid%p(i,j,lx3-1) = -lgrid%p(i,j,lx3)
+         lgrid%y(i,j,lx3-1) = -lgrid%y(i,j,lx3)
        end do
       end do
     end if
@@ -19200,7 +19591,7 @@ contains
     if(mgrid%coords_dd(3)==mgrid%bricks(3)-1) then
       do j=lx2,ux2
        do i=lx1,ux1
-         lgrid%p(i,j,ux3+1) = -lgrid%p(i,j,ux3)
+         lgrid%y(i,j,ux3+1) = -lgrid%y(i,j,ux3)
        end do
       end do
     end if
@@ -19239,16 +19630,14 @@ contains
        c3z = rp2/(h2z*(h1z+h2z))
 #endif
 
-       tmp = rp1/(c2x+c2y+c2z)
+       phicc = lgrid%y(i,j,k)
 
-       phicc = lgrid%p(i,j,k)
-
-       lgrid%v(i,j,k) = tmp*( &
+       lgrid%v(i,j,k) = ( &
 #if sdims_make==3
-       c3z*lgrid%p(i,j,k+1)+c2z*phicc+c1z*lgrid%p(i,j,k-1) + &
+       c3z*lgrid%y(i,j,k+1)+c2z*phicc+c1z*lgrid%y(i,j,k-1) + &
 #endif
-       c3x*lgrid%p(i+1,j,k)+c2x*phicc+c1x*lgrid%p(i-1,j,k) + &
-       c3y*lgrid%p(i,j+1,k)+c2y*phicc+c1y*lgrid%p(i,j-1,k) )
+       c3x*lgrid%y(i+1,j,k)+c2x*phicc+c1x*lgrid%y(i-1,j,k) + &
+       c3y*lgrid%y(i,j+1,k)+c2y*phicc+c1y*lgrid%y(i,j-1,k) )
 
       end do
      end do
@@ -19279,15 +19668,55 @@ contains
       end do
      end do
     end do
+
+#ifdef GMG_PRECONDITIONER
+
+    do k=lx3,ux3
+     do j=lx2,ux2
+      do i=lx1,ux1
+
+       lgrid%gmgv(1)%eh(i,j,k) = rp0
+       lgrid%gmgv(1)%rh(i,j,k) = lgrid%s(i,j,k)
+
+      end do
+     end do
+    end do
+
+    call gmg_Vcycle(mgrid,lgrid,1)
+
+    do k=lx3,ux3
+     do j=lx2,ux2
+      do i=lx1,ux1
+
+       lgrid%z(i,j,k) = lgrid%gmgv(1)%eh(i,j,k) 
+
+      end do
+     end do
+    end do
+
+#else
+
+    do k=lx3,ux3
+     do j=lx2,ux2
+      do i=lx1,ux1
+
+       lgrid%z(i,j,k) = lgrid%s(i,j,k)
+
+      end do
+     end do
+    end do
+
+#endif
+
 #ifdef ENFORCE_BARRIERS
     call mpi_barrier(mgrid%comm_cart,ierr)
 #endif
-    call communicate_array(mgrid,lx1,ux1,lx2,ux2,lx3,ux3,1,lgrid%s,.false.)
+    call communicate_array(mgrid,lx1,ux1,lx2,ux2,lx3,ux3,1,lgrid%z,.false.)
     
     if(mgrid%coords_dd(1)==0) then
       do k=lx3,ux3
        do j=lx2,ux2
-         lgrid%s(lx1-1,j,k) = -lgrid%s(lx1,j,k)
+         lgrid%z(lx1-1,j,k) = -lgrid%z(lx1,j,k)
        end do
       end do
     end if
@@ -19295,7 +19724,7 @@ contains
     if(mgrid%coords_dd(1)==mgrid%bricks(1)-1) then
       do k=lx3,ux3
        do j=lx2,ux2
-         lgrid%s(ux1+1,j,k) = -lgrid%s(ux1,j,k)
+         lgrid%z(ux1+1,j,k) = -lgrid%z(ux1,j,k)
        end do
       end do
     end if
@@ -19303,7 +19732,7 @@ contains
     if(mgrid%coords_dd(2)==0) then
       do k=lx3,ux3
        do i=lx1,ux1
-         lgrid%s(i,lx2-1,k) = -lgrid%s(i,lx2,k)
+         lgrid%z(i,lx2-1,k) = -lgrid%z(i,lx2,k)
        end do
       end do
     end if
@@ -19311,7 +19740,7 @@ contains
     if(mgrid%coords_dd(2)==mgrid%bricks(2)-1) then
       do k=lx3,ux3
        do i=lx1,ux1
-         lgrid%s(i,ux2+1,k) = -lgrid%s(i,ux2,k)
+         lgrid%z(i,ux2+1,k) = -lgrid%z(i,ux2,k)
        end do
       end do
     end if
@@ -19321,7 +19750,7 @@ contains
     if(mgrid%coords_dd(3)==0) then
       do j=lx2,ux2
        do i=lx1,ux1
-         lgrid%s(i,j,lx3-1) = -lgrid%s(i,j,lx3)
+         lgrid%z(i,j,lx3-1) = -lgrid%z(i,j,lx3)
        end do
       end do
     end if
@@ -19329,7 +19758,7 @@ contains
     if(mgrid%coords_dd(3)==mgrid%bricks(3)-1) then
       do j=lx2,ux2
        do i=lx1,ux1
-         lgrid%s(i,j,ux3+1) = -lgrid%s(i,j,ux3)
+         lgrid%z(i,j,ux3+1) = -lgrid%z(i,j,ux3)
        end do
       end do
     end if
@@ -19368,16 +19797,14 @@ contains
        c3z = rp2/(h2z*(h1z+h2z))
 #endif
 
-       tmp = rp1/(c2x+c2y+c2z)
+       phicc = lgrid%z(i,j,k)
 
-       phicc = lgrid%s(i,j,k)
-
-       lgrid%t(i,j,k) = tmp*( &
+       lgrid%t(i,j,k) = ( &
 #if sdims_make==3
-       c3z*lgrid%s(i,j,k+1)+c2z*phicc+c1z*lgrid%s(i,j,k-1) + &
+       c3z*lgrid%z(i,j,k+1)+c2z*phicc+c1z*lgrid%z(i,j,k-1) + &
 #endif
-       c3x*lgrid%s(i+1,j,k)+c2x*phicc+c1x*lgrid%s(i-1,j,k) + &
-       c3y*lgrid%s(i,j+1,k)+c2y*phicc+c1y*lgrid%s(i,j-1,k) )
+       c3x*lgrid%z(i+1,j,k)+c2x*phicc+c1x*lgrid%z(i-1,j,k) + &
+       c3y*lgrid%z(i,j+1,k)+c2y*phicc+c1y*lgrid%z(i,j-1,k) )
 
       end do
      end do
@@ -19409,7 +19836,7 @@ contains
      do j=lx2,ux2
       do i=lx1,ux1
        
-       lgrid%phi_cc(i,j,k) = lgrid%phi_cc(i,j,k) + alpha*lgrid%p(i,j,k) + wi*lgrid%s(i,j,k)
+       lgrid%phi_cc(i,j,k) = lgrid%phi_cc(i,j,k) + alpha*lgrid%y(i,j,k) + wi*lgrid%z(i,j,k)
        
        lgrid%rgs(i,j,k) = lgrid%s(i,j,k) -  wi*lgrid%t(i,j,k)
 
@@ -19441,29 +19868,12 @@ contains
      do j=lx2,ux2
       do i=lx1,ux1
        
-       xc = lgrid%coords(1,i,j,k)
-       yc = lgrid%coords(2,i,j,k)
-#if sdims_make==3
-       zc = lgrid%coords(3,i,j,k)
-#endif
-       h1x = xc - lgrid%coords(1,i-1,j,k)
-       h2x = lgrid%coords(1,i+1,j,k) - xc
-       c2x = -rp2/(h1x*h2x)
-
-       h1y = yc - lgrid%coords(2,i,j-1,k)
-       h2y = lgrid%coords(2,i,j+1,k) - yc
-       c2y = -rp2/(h1y*h2y)
-
-#if sdims_make==3
-       h1z = zc - lgrid%coords(3,i,j,k-1)
-       h2z = lgrid%coords(3,i,j,k+1) - zc
-       c2z = -rp2/(h1z*h2z)
-#endif
-
-       tmp = rp1/(c2x+c2y+c2z)
-
+#ifdef CONST_GRAV_UNITY
+       res_L2(1) = res_L2(1) + lgrid%rgs(i,j,k)**2
+#else
        res_L2(1) = res_L2(1) + ( lgrid%rgs(i,j,k) /  &
-       (tmp*rp4*CONST_PI*CONST_GRAV*max(abs(lgrid%prim(i_rho,i,j,k)-lgrid%gs_rho_bg),lgrid%gs_rho_bg)))**2
+       (rp4*CONST_PI*CONST_GRAV*max(abs(lgrid%prim(i_rho,i,j,k)-lgrid%gs_rho_bg),lgrid%gs_rho_bg)))**2
+#endif
 
       end do
      end do
@@ -19603,6 +20013,588 @@ contains
 #endif
 
  end subroutine fill_ghost_potential
+
+#ifdef GMG_PRECONDITIONER
+
+ recursive subroutine gmg_Vcycle(mgrid,lgrid,level)
+  type(mpigrid), intent(in) :: mgrid
+  type(locgrid), intent(inout) :: lgrid
+  integer, intent(in) :: level
+
+  integer :: i,j,k,ia,ja,ka,iaa,jaa,kaa
+  integer :: lx1,ux1,lx2,ux2,lx3,ux3
+  integer :: lx1l,ux1l,lx2l,ux2l,lx3l,ux3l
+
+  integer :: iter
+
+  real(kind=rp) :: h1x,h2x,h1y,h2y,xc,yc,c1x,c2x,c3x, &
+  c1y,c2y,c3y,h1z,h2z,zc,c1z,c2z,c3z,tmp, &
+  v1,v2,v3,v4,v5,v6,v7,v8,ivol
+
+  lx1 = lgrid%gmgv(level)%i1(1)
+  lx2 = lgrid%gmgv(level)%i1(2)
+  lx3 = lgrid%gmgv(level)%i1(3)
+  ux1 = lgrid%gmgv(level)%i2(1)
+  ux2 = lgrid%gmgv(level)%i2(2)
+  ux3 = lgrid%gmgv(level)%i2(3)
+
+  lx1l = lgrid%gmgv(level+1)%i1(1)
+  lx2l = lgrid%gmgv(level+1)%i1(2)
+  lx3l = lgrid%gmgv(level+1)%i1(3)
+  ux1l = lgrid%gmgv(level+1)%i2(1)
+  ux2l = lgrid%gmgv(level+1)%i2(2)
+  ux3l = lgrid%gmgv(level+1)%i2(3)
+
+  if(level==gmg_max_level) then
+
+    do iter=1,gmg_niter_coarse
+
+#ifdef ENFORCE_BARRIERS
+     call mpi_barrier(mgrid%comm_cart,ierr)
+#endif
+     call communicate_array(mgrid,lx1,ux1,lx2,ux2,lx3,ux3,1,lgrid%gmgv(level)%eh,.false.)
+
+     if(mgrid%coords_dd(1)==0) then
+       do k=lx3,ux3
+        do j=lx2,ux2
+          lgrid%gmgv(level)%eh(lx1-1,j,k) = -lgrid%gmgv(level)%eh(lx1,j,k)
+        end do
+       end do
+     end if
+
+     if(mgrid%coords_dd(1)==mgrid%bricks(1)-1) then
+       do k=lx3,ux3
+        do j=lx2,ux2
+          lgrid%gmgv(level)%eh(ux1+1,j,k) = -lgrid%gmgv(level)%eh(ux1,j,k)
+        end do
+       end do
+     end if
+
+     if(mgrid%coords_dd(2)==0) then
+       do k=lx3,ux3
+        do i=lx1,ux1
+          lgrid%gmgv(level)%eh(i,lx2-1,k) = -lgrid%gmgv(level)%eh(i,lx2,k)
+        end do
+       end do
+     end if
+
+     if(mgrid%coords_dd(2)==mgrid%bricks(2)-1) then
+       do k=lx3,ux3
+        do i=lx1,ux1
+          lgrid%gmgv(level)%eh(i,ux2+1,k) = -lgrid%gmgv(level)%eh(i,ux2,k)
+        end do
+       end do
+     end if
+
+     if(mgrid%coords_dd(3)==0) then
+       do j=lx2,ux2
+        do i=lx1,ux1
+          lgrid%gmgv(level)%eh(i,j,lx3-1) = -lgrid%gmgv(level)%eh(i,j,lx3)
+        end do
+       end do
+     end if
+
+     if(mgrid%coords_dd(3)==mgrid%bricks(3)-1) then
+       do j=lx2,ux2
+        do i=lx1,ux1
+          lgrid%gmgv(level)%eh(i,j,ux3+1) = -lgrid%gmgv(level)%eh(i,j,ux3)
+        end do
+       end do
+     end if
+
+     do k=lx3,ux3
+      do j=lx2,ux2
+       do i=lx1,ux1
+
+        xc = lgrid%gmgv(level)%coords(1,i,j,k)
+        yc = lgrid%gmgv(level)%coords(2,i,j,k)
+        zc = lgrid%gmgv(level)%coords(3,i,j,k)
+
+        h1x = xc - lgrid%gmgv(level)%coords(1,i-1,j,k)
+        h2x = lgrid%gmgv(level)%coords(1,i+1,j,k) - xc
+
+        c1x = rp2/(h1x*(h1x+h2x))
+        c2x = -rp2/(h1x*h2x)
+        c3x = rp2/(h2x*(h1x+h2x))
+
+        h1y = yc - lgrid%gmgv(level)%coords(2,i,j-1,k)
+        h2y = lgrid%gmgv(level)%coords(2,i,j+1,k) - yc
+
+        c1y = rp2/(h1y*(h1y+h2y))
+        c2y = -rp2/(h1y*h2y)
+        c3y = rp2/(h2y*(h1y+h2y))
+
+        h1z = zc - lgrid%gmgv(level)%coords(3,i,j,k-1)
+        h2z = lgrid%gmgv(level)%coords(3,i,j,k+1) - zc
+
+        c1z = rp2/(h1z*(h1z+h2z))
+        c2z = -rp2/(h1z*h2z)
+        c3z = rp2/(h2z*(h1z+h2z))
+
+        tmp = gmg_omega/(c2x+c2y+c2z)
+
+        lgrid%gmgv(level)%tmp(i,j,k) = (rp1-gmg_omega)*lgrid%gmgv(level)%eh(i,j,k) + &
+        tmp*( lgrid%gmgv(level)%rh(i,j,k) - ( &
+        c3z*lgrid%gmgv(level)%eh(i,j,k+1) + c1z*lgrid%gmgv(level)%eh(i,j,k-1) + &
+        c3x*lgrid%gmgv(level)%eh(i+1,j,k) + c1x*lgrid%gmgv(level)%eh(i-1,j,k) + &
+        c3y*lgrid%gmgv(level)%eh(i,j+1,k) + c1y*lgrid%gmgv(level)%eh(i,j-1,k) ) )
+
+       end do
+      end do
+     end do
+
+     do k=lx3,ux3
+      do j=lx2,ux2
+       do i=lx1,ux1
+        lgrid%gmgv(level)%eh(i,j,k) = lgrid%gmgv(level)%tmp(i,j,k)
+       end do
+      end do
+     end do
+
+    end do
+
+  else
+
+    !PRE-SMOOTH
+
+    do iter=1,gmg_niter_presmooth
+
+#ifdef ENFORCE_BARRIERS
+     call mpi_barrier(mgrid%comm_cart,ia)
+#endif
+     call communicate_array(mgrid,lx1,ux1,lx2,ux2,lx3,ux3,1,lgrid%gmgv(level)%eh,.false.)
+
+     if(mgrid%coords_dd(1)==0) then
+       do k=lx3,ux3
+        do j=lx2,ux2
+          lgrid%gmgv(level)%eh(lx1-1,j,k) = -lgrid%gmgv(level)%eh(lx1,j,k)
+        end do
+       end do
+     end if
+
+     if(mgrid%coords_dd(1)==mgrid%bricks(1)-1) then
+       do k=lx3,ux3
+        do j=lx2,ux2
+          lgrid%gmgv(level)%eh(ux1+1,j,k) = -lgrid%gmgv(level)%eh(ux1,j,k)
+        end do
+       end do
+     end if
+
+     if(mgrid%coords_dd(2)==0) then
+       do k=lx3,ux3
+        do i=lx1,ux1
+          lgrid%gmgv(level)%eh(i,lx2-1,k) = -lgrid%gmgv(level)%eh(i,lx2,k)
+        end do
+       end do
+     end if
+
+     if(mgrid%coords_dd(2)==mgrid%bricks(2)-1) then
+       do k=lx3,ux3
+        do i=lx1,ux1
+          lgrid%gmgv(level)%eh(i,ux2+1,k) = -lgrid%gmgv(level)%eh(i,ux2,k)
+        end do
+       end do
+     end if
+
+     if(mgrid%coords_dd(3)==0) then
+       do j=lx2,ux2
+        do i=lx1,ux1
+          lgrid%gmgv(level)%eh(i,j,lx3-1) = -lgrid%gmgv(level)%eh(i,j,lx3)
+        end do
+       end do
+     end if
+
+     if(mgrid%coords_dd(3)==mgrid%bricks(3)-1) then
+       do j=lx2,ux2
+        do i=lx1,ux1
+          lgrid%gmgv(level)%eh(i,j,ux3+1) = -lgrid%gmgv(level)%eh(i,j,ux3)
+        end do
+       end do
+     end if
+
+     do k=lx3,ux3
+      do j=lx2,ux2
+       do i=lx1,ux1
+
+        xc = lgrid%gmgv(level)%coords(1,i,j,k)
+        yc = lgrid%gmgv(level)%coords(2,i,j,k)
+        zc = lgrid%gmgv(level)%coords(3,i,j,k)
+
+        h1x = xc - lgrid%gmgv(level)%coords(1,i-1,j,k)
+        h2x = lgrid%gmgv(level)%coords(1,i+1,j,k) - xc
+
+        c1x = rp2/(h1x*(h1x+h2x))
+        c2x = -rp2/(h1x*h2x)
+        c3x = rp2/(h2x*(h1x+h2x))
+
+        h1y = yc - lgrid%gmgv(level)%coords(2,i,j-1,k)
+        h2y = lgrid%gmgv(level)%coords(2,i,j+1,k) - yc
+
+        c1y = rp2/(h1y*(h1y+h2y))
+        c2y = -rp2/(h1y*h2y)
+        c3y = rp2/(h2y*(h1y+h2y))
+
+        h1z = zc - lgrid%gmgv(level)%coords(3,i,j,k-1)
+        h2z = lgrid%gmgv(level)%coords(3,i,j,k+1) - zc
+
+        c1z = rp2/(h1z*(h1z+h2z))
+        c2z = -rp2/(h1z*h2z)
+        c3z = rp2/(h2z*(h1z+h2z))
+
+        tmp = gmg_omega/(c2x+c2y+c2z)
+
+        lgrid%gmgv(level)%tmp(i,j,k) = (rp1-gmg_omega)*lgrid%gmgv(level)%eh(i,j,k) + &
+        tmp*( lgrid%gmgv(level)%rh(i,j,k) - ( &
+        c3z*lgrid%gmgv(level)%eh(i,j,k+1) + c1z*lgrid%gmgv(level)%eh(i,j,k-1) + &
+        c3x*lgrid%gmgv(level)%eh(i+1,j,k) + c1x*lgrid%gmgv(level)%eh(i-1,j,k) + &
+        c3y*lgrid%gmgv(level)%eh(i,j+1,k) + c1y*lgrid%gmgv(level)%eh(i,j-1,k) ) )
+
+       end do
+      end do
+     end do
+
+     do k=lx3,ux3
+      do j=lx2,ux2
+       do i=lx1,ux1
+        lgrid%gmgv(level)%eh(i,j,k) = lgrid%gmgv(level)%tmp(i,j,k)
+       end do
+      end do
+     end do
+
+    end do
+
+    ! COMPUTE RESIDUAL
+
+#ifdef ENFORCE_BARRIERS
+    call mpi_barrier(mgrid%comm_cart,ierr)
+#endif
+    call communicate_array(mgrid,lx1,ux1,lx2,ux2,lx3,ux3,1,lgrid%gmgv(level)%eh,.false.)
+
+    if(mgrid%coords_dd(1)==0) then
+      do k=lx3,ux3
+       do j=lx2,ux2
+         lgrid%gmgv(level)%eh(lx1-1,j,k) = -lgrid%gmgv(level)%eh(lx1,j,k)
+       end do
+      end do
+    end if
+
+    if(mgrid%coords_dd(1)==mgrid%bricks(1)-1) then
+      do k=lx3,ux3
+       do j=lx2,ux2
+         lgrid%gmgv(level)%eh(ux1+1,j,k) = -lgrid%gmgv(level)%eh(ux1,j,k)
+       end do
+      end do
+    end if
+
+    if(mgrid%coords_dd(2)==0) then
+      do k=lx3,ux3
+       do i=lx1,ux1
+         lgrid%gmgv(level)%eh(i,lx2-1,k) = -lgrid%gmgv(level)%eh(i,lx2,k)
+       end do
+      end do
+    end if
+
+    if(mgrid%coords_dd(2)==mgrid%bricks(2)-1) then
+      do k=lx3,ux3
+       do i=lx1,ux1
+         lgrid%gmgv(level)%eh(i,ux2+1,k) = -lgrid%gmgv(level)%eh(i,ux2,k)
+       end do
+      end do
+    end if
+
+    if(mgrid%coords_dd(3)==0) then
+      do j=lx2,ux2
+       do i=lx1,ux1
+         lgrid%gmgv(level)%eh(i,j,lx3-1) = -lgrid%gmgv(level)%eh(i,j,lx3)
+       end do
+      end do
+    end if
+
+    if(mgrid%coords_dd(3)==mgrid%bricks(3)-1) then
+      do j=lx2,ux2
+       do i=lx1,ux1
+         lgrid%gmgv(level)%eh(i,j,ux3+1) = -lgrid%gmgv(level)%eh(i,j,ux3)
+       end do
+      end do
+    end if
+
+    do k=lx3,ux3
+     do j=lx2,ux2
+      do i=lx1,ux1
+
+        xc = lgrid%gmgv(level)%coords(1,i,j,k)
+        yc = lgrid%gmgv(level)%coords(2,i,j,k)
+        zc = lgrid%gmgv(level)%coords(3,i,j,k)
+
+        h1x = xc - lgrid%gmgv(level)%coords(1,i-1,j,k)
+        h2x = lgrid%gmgv(level)%coords(1,i+1,j,k) - xc
+
+        c1x = rp2/(h1x*(h1x+h2x))
+        c2x = -rp2/(h1x*h2x)
+        c3x = rp2/(h2x*(h1x+h2x))
+
+        h1y = yc - lgrid%gmgv(level)%coords(2,i,j-1,k)
+        h2y = lgrid%gmgv(level)%coords(2,i,j+1,k) - yc
+
+        c1y = rp2/(h1y*(h1y+h2y))
+        c2y = -rp2/(h1y*h2y)
+        c3y = rp2/(h2y*(h1y+h2y))
+
+        h1z = zc - lgrid%gmgv(level)%coords(3,i,j,k-1)
+        h2z = lgrid%gmgv(level)%coords(3,i,j,k+1) - zc
+
+        c1z = rp2/(h1z*(h1z+h2z))
+        c2z = -rp2/(h1z*h2z)
+        c3z = rp2/(h2z*(h1z+h2z))
+
+        tmp = lgrid%gmgv(level)%eh(i,j,k)*(c2x+c2y+c2z)
+
+        lgrid%gmgv(level)%tmp(i,j,k) = lgrid%gmgv(level)%rh(i,j,k) - ( &
+        c3z*lgrid%gmgv(level)%eh(i,j,k+1) + c1z*lgrid%gmgv(level)%eh(i,j,k-1) + &
+        c3x*lgrid%gmgv(level)%eh(i+1,j,k) + c1x*lgrid%gmgv(level)%eh(i-1,j,k) + &
+        c3y*lgrid%gmgv(level)%eh(i,j+1,k) + c1y*lgrid%gmgv(level)%eh(i,j-1,k) + tmp )
+
+      end do
+     end do
+    end do
+
+    ! RESTRICT rh
+
+    do k=lgrid%gmgv(level+1)%i1(3),lgrid%gmgv(level+1)%i2(3)
+     do j=lgrid%gmgv(level+1)%i1(2),lgrid%gmgv(level+1)%i2(2)
+      do i=lgrid%gmgv(level+1)%i1(1),lgrid%gmgv(level+1)%i2(1)
+
+       ia = 2*(i-1)+1
+       ja = 2*(j-1)+1
+       ka = 2*(k-1)+1
+
+       v1 = lgrid%gmgv(level)%vol(ia,ja,ka)
+       v2 = lgrid%gmgv(level)%vol(ia+1,ja,ka)
+       v3 = lgrid%gmgv(level)%vol(ia,ja+1,ka)
+       v4 = lgrid%gmgv(level)%vol(ia,ja,ka+1)
+       v5 = lgrid%gmgv(level)%vol(ia+1,ja+1,ka)
+       v6 = lgrid%gmgv(level)%vol(ia+1,ja,ka+1)
+       v7 = lgrid%gmgv(level)%vol(ia,ja+1,ka+1)
+       v8 = lgrid%gmgv(level)%vol(ia+1,ja+1,ka+1)
+
+       ivol = rp1/(v1+v2+v3+v4+v5+v6+v7+v8)
+
+       lgrid%gmgv(level+1)%rh(i,j,k) = ( &
+       lgrid%gmgv(level)%tmp(ia,ja,ka)*v1 + &
+       lgrid%gmgv(level)%tmp(ia+1,ja,ka)*v2 + &
+       lgrid%gmgv(level)%tmp(ia,ja+1,ka)*v3 + &
+       lgrid%gmgv(level)%tmp(ia,ja,ka+1)*v4 + &
+       lgrid%gmgv(level)%tmp(ia+1,ja+1,ka)*v5 + &
+       lgrid%gmgv(level)%tmp(ia+1,ja,ka+1)*v6 + &
+       lgrid%gmgv(level)%tmp(ia,ja+1,ka+1)*v7 + &
+       lgrid%gmgv(level)%tmp(ia+1,ja+1,ka+1)*v8 )*ivol
+
+       lgrid%gmgv(level+1)%eh(i,j,k) = rp0
+
+      end do
+     end do
+    end do
+
+    ! RECURSIVE CALL
+
+#ifdef ENFORCE_BARRIERS
+     call mpi_barrier(mgrid%comm_cart,ierr)
+#endif
+    call gmg_Vcycle(mgrid,lgrid,level+1)
+ 
+    ! PROLONG
+
+#ifdef ENFORCE_BARRIERS
+    call mpi_barrier(mgrid%comm_cart,ierr)
+#endif
+    call communicate_array(mgrid,lx1l,ux1l,lx2l,ux2l,lx3l,ux3l,1,lgrid%gmgv(level+1)%eh,.false.)
+
+    if(mgrid%coords_dd(1)==0) then
+      do k=lx3l,ux3l
+       do j=lx2l,ux2l
+         lgrid%gmgv(level+1)%eh(lx1l-1,j,k) = -lgrid%gmgv(level+1)%eh(lx1l,j,k)
+       end do
+      end do
+    end if
+
+    if(mgrid%coords_dd(1)==mgrid%bricks(1)-1) then
+      do k=lx3l,ux3l
+       do j=lx2l,ux2l
+         lgrid%gmgv(level+1)%eh(ux1l+1,j,k) = -lgrid%gmgv(level+1)%eh(ux1l,j,k)
+       end do
+      end do
+    end if
+
+    if(mgrid%coords_dd(2)==0) then
+      do k=lx3l,ux3l
+       do i=lx1l,ux1l
+         lgrid%gmgv(level+1)%eh(i,lx2l-1,k) = -lgrid%gmgv(level+1)%eh(i,lx2l,k)
+       end do
+      end do
+    end if
+
+    if(mgrid%coords_dd(2)==mgrid%bricks(2)-1) then
+      do k=lx3l,ux3l
+       do i=lx1l,ux1l
+         lgrid%gmgv(level+1)%eh(i,ux2l+1,k) = -lgrid%gmgv(level+1)%eh(i,ux2l,k)
+       end do
+      end do
+    end if
+
+    if(mgrid%coords_dd(3)==0) then
+      do j=lx2l,ux2l
+       do i=lx1l,ux1l
+         lgrid%gmgv(level+1)%eh(i,j,lx3l-1) = -lgrid%gmgv(level+1)%eh(i,j,lx3l)
+       end do
+      end do
+    end if
+
+    if(mgrid%coords_dd(3)==mgrid%bricks(3)-1) then
+      do j=lx2l,ux2l
+       do i=lx1l,ux1l
+         lgrid%gmgv(level+1)%eh(i,j,ux3l+1) = -lgrid%gmgv(level+1)%eh(i,j,ux3l)
+       end do
+      end do
+    end if
+
+    do k=lx3l,ux3l
+     do j=lx2l,ux2l
+      do i=lx1l,ux1l
+
+       ia = 2*(i-1)+1
+       ja = 2*(j-1)+1
+       ka = 2*(k-1)+1
+ 
+       tmp = lgrid%gmgv(level+1)%eh(i,j,k)
+
+       do kaa=0,1
+        do jaa=0,1
+         do iaa=0,1
+ 
+          lgrid%gmgv(level)%eh(ia+iaa,ja+jaa,ka+kaa) = lgrid%gmgv(level)%eh(ia+iaa,ja+jaa,ka+kaa) + &
+          tmp  
+
+         end do
+        end do
+       end do
+
+      end do
+     end do
+    end do
+
+    ! POSTSMOOTH
+
+    do iter=1,gmg_niter_postsmooth
+
+#ifdef ENFORCE_BARRIERS
+     call mpi_barrier(mgrid%comm_cart,ierr)
+#endif
+     call communicate_array(mgrid,lx1,ux1,lx2,ux2,lx3,ux3,1,lgrid%gmgv(level)%eh,.false.)
+
+     if(mgrid%coords_dd(1)==0) then
+       do k=lx3,ux3
+        do j=lx2,ux2
+          lgrid%gmgv(level)%eh(lx1-1,j,k) = -lgrid%gmgv(level)%eh(lx1,j,k)
+        end do
+       end do
+     end if
+
+     if(mgrid%coords_dd(1)==mgrid%bricks(1)-1) then
+       do k=lx3,ux3
+        do j=lx2,ux2
+          lgrid%gmgv(level)%eh(ux1+1,j,k) = -lgrid%gmgv(level)%eh(ux1,j,k)
+        end do
+       end do
+     end if
+
+     if(mgrid%coords_dd(2)==0) then
+       do k=lx3,ux3
+        do i=lx1,ux1
+          lgrid%gmgv(level)%eh(i,lx2-1,k) = -lgrid%gmgv(level)%eh(i,lx2,k)
+        end do
+       end do
+     end if
+
+     if(mgrid%coords_dd(2)==mgrid%bricks(2)-1) then
+       do k=lx3,ux3
+        do i=lx1,ux1
+          lgrid%gmgv(level)%eh(i,ux2+1,k) = -lgrid%gmgv(level)%eh(i,ux2,k)
+        end do
+       end do
+     end if
+
+     if(mgrid%coords_dd(3)==0) then
+       do j=lx2,ux2
+        do i=lx1,ux1
+          lgrid%gmgv(level)%eh(i,j,lx3-1) = -lgrid%gmgv(level)%eh(i,j,lx3)
+        end do
+       end do
+     end if
+
+     if(mgrid%coords_dd(3)==mgrid%bricks(3)-1) then
+       do j=lx2,ux2
+        do i=lx1,ux1
+          lgrid%gmgv(level)%eh(i,j,ux3+1) = -lgrid%gmgv(level)%eh(i,j,ux3)
+        end do
+       end do
+     end if
+
+     do k=lx3,ux3
+      do j=lx2,ux2
+       do i=lx1,ux1
+
+        xc = lgrid%gmgv(level)%coords(1,i,j,k)
+        yc = lgrid%gmgv(level)%coords(2,i,j,k)
+        zc = lgrid%gmgv(level)%coords(3,i,j,k)
+
+        h1x = xc - lgrid%gmgv(level)%coords(1,i-1,j,k)
+        h2x = lgrid%gmgv(level)%coords(1,i+1,j,k) - xc
+
+        c1x = rp2/(h1x*(h1x+h2x))
+        c2x = -rp2/(h1x*h2x)
+        c3x = rp2/(h2x*(h1x+h2x))
+
+        h1y = yc - lgrid%gmgv(level)%coords(2,i,j-1,k)
+        h2y = lgrid%gmgv(level)%coords(2,i,j+1,k) - yc
+
+        c1y = rp2/(h1y*(h1y+h2y))
+        c2y = -rp2/(h1y*h2y)
+        c3y = rp2/(h2y*(h1y+h2y))
+
+        h1z = zc - lgrid%gmgv(level)%coords(3,i,j,k-1)
+        h2z = lgrid%gmgv(level)%coords(3,i,j,k+1) - zc
+
+        c1z = rp2/(h1z*(h1z+h2z))
+        c2z = -rp2/(h1z*h2z)
+        c3z = rp2/(h2z*(h1z+h2z))
+
+        tmp = gmg_omega/(c2x+c2y+c2z)
+
+        lgrid%gmgv(level)%tmp(i,j,k) = (rp1-gmg_omega)*lgrid%gmgv(level)%eh(i,j,k) + &
+        tmp*( lgrid%gmgv(level)%rh(i,j,k) - ( &
+        c3z*lgrid%gmgv(level)%eh(i,j,k+1) + c1z*lgrid%gmgv(level)%eh(i,j,k-1) + &
+        c3x*lgrid%gmgv(level)%eh(i+1,j,k) + c1x*lgrid%gmgv(level)%eh(i-1,j,k) + &
+        c3y*lgrid%gmgv(level)%eh(i,j+1,k) + c1y*lgrid%gmgv(level)%eh(i,j-1,k) ) )
+
+       end do
+      end do
+     end do
+
+     do k=lx3,ux3
+      do j=lx2,ux2
+       do i=lx1,ux1
+        lgrid%gmgv(level)%eh(i,j,k) = lgrid%gmgv(level)%tmp(i,j,k)
+       end do
+      end do
+     end do
+
+    end do
+
+  endif
+
+ end subroutine gmg_Vcycle
+
+#endif
 
 #endif
 #endif
@@ -22796,10 +23788,6 @@ contains
       do iv=1,nreacs
        rates(iv) = rates(iv)*boost_reacs 
       end do
-#endif
-
-#ifdef SAVE_SPECIES_FLUXES
-      call species_residuals_per_reac(Y,rho,rates,lgrid%X_species_dot_reacs(:,:,i,j,k))
 #endif
 
       do iv=1,nreacs

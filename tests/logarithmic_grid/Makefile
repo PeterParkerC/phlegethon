@@ -54,6 +54,11 @@ OPTS += nsteps_dump_make=100000
 OPTS += info_terminal_rate_make=10000
 OPTS += dt_restart_make=1.0e5_rp
 
+OPTS += SAVE_RAYS
+OPTS += rays_dt_dump_make=1.0_rp
+OPTS += rays_nx1_comp_make=4
+OPTS += rays_nx2_comp_make=2
+
 #stopping criteria
 OPTS += tmax_make=2.0_rp
 OPTS += stepmax_make=10000000

@@ -93,6 +93,53 @@ except KeyError:
 _EOS_TABLE_CACHE = {}
 
 #######################################################################################
+# userdef-output class
+#######################################################################################
+
+def ud_read_data(file,n1):
+    
+    f = open(file,'rb')
+    data = np.fromfile(file=f,dtype='f8')
+    nvars = round(data.shape[0]/n1)
+    shape = (n1,nvars)
+    data = data.reshape(shape)
+    f.close()
+    u = data[:, :]
+    del data
+    data = u.astype(np.float64, copy=False)
+    return data
+
+class Udo:
+
+    def __init__(self,dire='./udos'):
+
+        self.dir = dire
+
+        list_dir = os.listdir(dire)
+        probes = [entry for entry in list_dir if entry.startswith("udo")]
+
+        idx_probes = []
+        for probe in probes:
+         nb = re.findall(r'\d+',probe)
+         idx_probes.append(int(nb[0]))
+
+        self.idx_probes = np.array(sorted(idx_probes))
+
+    def time_series(self,idx_var):
+
+        signal = []
+
+        idx_pvs = 0
+        for index in self.idx_probes:
+          nelmts = index+1-idx_pvs
+          idx_pvs = index+1
+          pp_path = os.path.join(self.dir, 'udo_%d.dat'%(index))
+          pp = read_data(pp_path,nelmts)
+          signal.extend(pp[:,idx_var])
+
+        return np.array(signal)
+
+#######################################################################################
 # point-probe class
 #######################################################################################
 
@@ -741,12 +788,22 @@ class h5rprof:
         self.dd['emag_div_vel'] = havg[:,off+30]
         self.dd['b_dot_b_dot_nabla_vel'] = havg[:,off+31]
         self.dd['WL'] = havg[:,off+32]
+        
+        try:
+         self.dd['dXdt_reacs'] = (havg[:,off+33:]).reshape(self.nr,self.nreacs,self.nspecies).transpose(0,2,1)
+        except:
+         self.dd['dXdt_reacs'] = 0.0
 
         self.dd['mu'] = self.dd['abar']/(self.dd['zbar']+1.0)
-        self.dd['nabla'] = \
-        np.gradient(np.log(self.dd['T']))/np.gradient(np.log(self.dd['P']))
-        self.dd['nabla_mu'] = \
-        np.gradient(np.log(self.dd['mu']))/np.gradient(np.log(self.dd['P']))
+
+        try:
+         self.dd['nabla'] = \
+         np.gradient(np.log(self.dd['T']))/np.gradient(np.log(self.dd['P']))
+         self.dd['nabla_mu'] = \
+         np.gradient(np.log(self.dd['mu']))/np.gradient(np.log(self.dd['P']))
+        except:
+         self.dd['nabla'] = self.dd['rho']*0.0 
+         self.dd['nabla_mu'] = self.dd['rho']*0.0
 
         self.grid0 = h5grid(0,path=path_to_grids,data_path=data_path,helm_table=helm_table,pig_table=pig_table,NRHO=NRHO,NT=NT,LOGRHOMIN=LOGRHOMIN,LOGRHOMAX=LOGRHOMAX,LOGTMIN=LOGTMIN,LOGTMAX=LOGTMAX)
 
@@ -781,7 +838,6 @@ class h5rprof:
  
          self.dd['game'] = self.dd['P']/self.dd['rho_eint']+1
          self.dd['gamc'] = self.dd['rho']*self.dd['sound']**2/self.dd['P']
-
 
 def ra_iles(i1,i2,delta=1,path='./rprofs',filename=None,
 path_to_grids='./grids',mode='i',data_path=data,helm_table='helm_table_timmes_x2.dat',pig_table='401x401_pig_table_h2_offset.dat',
@@ -1701,6 +1757,130 @@ class h5plane:
      rc('text', usetex=False)
 
      return fig,axs
+  
+#######################################################################################
+# h5rays class
+#######################################################################################
+
+def ray_list(path=""):
+
+   filelist = glob.glob(os.path.join(path,'*.h5'))
+   files = []
+
+   for file in filelist:
+     f = os.path.basename(file)
+     m = re.search('rays_n([0-9]{5,})\\.(h5)$', f)
+     if m:
+       files.append((int(m.group(1)), f))
+
+   files.sort(key=lambda x: x[0])
+
+   return files
+
+class h5rays:
+
+    def __init__(self,filename,path='./rays',mode='i'):
+        if(mode=='n'):
+            filename = os.path.join(path, 'rays_n{:05}.h5'.format(filename))
+        elif(mode=='i'):
+            filename = ray_list(path=path)[filename][1]
+        else:
+          raise ValueError('Unknown mode' + str(mode),': mode must be n or i')
+
+        filename = os.path.join(path, filename)
+        self.grid = h5py.File(filename,"r")['grid']
+        
+        path0 = os.path.join(path, 'rays_n{:05}.h5'.format(0))
+        f0 = h5py.File(path0,"r")
+        self.grid0 = f0['grid']
+
+        self.gamma_gas = self.grid0['gamma_ad'][()]
+        self.mub = self.grid0['mu'][()]
+        self.x1l = self.grid0['x1l'][()]
+        self.x1u = self.grid0['x1u'][()]
+        self.x2l = self.grid0['x2l'][()]
+        self.x2u = self.grid0['x2u'][()]
+        self.x3l = self.grid0['x3l'][()]
+        self.x3u = self.grid0['x3u'][()]
+        self.sdims = self.grid0['sdims'][()]
+        self.nx1 = self.grid0['nx1'][()]
+        self.nx2 = self.grid0['nx2'][()]
+        self.nx3 = self.grid0['nx3'][()]
+        self.nvars = self.grid0['nvars'][()]
+
+        self.use_mhd = self.grid0.attrs['use_mhd'].decode('ASCII')
+
+        self.i_rho = 0
+        self.i_vx1 = 1
+        self.i_vx2 = 2
+        if(self.sdims==3):
+         self.i_vx3 = 3
+        else:
+         self.i_vx3 = 2
+        self.i_p = self.i_vx3 + 1
+        self.i_as1 = self.i_p + 1
+        self.i_T = self.nvars
+
+        if(self.use_mhd=='true'):
+         if(self.sdims==3):
+          self.i_bx1 = self.nvars + 1
+          self.i_bx2 = self.i_bx1 + 1
+          self.i_bx3 = self.i_bx2 + 1
+         else:
+          self.i_bx1 = self.nvars + 1
+          self.i_bx2 = self.i_bx1 + 1
+          self.i_bx3 = self.i_bx2 
+
+        self.time = self.grid['time'][()]
+        self.dt = self.grid['dt'][()]
+        self.step = self.grid['step'][()]
+
+    def coords(self):
+        return self.vec4d(self.grid['rays'])[-self.sdims:]
+ 
+    def r(self):
+        return np.sqrt(np.sum(self.coords()**2,axis=0))
+
+    def rho(self):
+        return self.vec4d(self.grid['rays'])[self.i_rho]
+    
+    def P(self):
+        return self.vec4d(self.grid['rays'])[self.i_p]
+
+    def T(self):
+        return self.vec4d(self.grid['rays'])[self.i_T]
+
+    def vel(self):
+        return self.vec4d(self.grid['rays'])[self.i_vx1:self.i_vx3+1]
+ 
+    def vr(self):
+        coords = self.coords()
+        vel = self.vel()
+        r = self.r()
+        return np.sum(coords*vel,axis=0)/r
+     
+    def vh(self):
+        return np.sqrt(self.vel()**2-self.vr()**2)
+ 
+    def bfield(self):
+        return self.vec4d(self.grid['rays'])[self.i_bx1:self.i_bx3+1]
+ 
+    def br(self):
+        coords = self.coords()
+        bfield = self.bfield()
+        r = self.r()
+        return np.sum(coords*bfield,axis=0)/r
+     
+    def bh(self):
+        return np.sqrt(self.bfield()**2-self.br()**2)
+ 
+    def vec4d(self,vec):
+
+        tmp = vec[:,:,:,:]
+        tmp = tmp.transpose(3,2,1,0)
+
+        return tmp
+
 #######################################################################################
 # h5grid class
 #######################################################################################
@@ -2013,9 +2193,6 @@ class h5grid:
    
     def edot_reacs(self,ix=-1,iy=-1,iz=-1):
         return self.vec4d(self.grid['edot_nuc'],ix=ix,iy=iy,iz=iz)[:self.nreacs]
- 
-    def dXdt_reacs(self,ix=-1,iy=-1,iz=-1):
-        return self.vec5d(self.grid['X_species_dot_reacs'],ix=ix,iy=iy,iz=iz)[:self.nspecies,:self.nreacs]
  
     def dXdt(self,ix=-1,iy=-1,iz=-1):
         return self.vec4d(self.grid['X_species_dot'],ix=ix,iy=iy,iz=iz)[:self.nspecies]

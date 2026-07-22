@@ -22474,7 +22474,7 @@ contains
   integer :: iter
   real(kind=rp) :: p,snu,res_snu1,res_snu2,res_snu3,idt,Xsum,iXsum
 #ifdef USE_BURNING_LIMITER
-  real(kind=rp) :: div_vel,grad_P2,rcell2,ratio
+  real(kind=rp) :: div_vel,grad_P2,ratio
 #endif  
 
   eint = rp0
@@ -22593,21 +22593,14 @@ contains
         (lgrid%coords(1,i+1,j,k)-lgrid%coords(1,i-1,j,k)) + &
         (lgrid%prim(i_vx2,i,j+1,k)-lgrid%prim(i_vx2,i,j-1,k)) / &
         (lgrid%coords(2,i,j+1,k)-lgrid%coords(2,i,j-1,k))
-     grad_P2 = &
-        ((lgrid%prim(i_p,i+1,j,k)-lgrid%prim(i_p,i-1,j,k)) / &
-        (lgrid%coords(1,i+1,j,k)-lgrid%coords(1,i-1,j,k)))**2 + &
-        ((lgrid%prim(i_p,i,j+1,k)-lgrid%prim(i_p,i,j-1,k)) / &
-        (lgrid%coords(2,i,j+1,k)-lgrid%coords(2,i,j-1,k)))**2
-     rcell2 = (lgrid%coords(1,i+1,j,k)-lgrid%coords(1,i-1,j,k))**2 + &
-        (lgrid%coords(2,i,j+1,k)-lgrid%coords(2,i,j-1,k))**2
+     grad_P2 = (lgrid%prim(i_p,i+1,j,k)-lgrid%prim(i_p,i-1,j,k)) + &
+        (lgrid%prim(i_p,i,j+1,k)-lgrid%prim(i_p,i,j-1,k))
 #if sdims_make==3
      div_vel = div_vel + (lgrid%prim(i_vx3,i,j,k+1)-lgrid%prim(i_vx3,i,j,k-1)) / &
-        (lgrid%coords(3,i,j,k+1)-lgrid%coords(3,i,j,k-1))         
-     grad_P2 = grad_P2 + ((lgrid%prim(i_p,i,j,k+1)-lgrid%prim(i_p,i,j,k-1)) / &
-        (lgrid%coords(3,i,j,k+1)-lgrid%coords(3,i,j,k-1)))**2
-     rcell2 = rcell2 + (lgrid%coords(3,i,j,k+1)-lgrid%coords(3,i,j,k-1))**2
+        (lgrid%coords(3,i,j,k+1)-lgrid%coords(3,i,j,k-1))      
+     grad_P2 = grad_P2 + (lgrid%prim(i_p,i,j,k+1)-lgrid%prim(i_p,i,j,k-1))
 #endif
-     ratio = sqrt(grad_P2*rcell2)/lgrid%prim(i_p,i,j,k)
+     ratio = sqrt(grad_P2)/lgrid%prim(i_p,i,j,k)
 #endif
      if((div_vel < rp0) .and. (ratio < tthirds)) then
       exit

@@ -17,22 +17,22 @@ subroutine setup_gs(mgrid,lgrid)
  type(locgrid), intent(inout) :: lgrid
 
  integer :: i,j,k
- real(kind=rp) :: x,y,z,r,r0,rho0,rho
+ real(kind=rp) :: x,y,z,r,rho
  real(kind=rp) :: x1l,x1u,x2l,x2u,x3l,x3u,gamma_ad,mu
- 
- r0 = 0.25_rp
- rho0 = 1.0_rp
+ real(kind=rp) :: uth=0.05_rp,RR=1.0_rp,M=1.0_rp
 
- x1l = -0.5_rp
- x1u = +0.5_rp
- x2l = -0.5_rp
- x2u = +0.5_rp
- x3l = -0.5_rp
- x3u = +0.5_rp
+ x1l = -2.0_rp
+ x1u = +2.0_rp
+ x2l = -2.0_rp
+ x2u = +2.0_rp
+ x3l = -2.0_rp
+ x3u = +2.0_rp
  gamma_ad = 5.0_rp/3.0_rp
  mu = 1.0_rp
 
  call initialize_simulation(mgrid,lgrid,x1l,x1u,x2l,x2u,x3l,x3u,gamma_ad,mu)
+
+ lgrid%gs_rho_bg = 0.0_rp
 
  do k=lbound(lgrid%prim,4),ubound(lgrid%prim,4)
   do j=lbound(lgrid%prim,3),ubound(lgrid%prim,3)
@@ -44,18 +44,17 @@ subroutine setup_gs(mgrid,lgrid)
 
      r = sqrt(x**2+y**2+z**2)
 
-     rho = 0.0_rp
+     rho = 1.0e-4_rp
 
-     if(r<=r0) then
-      rho = rho0*(1.0_rp-r**2/r0**2)**2
+     if(r<=RR) then
+      rho = M/(2.0_rp*CONST_PI*RR**2*r)
      endif
 
      lgrid%prim(i_rho,i,j,k) = rho
      lgrid%prim(i_vx1,i,j,k) = 0.0_rp
      lgrid%prim(i_vx2,i,j,k) = 0.0_rp
      lgrid%prim(i_vx3,i,j,k) = 0.0_rp
-     lgrid%prim(i_p,i,j,k) = 1.0_rp 
- 
+     lgrid%prim(i_p,i,j,k) = (gamma_ad-1.0_rp)*rho*uth
      lgrid%phi_cc(i,j,k) = 0.0_rp
 
    end do
@@ -65,6 +64,66 @@ subroutine setup_gs(mgrid,lgrid)
 end subroutine setup_gs
 
 end program test
+
+subroutine extract_userdef_quantities(mgrid,lgrid,iudflush)
+ use source
+ type(locgrid), intent(inout) :: lgrid
+ type(mpigrid), intent(inout) :: mgrid
+ integer, intent(in) :: iudflush
+
+ integer :: i,j,k,ierr
+ real(kind=rp) :: etot(1),etot_comm(1)
+ real(kind=rp) :: eint(1),eint_comm(1)
+ real(kind=rp) :: ekin(1),ekin_comm(1)
+ real(kind=rp) :: epot(1),epot_comm(1)
+ real(kind=rp) :: a,b,c,d,vol
+
+ eint(1) = rp0
+ ekin(1) = rp0
+ epot(1) = rp0
+ etot(1) = rp0
+
+ do k=mgrid%i1(3),mgrid%i2(3)
+  do j=mgrid%i1(2),mgrid%i2(2)
+   do i=mgrid%i1(1),mgrid%i2(1)
+
+    vol = 1.0_rp/lgrid%ivol(i,j,k)
+
+    a = lgrid%prim(i_p,i,j,k)/(lgrid%gm-1.0_rp)
+
+    b = 0.5_rp*lgrid%prim(i_rho,i,j,k)*( &
+    lgrid%prim(i_vx1,i,j,k)**2 + &
+    lgrid%prim(i_vx2,i,j,k)**2 + &
+    lgrid%prim(i_vx3,i,j,k)**2 &
+    )
+
+    c = 0.5_rp*lgrid%prim(i_rho,i,j,k)*lgrid%phi_cc(i,j,k)
+   
+    d = a + b + c
+
+    eint(1) = eint(1) + a*vol
+    ekin(1) = ekin(1) + b*vol
+    epot(1) = epot(1) + c*vol
+    etot(1) = etot(1) + d*vol
+
+   end do
+  end do
+ end do
+
+ call mpi_allreduce(eint, eint_comm, 1, MPI_RP , MPI_SUM, mgrid%comm_cart, ierr)
+ call mpi_allreduce(ekin, ekin_comm, 1, MPI_RP , MPI_SUM, mgrid%comm_cart, ierr)
+ call mpi_allreduce(epot, epot_comm, 1, MPI_RP , MPI_SUM, mgrid%comm_cart, ierr)
+ call mpi_allreduce(etot, etot_comm, 1, MPI_RP , MPI_SUM, mgrid%comm_cart, ierr)
+
+ lgrid%ud_state(iudflush,1) = lgrid%time
+ lgrid%ud_state(iudflush,2) = eint_comm(1)
+ lgrid%ud_state(iudflush,3) = ekin_comm(1)
+ lgrid%ud_state(iudflush,4) = epot_comm(1)
+ lgrid%ud_state(iudflush,5) = etot_comm(1)
+
+ mgrid%dummy = 0
+
+end subroutine extract_userdef_quantities
 
 #ifndef GEOMETRY_CARTESIAN_NONUNIFORM
 

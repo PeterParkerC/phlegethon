@@ -14,7 +14,7 @@ OPTS += ddx2=8
 OPTS += USE_QUAD_PRECISION
 OPTS += USE_OPR_EQM
 OPTS += USE_H2
-
+OPTS += ndigits=15
 #--------------------------------#
 
 BUILD_DIR = obj

@@ -85,7 +85,7 @@ Template defaults in `create_input.ipynb` already include:
 - `output_file = True`
 - `name_of_in_file = 'TESTCASE.in'`
 
-It also enebles `enable_abundance_transition` in order to recompute $\bar{A}$ with a reduced number of species.
+It also enables `enable_abundance_transition` in order to recompute $\bar{A}$ with a reduced number of species.
 
 Quick-start:
 

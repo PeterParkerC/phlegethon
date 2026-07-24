@@ -72,7 +72,9 @@ module source
 
  real(kind=rp), save :: Al(niso),Zl(niso),glj(niso,nlev_max),Iplj(niso,nlev_max)
  integer, save :: ns(niso) 
- 
+
+ integer, parameter :: fw=ndigits+7
+
  !===========================
  ! CONSTANTS
  !===========================
@@ -792,8 +794,17 @@ contains
    integer :: ierr,i,j,it,jt,iit,jjt,u=13
 
    character(len=256) :: filename
+   character(len=256) :: fmt4,fmt9,fmt4a
 
    call mpi_barrier(mgrid%comm_cart,ierr)
+
+   write(fmt4,'("(4(E",I0,".",I0,",1X))")') &
+     fw, ndigits
+
+   write(fmt9,'("(9(E",I0,".",I0,",1X))")') &
+     fw, ndigits
+
+   write(fmt4a,'("(4(F3.1,1X))")')
 
    if(mgrid%rankl==0) then
    
@@ -810,7 +821,7 @@ contains
           it = iit + int(Nrho/ddx1)*i
           jt = jjt + int(NT/ddx2)*j
 
-          read(fp,'(E21.14,1X,E21.14,1X,E21.14,1X,E21.14,1X,E21.14,1X,E21.14,1X,E21.14,1X,E21.14,1X,E21.14)') &
+          read(fp,fmt9) &
           table_glob(it,jt)%var(id_f), &
           table_glob(it,jt)%var(id_dfdrho), &
           table_glob(it,jt)%var(id_dfdT), &
@@ -830,7 +841,7 @@ contains
           it = iit + int(Nrho/ddx1)*i
           jt = jjt + int(NT/ddx2)*j
 
-          read(fp,'(E21.14,1X,E21.14,1X,E21.14,1X,E21.14)') &
+          read(fp,fmt4) &
           table_glob(it,jt)%var(id_dPdrho), &
           table_glob(it,jt)%var(id_dcdrho), &
           table_glob(it,jt)%var(id_dcdT), &
@@ -851,7 +862,7 @@ contains
 
     do j=1,NT+1
      do i=1,Nrho+1
-      write(u,'(E21.14,1X,E21.14,1X,E21.14,1X,E21.14,1X,E21.14,1X,E21.14,1X,E21.14,1X,E21.14,1X,E21.14)') & 
+      write(u,fmt9) & 
       table_glob(i,j)%var(id_f), &
       table_glob(i,j)%var(id_dfdrho), &
       table_glob(i,j)%var(id_dfdT), &
@@ -866,7 +877,7 @@ contains
 
     do j=1,NT+1
      do i=1,Nrho+1
-      write(u,'(E21.14,1X,E21.14,1X,E21.14,1X,E21.14)') &
+      write(u,fmt4) &
       table_glob(i,j)%var(id_dPdrho), &
       table_glob(i,j)%var(id_dcdrho), &
       table_glob(i,j)%var(id_dcdT), &
@@ -876,7 +887,7 @@ contains
 
     do j=1,NT+1
      do i=1,Nrho+1
-      write(u,'(E21.14,1X,E21.14,1X,E21.14,1X,E21.14)') &
+      write(u,fmt4a) &
       0.0_rp, &
       0.0_rp, &
       0.0_rp, &
@@ -886,7 +897,7 @@ contains
 
     do j=1,NT+1
      do i=1,Nrho+1
-      write(u,'(E21.14,1X,E21.14,1X,E21.14,1X,E21.14)') &
+      write(u,fmt4a) &
       0.0_rp, &
       0.0_rp, &
       0.0_rp, &
@@ -906,15 +917,22 @@ contains
 
    integer :: u=12,i,j
    character(len=256) :: filename
+   character(len=256) :: fmt4,fmt9
 
    write(filename, "('briquette_',I0.3,'x',I0.3,'.dat')") mgrid%coords_dd(1),mgrid%coords_dd(2) 
+
+   write(fmt4,'("(4(E",I0,".",I0,",1X))")') &
+     fw, ndigits
+
+   write(fmt9,'("(9(E",I0,".",I0,",1X))")') &
+     fw, ndigits
 
    open(newunit=u,file=filename, &
    status='replace',action = 'write')
 
    do j=1,int(NT/ddx2+1)
     do i=1,int(Nrho/ddx1+1)
-      write(u,'(E21.14,1X,E21.14,1X,E21.14,1X,E21.14,1X,E21.14,1X,E21.14,1X,E21.14,1X,E21.14,1X,E21.14)') & 
+      write(u,fmt9) & 
       table(i,j)%var(id_f), &
       table(i,j)%var(id_dfdrho), &
       table(i,j)%var(id_dfdT), &
@@ -929,7 +947,7 @@ contains
 
    do j=1,int(NT/ddx2+1)
     do i=1,int(Nrho/ddx1+1)
-      write(u,'(E21.14,1X,E21.14,1X,E21.14,1X,E21.14)') &
+      write(u,fmt4) &
       table(i,j)%var(id_dPdrho), &
       table(i,j)%var(id_dcdrho), &
       table(i,j)%var(id_dcdT), &

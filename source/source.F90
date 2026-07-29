@@ -872,7 +872,7 @@ module source
 
  end type
 
-#ifdef USE_SHOCK_FLATTENING
+#if defined(USE_SHOCK_FLATTENING) || defined(USE_USERDEF_SHOCK_FLATTENING)
  type i_flux
 
     integer, allocatable, dimension(:) :: val  
@@ -916,7 +916,7 @@ module source
 #endif
 #endif
 
-#ifdef USE_SHOCK_FLATTENING
+#if defined(USE_SHOCK_FLATTENING) || defined(USE_USERDEF_SHOCK_FLATTENING)
    type(i_flux), dimension(sdims) :: is_flattened
 #endif
 
@@ -1244,7 +1244,7 @@ module source
 #endif
 #endif
 
-#ifdef USE_SHOCK_FLATTENING
+#if defined(USE_SHOCK_FLATTENING) || defined(USE_USERDEF_SHOCK_FLATTENING)
     integer, allocatable, dimension(:,:,:) :: is_flattened
 #endif
 
@@ -1905,7 +1905,7 @@ contains
     call extract_network_information(lgrid)
 #endif
 
-#ifdef USE_SHOCK_FLATTENING
+#if defined(USE_SHOCK_FLATTENING) || defined(USE_USERDEF_SHOCK_FLATTENING)
     allocate(lgrid%is_flattened(lx1-ngc:ux1+ngc,lx2-ngc:ux2+ngc, &
 #if sdims_make==2
     lx3:ux3))
@@ -2077,7 +2077,7 @@ contains
     lgrid%spj_inextoutput = 0
 #endif
 
-#ifdef USE_SHOCK_FLATTENING
+#if defined(USE_SHOCK_FLATTENING) || defined(USE_USERDEF_SHOCK_FLATTENING)
     allocate(lgrid%ru%is_flattened(1)%val(lx1:ux1+1))
     allocate(lgrid%ru%is_flattened(2)%val(lx2:ux2+1))
 #if sdims_make==3
@@ -2402,7 +2402,7 @@ contains
 #endif
 #endif
 
-#ifdef USE_SHOCK_FLATTENING
+#if defined(USE_SHOCK_FLATTENING) || defined(USE_USERDEF_SHOCK_FLATTENING)
     deallocate(lgrid%is_flattened)
     do ierr=1,sdims
      deallocate(lgrid%ru%is_flattened(ierr)%val)
@@ -3164,6 +3164,9 @@ contains
     integer(HID_T) :: id,plist_id
 
     real(kind=rp), allocatable, dimension(:,:,:) :: vol
+#if defined(USE_SHOCK_FLATTENING) || defined(USE_USERDEF_SHOCK_FLATTENING)
+    real(kind=rp), allocatable, dimension(:,:,:) :: is_flattened_r
+#endif
 
     write(h5%filename, "('./grids/grid_n',I0.5,'.h5')") lgrid%step
 
@@ -3376,6 +3379,18 @@ contains
 
     call hdf5_write_array(h5,id,"temp",mgrid, &
     mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,lgrid%temp,0)
+
+#if defined(USE_SHOCK_FLATTENING) || defined(USE_USERDEF_SHOCK_FLATTENING)
+    allocate(is_flattened_r(lbound(lgrid%is_flattened,1):ubound(lgrid%is_flattened,1), &
+                            lbound(lgrid%is_flattened,2):ubound(lgrid%is_flattened,2), &
+                            lbound(lgrid%is_flattened,3):ubound(lgrid%is_flattened,3)))
+    is_flattened_r = real(lgrid%is_flattened, kind=rp)
+
+    call hdf5_write_array(h5,id,"is_flattened",mgrid, &
+    mgrid%i1(1),mgrid%i2(1),mgrid%i1(2),mgrid%i2(2),mgrid%i1(3),mgrid%i2(3),ngc,lgrid%ivol,is_flattened_r,0)
+
+    deallocate(is_flattened_r)
+#endif
 
 #ifdef USE_MHD
     call hdf5_write_ndarray(h5,id,"bfield",mgrid,sdims, &
@@ -7573,7 +7588,7 @@ contains
 
 #endif
 
-#ifdef USE_SHOCK_FLATTENING
+#if defined(USE_SHOCK_FLATTENING) || defined(USE_USERDEF_SHOCK_FLATTENING)
      communicate_corners = .true.
 #else
 #ifdef USE_MHD
@@ -8540,26 +8555,35 @@ contains
 
 #endif
 
+#if defined(USE_SHOCK_FLATTENING) || defined(USE_USERDEF_SHOCK_FLATTENING)
+
+#if sdims_make==3
+    do k=lx3-1,ux3+1
+#else
+    do k=lx3,ux3
+#endif
+     do j=lx2-1,ux2+1
+      do i=lx1-1,ux1+1
+
+       lgrid%is_flattened(i,j,k) = 0
+
+      end do
+     end do
+    end do
+
+#ifdef USE_USERDEF_SHOCK_FLATTENING
+    call userdef_shock_flattening(mgrid,lgrid)
+
+#endif
+
+#endif
+
 #ifdef USE_SHOCK_FLATTENING
 
 #if sdims_make==3
-     do k=lx3-1,ux3+1    
+    do k=lx3-2,ux3+2
 #else
-     do k=lx3,ux3       
-#endif
-      do j=lx2-1,ux2+1
-       do i=lx1-1,ux1+1
-
-        lgrid%is_flattened(i,j,k) = 0
-
-       end do
-      end do
-     end do
-
-#if sdims_make==3
-     do k=lx3-2,ux3+2       
-#else
-     do k=lx3,ux3       
+    do k=lx3,ux3
 #endif
       do j=lx2-2,ux2+2
        do i=lx1-2,ux1+2
@@ -9198,7 +9222,7 @@ contains
 
 #endif
 
-#ifdef USE_SHOCK_FLATTENING
+#if defined(USE_SHOCK_FLATTENING) || defined(USE_USERDEF_SHOCK_FLATTENING)
 
         do i=lx1,ux1+1
          if(lgrid%is_flattened(i-1,j,k)==1 .or. lgrid%is_flattened(i,j,k)==1) then         
@@ -10155,7 +10179,7 @@ contains
 
 #endif
 
-#ifdef USE_SHOCK_FLATTENING
+#if defined(USE_SHOCK_FLATTENING) || defined(USE_USERDEF_SHOCK_FLATTENING)
 
         do j=lx2,ux2+1
          if(lgrid%is_flattened(i,j-1,k)==1 .or. lgrid%is_flattened(i,j,k)==1) then         
@@ -10527,7 +10551,7 @@ contains
 
 #endif
 
-#ifdef USE_SHOCK_FLATTENING
+#if defined(USE_SHOCK_FLATTENING) || defined(USE_USERDEF_SHOCK_FLATTENING)
        do j=lx2-1,ux2+1
          if(lgrid%is_flattened(i,j,k)==1) then
 
@@ -11351,7 +11375,7 @@ contains
 
 #endif
 
-#ifdef USE_SHOCK_FLATTENING
+#if defined(USE_SHOCK_FLATTENING) || defined(USE_USERDEF_SHOCK_FLATTENING)
 
         do k=lx3,ux3+1
          if(lgrid%is_flattened(i,j,k-1)==1 .or. lgrid%is_flattened(i,j,k)==1) then         
@@ -11735,7 +11759,7 @@ contains
 
 #endif
 
-#ifdef USE_SHOCK_FLATTENING
+#if defined(USE_SHOCK_FLATTENING) || defined(USE_USERDEF_SHOCK_FLATTENING)
        do k=lx3-1,ux3+1
          if(lgrid%is_flattened(i,j,k)==1) then
 
@@ -14604,7 +14628,7 @@ contains
    real(kind=rp) :: machL,machR,chi,cu2L,cu2R
 #endif
 
-#ifdef USE_SHOCK_FLATTENING
+#if defined(USE_SHOCK_FLATTENING) || defined(USE_USERDEF_SHOCK_FLATTENING)
    real(kind=rp), dimension(1:nvars) :: UL,UR,fL,fR
    real(kind=rp), dimension(1:sdims) :: UbL,UbR,fbL,fbR
 #endif
@@ -14986,7 +15010,7 @@ contains
       phi = rp1
 #endif
 
-#ifdef USE_SHOCK_FLATTENING
+#if defined(USE_SHOCK_FLATTENING) || defined(USE_USERDEF_SHOCK_FLATTENING)
       if(ru%is_flattened(ru%dir)%val(idx)==1) then
 
         sL = min(rp0,sL)
@@ -15618,7 +15642,7 @@ contains
 
 #endif
 
-#ifdef USE_SHOCK_FLATTENING
+#if defined(USE_SHOCK_FLATTENING) || defined(USE_USERDEF_SHOCK_FLATTENING)
      end if
 #endif
 
@@ -16234,7 +16258,7 @@ contains
    real(kind=rp), dimension(1:nvars) :: U,Us,f
 #endif
 
-#ifdef USE_SHOCK_FLATTENING
+#if defined(USE_SHOCK_FLATTENING) || defined(USE_USERDEF_SHOCK_FLATTENING)
    real(kind=rp), dimension(1:nvars) :: UL,UR,fL,fR
 #endif
 
@@ -16529,7 +16553,7 @@ contains
       rhostarR = rhoR*(dsuR/(sR-ustar))
       rhoestarR = rhostarR*(rhoeR*inv_rhoR+(ustar-vx1R)*(ustar+pR*inv_rhoR/dsuR)) 
  
-#ifdef USE_SHOCK_FLATTENING
+#if defined(USE_SHOCK_FLATTENING) || defined(USE_USERDEF_SHOCK_FLATTENING)
       if(ru%is_flattened(ru%dir)%val(idx)==1) then
 
         sL = min(rp0,sL)
@@ -16854,7 +16878,7 @@ contains
 
 #endif
 
-#ifdef USE_SHOCK_FLATTENING
+#if defined(USE_SHOCK_FLATTENING) || defined(USE_USERDEF_SHOCK_FLATTENING)
     endif
 #endif
 

@@ -23608,6 +23608,8 @@ subroutine gmg_bcs(mgrid,lgrid,level)
 
       T9 = T*em9
 
+      if(T9>rp10) T9=rp10
+
       do iv=1,nspecies
        Y0(iv) = Y(iv)
       end do

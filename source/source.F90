@@ -2923,7 +2923,7 @@ contains
     integer :: error
     integer(HID_T) :: dataset_id,dataspace_id,memspace_id
     
-    integer(HID_T) :: start(3),cnt(3),dims(3)
+    integer(HSIZE_T) :: start(3),cnt(3),dims(3)
 
     call h5dopen_f(group_id,dsetname,dataset_id,error) 
 
@@ -2975,7 +2975,7 @@ contains
     integer :: error
     integer(HID_T) :: dataset_id,dataspace_id,memspace_id
     
-    integer(HID_T) :: start(4),cnt(4),dims(4)
+    integer(HSIZE_T) :: start(4),cnt(4),dims(4)
 
     call h5dopen_f(group_id,dsetname,dataset_id,error) 
 
@@ -3018,7 +3018,7 @@ contains
     type(h5_file) :: h5
 
     integer :: error
-    integer(HID_T) :: file_id,group_id
+    integer(HID_T) :: file_id,group_id,plist_id
     
     write(h5%filename, "('./restarts/restart_n',I0.5,'.h5')") lgrid%step
 
@@ -3047,7 +3047,13 @@ contains
     h5%pref_dtypei = H5T_STD_I32BE
 #endif
 
-    call h5fopen_f(h5%filename,H5F_ACC_RDONLY_F,file_id,error)
+    call h5pcreate_f(H5P_FILE_ACCESS_F,plist_id,error)
+
+    call h5pset_fapl_mpio_f(plist_id,mgrid%comm_cart,MPI_INFO_NULL,error)
+
+    call h5fopen_f(h5%filename,H5F_ACC_RDONLY_F,file_id,error,plist_id)
+
+    call h5pclose_f(plist_id,error)
 
     call h5gopen_f(file_id,"grid",group_id,error)
 
@@ -3090,7 +3096,7 @@ contains
     mgrid%i1(3),mgrid%i2(3),&
     ngc,lgrid%phi_cc)
 
-    call  read_ndarray(h5,group_id,"grav",mgrid,nvars,&
+    call  read_ndarray(h5,group_id,"grav",mgrid,sdims,&
     mgrid%i1(1),mgrid%i2(1),&
     mgrid%i1(2),mgrid%i2(2),&
     mgrid%i1(3),mgrid%i2(3),&
@@ -3099,7 +3105,7 @@ contains
 #endif
 #ifdef USE_MONOPOLE_GRAVITY
 
-    call  read_ndarray(h5,group_id,"grav",mgrid,nvars,&
+    call  read_ndarray(h5,group_id,"grav",mgrid,sdims,&
     mgrid%i1(1),mgrid%i2(1),&
     mgrid%i1(2),mgrid%i2(2),&
     mgrid%i1(3),mgrid%i2(3),&

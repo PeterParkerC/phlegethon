@@ -2104,7 +2104,7 @@ contains
     mgrid%rays_i1(1)-ngc:mgrid%rays_i2(1)+ngc, &
     mgrid%rays_i1(2)-ngc:mgrid%rays_i2(2)+ngc, &
 #if sdims_make==2
-    mgrid%rays_i1(3):mgrid%rays_i2(3)))    
+    mgrid%rays_i1(3):mgrid%rays_i2(3))) 
 #endif
 #if sdims_make==3
     mgrid%rays_i1(3)-ngc:mgrid%rays_i2(3)+ngc))
@@ -4126,11 +4126,11 @@ contains
         cos_phi = cos(phi)
         sin_phi = sin(phi)
         vr = (x*vx1+y*vx2+z*vx3)/r
-        vt1 = cos_theta*cos_phi*vx1+cos_theta*sin_theta*vx2-sin_theta*vx3
+        vt1 = cos_theta*cos_phi*vx1+cos_theta*sin_phi*vx2-sin_theta*vx3
         vt2 = -sin_phi*vx1+cos_phi*vx2
 #ifdef USE_MHD
         br = (x*bx1+y*bx2+z*bx3)/r
-        bt1 = cos_theta*cos_phi*bx1+cos_theta*sin_theta*bx2-sin_theta*bx3
+        bt1 = cos_theta*cos_phi*bx1+cos_theta*sin_phi*bx2-sin_theta*bx3
         bt2 = -sin_phi*bx1+cos_phi*bx2
 #endif
 #ifdef USE_GRAVITY
@@ -4145,11 +4145,11 @@ contains
         cos_phi = cos(phi)
         sin_phi = sin(phi)
         vr = (x*vx1+y*vx2+z*vx3)/r
-        vt1 = cos_theta*cos_phi*vx1+cos_theta*sin_theta*vx2-sin_theta*vx3
+        vt1 = cos_theta*cos_phi*vx1+cos_theta*sin_phi*vx2-sin_theta*vx3
         vt2 = -sin_phi*vx1+cos_phi*vx2
 #ifdef USE_MHD
         br = (x*bx1+y*bx2+z*bx3)/r
-        bt1 = cos_theta*cos_phi*bx1+cos_theta*sin_theta*bx2-sin_theta*bx3
+        bt1 = cos_theta*cos_phi*bx1+cos_theta*sin_phi*bx2-sin_theta*bx3
         bt2 = -sin_phi*bx1+cos_phi*bx2
 #endif
 #elif defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)

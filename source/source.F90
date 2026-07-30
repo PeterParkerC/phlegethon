@@ -2101,10 +2101,15 @@ contains
     mgrid%rays_i2(3) = int((mgrid%coords_dd(3)+1)*mgrid%rays_nx3)
 
     allocate(lgrid%rays(1:rays_nvars, &
-    mgrid%rays_i1(1):mgrid%rays_i2(1), &
-    mgrid%rays_i1(2):mgrid%rays_i2(2), &
-    mgrid%rays_i1(3):mgrid%rays_i2(3)))
-     
+    mgrid%rays_i1(1)-ngc:mgrid%rays_i2(1)+ngc, &
+    mgrid%rays_i1(2)-ngc:mgrid%rays_i2(2)+ngc, &
+#if sdims_make==2
+    mgrid%rays_i1(3):mgrid%rays_i2(3)))    
+#endif
+#if sdims_make==3
+    mgrid%rays_i1(3)-ngc:mgrid%rays_i2(3)+ngc))
+#endif
+
 #endif
 
     call h5open_f(ierr)

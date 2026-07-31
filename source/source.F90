@@ -852,10 +852,6 @@ module source
     real(kind=rp), allocatable, dimension(:,:,:) :: tmp
     real(kind=rp), allocatable, dimension(:,:,:,:) :: coords
     real(kind=rp), allocatable, dimension(:,:,:,:) :: nodes
-    real(kind=rp), allocatable, dimension(:,:,:) :: coords_x1
-    real(kind=rp), allocatable, dimension(:,:,:) :: coords_x2
-    real(kind=rp), allocatable, dimension(:,:,:) :: coords_x3
-    real(kind=rp), allocatable, dimension(:,:,:) :: vol
     integer, dimension(3) :: i1,i2
 
  end type
@@ -1682,26 +1678,6 @@ contains
      lgrid%gmgv(ierr)%i1(2)-1:lgrid%gmgv(ierr)%i2(2)+1+1, &
      lgrid%gmgv(ierr)%i1(3)-1:lgrid%gmgv(ierr)%i2(3)+1+1 ) )
 
-     allocate(lgrid%gmgv(ierr)%coords_x1( &
-     lgrid%gmgv(ierr)%i1(1)-1:lgrid%gmgv(ierr)%i2(1)+1+1, &
-     lgrid%gmgv(ierr)%i1(2)-1:lgrid%gmgv(ierr)%i2(2)+1, &
-     lgrid%gmgv(ierr)%i1(3)-1:lgrid%gmgv(ierr)%i2(3)+1 ) )
-
-     allocate(lgrid%gmgv(ierr)%coords_x2( &
-     lgrid%gmgv(ierr)%i1(1)-1:lgrid%gmgv(ierr)%i2(1)+1, &
-     lgrid%gmgv(ierr)%i1(2)-1:lgrid%gmgv(ierr)%i2(2)+1+1, &
-     lgrid%gmgv(ierr)%i1(3)-1:lgrid%gmgv(ierr)%i2(3)+1 ) )
-
-     allocate(lgrid%gmgv(ierr)%coords_x3( &
-     lgrid%gmgv(ierr)%i1(1)-1:lgrid%gmgv(ierr)%i2(1)+1, &
-     lgrid%gmgv(ierr)%i1(2)-1:lgrid%gmgv(ierr)%i2(2)+1, &
-     lgrid%gmgv(ierr)%i1(3)-1:lgrid%gmgv(ierr)%i2(3)+1+1 ) )
-
-     allocate(lgrid%gmgv(ierr)%vol( &
-     lgrid%gmgv(ierr)%i1(1)-1:lgrid%gmgv(ierr)%i2(1)+1, &
-     lgrid%gmgv(ierr)%i1(2)-1:lgrid%gmgv(ierr)%i2(2)+1, &
-     lgrid%gmgv(ierr)%i1(3)-1:lgrid%gmgv(ierr)%i2(3)+1 ) )
-
     end do
 
 #endif
@@ -2200,10 +2176,6 @@ contains
      deallocate(lgrid%gmgv(ierr)%tmp)
      deallocate(lgrid%gmgv(ierr)%coords)
      deallocate(lgrid%gmgv(ierr)%nodes)
-     deallocate(lgrid%gmgv(ierr)%coords_x1)
-     deallocate(lgrid%gmgv(ierr)%coords_x2)
-     deallocate(lgrid%gmgv(ierr)%coords_x3)
-     deallocate(lgrid%gmgv(ierr)%vol)
     end do
 #endif
 #endif

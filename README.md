@@ -16,7 +16,7 @@
 - Constrained transport for divergence-free magnetic field evolution
 - Time-implicit nuclear reaction networks
 - Super-time-stepping for stiff thermal diffusion
-- BiCGSTAB full gravity solver
+- BiCGSTAB full gravity solver with geometric multigrid preconditioning 
 - Realistic equations of state for stellar plasma (including partial ionization, electron degeneracy, and pair production)  
 - Multiple grid geometries: Cartesian, polar, spherical, cubed-sphere
   

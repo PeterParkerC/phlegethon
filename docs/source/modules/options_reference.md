@@ -200,7 +200,9 @@ Choose one of the following spatial reconstruction methods (see Sect. 2.5)
 | `PPH_REC`| Unlimited parabolic reconstruction for all variables except active scalars, for which limited parabolic reconstruction is used, based on [Leidi+24](https://ui.adsabs.harvard.edu/abs/2024A%26A...686A..34L/abstract). |
 | `LIM5TH_REC`| Limited fifth-order reconstruction, based on [Leidi+24](https://ui.adsabs.harvard.edu/abs/2024A%26A...686A..34L/abstract). |
 
-The option `USE_SHOCK_FLATTENING` will enable the shock-flattening procedure described in Sect. 2.7 (i.e., switch to a two-wave HLL Riemann solver and van Leer reconstruction in the presence of a shock). For this option to be used, the shock-flattening parameter needs to be defined by the user, e.g., `eps_sf_make=0.2`). This is such that the shock flattener will be activated if the relative jump in pressure at a certain cell location is larger than `eps_sf_make`.
+The option `USE_SHOCK_FLATTENING` will enable the shock-flattening procedure described in Sect. 2.7 (i.e., switch to a two-wave HLL Riemann solver and minmod slope-limited reconstruction in the presence of a shock). For this option to be used, the shock-flattening parameter needs to be defined by the user, e.g., `eps_sf_make=0.1`) as well as at least 3 ghost cells. (e.g. `ngc_make=3`). This is such that the shock flattener will be activated if the relative jump in pressure at a certain cell location is larger than `eps_sf_make`.
+
+The option `USE_USERDEF_SHOCK_FLATTENING` calls the user routine `userdef_shock_flattening(mgrid,lgrid)` defined in `app.F90`, letting the application decide which cells are marked through `is_flattened`. Cells with `is_flattened = 1` apply the shock-flattening procedure during the whole simulation. It can be used on its own, or together with `USE_SHOCK_FLATTENING` if you also want shock detection in other parts of the domain. The user should use at least 3 ghost cells with this option to be safe (e.g. `ngc_make=3`). This option only applies to cells selected by the application routine. See the `kh_userdef_flattening` test for an example of how the routine should be constructed.
 
 Riemann solvers (see Sect. 2.6). For hydrodynamic simulations, choose one of the following options:
 
@@ -225,7 +227,13 @@ For `LHLL-type` solvers, if both low-Mach and supersonic flows need to be captur
 | Option | Meaning |
 | --- | --- |
 | `USE_WB` | uses the Deviation method of [Berberich+19](https://ui.adsabs.harvard.edu/abs/2019arXiv190305154B/abstract). In `app.F90`, the cell-centered and face-centered components of $\rho$ and $P$ must be filled as, e.g., `lgrid%eq_prim_cc(i_rho:i_p:i_T,i,j,k)` and `lgrid%eq_prim_x1(i_rho:i_p:i_T,,i,j,k)` etc. |
-| `USE_GRAVITY_SOLVER` | Enables time-dependent gravity by solving Poisson's equation (see Sect. 2.12), in Godunov-splitting fashion unless `GRAVITY_SOLVER_RK` is enabled. Boundary conditions are imposed on the gravitational potential by computing the monopole expansion of the mass distribution on the grid. |
+| `USE_GRAVITY_SOLVER` | Enables time-dependent gravity by solving Poisson's equation (see Sect. 2.12), in Godunov-splitting fashion unless `GRAVITY_SOLVER_RK` is enabled. Boundary conditions are imposed on the gravitational potential by computing the monopole expansion of the mass distribution on the grid. This option only works for uniform or nonuniform Cartesian grids and can be used in combination with internal boundaries. |
+| `GMG_PRECONDITIONER` | Uses geometric multigrid as preconditioning for the gravity solver. This option is not supported if internal boundaries are used and only works for 3D grids. When this option is enabled, the user must provide the subroutine `fill_gmg_grids` in app.F90 (see e.g., tests/gravity-solver). |
+| `gmg_max_level_make=7` | Maximum number of grids used by the GMG preconditioner.|
+| `gmg_niter_coarse_make=5` | Number of weighted Jacobi iterations on the coarsest grid. |
+| `gmg_niter_presmooth_make=5` | Number of weighted Jacobi iterations during the pre-smoothing step. |
+| `gmg_niter_postsmooth_make=5` | Number of weighted Jacobi iterations during the post-smoothing step. |
+| `gmg_omega_make=0.85_rp` | Damping coefficient in weighted Jacobi. |
 | `GRAVITY_SOLVER_RK` | Solves Poisson's equation for the gravitational potential in every substage of the Runge--Kutta time stepper. |
 | `GS_QUADRUPOLE_BCS` | Adds the quadrupole expansion term of the mass distribution to compute boundary conditions for the gravitational potential. |
 | `GS_OCTUPOLE_BCS` | Adds the octupole expansion term of the mass distribution to compute boundary conditions for the gravitational potential (must be used in combination with `GS_QUADRUPOLE_BCS`). |
@@ -259,7 +267,7 @@ For `LHLL-type` solvers, if both low-Mach and supersonic flows need to be captur
 | `boost_reacs_make=100.0_rp` | Boost factor for the nuclear reactions rates. |
 | `BOOST_NEULOSS` | Activates boosting of non-nuclear neutrino losses. |
 | `boost_neuloss_make=10.0_rp` | Boost factor for non-nuclear neutrino losses. |
-| `SAVE_SPECIES_FLUXES` | Saves rate of change of each species due to each reaction (only for `sdims_make=2`). |
+| `SAVE_SPECIES_FLUXES` | Saves rate of change of each species due to each reaction (only for `SAVE_RPROFS`). |
 
 ### 12. Velocity damping
 
@@ -309,6 +317,11 @@ For `LHLL-type` solvers, if both low-Mach and supersonic flows need to be captur
 |`compression_factor_make=4` | If >1, the code performs rebinning to save a grid snapshot to the output at reduced resolution according to the provided compression factor (CF), without modifying the restart files (only for `sdims_make=3`). The reduced output is computed via volume-weighted averaging of neighboring blocks of CFxCFxCF cells. |
 | `USERDEF_OUTPUT` | Allows the user to store the value of `nudvars_make` scalar quantities at every time step, along the lines of the `USE_POINT_PROBES` option. These scalar quantities must be computed by the user in the provided `extract_userdef_quantities` subroutine in `app.F90`, and stored into `lgrid%ud_state` (see `tests/kh` for an example). The output is available in the repository `/udos`. |
 | `nudvars_make=6` | Number of scalar quantities to be recorded at every time step. |
+| `SAVE_RAYS` | Available only for polar and spherical grids. Stores radial rays of the primitive variables, temperature, magnetic field, and Cartesian coordinates in the `/rays` output directory. The rays are generated by subsampling the grid using the radial and angular compression factors described below. |
+| `rays_dt_dump_make=1.3_rp` | Time interval between successive ray outputs. Expressed in code time units. |
+| `rays_nx1_comp_make=8` | Radial compression factor. In this example, every 8th cell in the radial `x1` direction is included in the ray output. |
+| `rays_nx2_comp_make=2` | Angular compression factor in the `x2` direction (azimuthal for polar grids, and meridional for spherical grids). In this example, every 2nd angular cell is included in the ray output. | 
+| `rays_nx3_comp_make=4` | Angular compression factor in the `x3` direction (necessarily azimuthal and only for 3D spherical grids). In this example, every 4th angular cell is included in the ray output. | 
 
 ### 13. Specs
 

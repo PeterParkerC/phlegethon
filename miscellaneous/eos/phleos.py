@@ -39,6 +39,7 @@ def rhoT_given(eos_table,rho,T,abar=1.0,zbar=1.0,gamma_ideal=5.0/3.0,eos_mode=['
     elepos = False
     coulomb = False
     pig = False
+    pig_xvar = False
 
     if('ideal' in eos_mode):
         ideal = True
@@ -60,6 +61,9 @@ def rhoT_given(eos_table,rho,T,abar=1.0,zbar=1.0,gamma_ideal=5.0/3.0,eos_mode=['
     if('pig' in eos_mode):
         pig = True
 
+    if('pig_xvar' in eos_mode):
+        pig_xvar = True
+
     dim = np.ndim(rho)
 
     if(dim<3):
@@ -76,14 +80,23 @@ def rhoT_given(eos_table,rho,T,abar=1.0,zbar=1.0,gamma_ideal=5.0/3.0,eos_mode=['
     else:
         zbar = np.atleast_3d(zbar)
 
-    full = eos_fort.eos_fort_mod.rhot_given_3d(
-	rho,T,abar,zbar,
-	ideal,ions,radiation,
-	elepos,coulomb,pig,
-    gamma_ideal,
-	eos_table[0],
-	eos_table[1],eos_table[2],
-	eos_table[3],eos_table[4])
+    if(pig_xvar):
+     full = eos_fort.eos_fort_mod.rhot_given_3d_pxvar(
+     rho,T,abar,
+	 radiation,
+	 eos_table[0],
+	 eos_table[1],eos_table[2],
+	 eos_table[3],eos_table[4], 
+	 eos_table[5],eos_table[6])
+    else:
+     full = eos_fort.eos_fort_mod.rhot_given_3d(
+     rho,T,abar,zbar,
+	 ideal,ions,radiation,
+	 elepos,coulomb,pig,
+     gamma_ideal,
+	 eos_table[0],
+	 eos_table[1],eos_table[2],
+	 eos_table[3],eos_table[4])
 
     if(dim==0):
       full = full[:,0,0,0]

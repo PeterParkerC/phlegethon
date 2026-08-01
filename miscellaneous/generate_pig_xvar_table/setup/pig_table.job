@@ -1,0 +1,15 @@
+#!/bin/bash
+#SBATCH -p rome.p
+#SBATCH -o ptable_%j.out
+#SBATCH -N 1 
+#SBATCH -n 1
+#SBATCH --threads-per-core=1
+#SBATCH -t 01:00:00
+
+source /etc/profile.d/z00_lmod.sh
+
+make clean
+
+make
+
+mpirun -n 1 ./run.generate_pig_table

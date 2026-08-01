@@ -276,6 +276,71 @@ module source
 #endif
 #endif
 
+#ifdef PIG_XVAR_EOS
+  integer, parameter :: pig_nT = &
+#ifdef pig_nT_make
+  pig_nT_make
+#else
+  401
+#endif
+
+ integer, parameter :: pig_nrho = &
+#ifdef pig_nrho_make
+  pig_nrho_make
+#else
+  401
+#endif
+
+ real(kind=rp), parameter :: pig_ltlo = &
+#ifdef pig_ltlo_make
+  pig_ltlo_make
+#else
+  1.0_rp
+#endif
+
+ real(kind=rp), parameter :: pig_lthi = &
+#ifdef pig_lthi_make
+  pig_lthi_make
+#else
+  8.0_rp
+#endif
+
+ real(kind=rp), parameter :: pig_ldlo = &
+#ifdef pig_ldlo_make
+  pig_ldlo_make
+#else
+  -20.0_rp
+#endif
+
+ real(kind=rp), parameter :: pig_ldhi = &
+#ifdef pig_ldhi_make
+  pig_ldhi_make
+#else
+  0.0_rp
+#endif
+
+ real(kind=rp), parameter :: pig_Xlo = &
+#ifdef pig_Xlo_make
+  pig_Xlo_make
+#else
+  0.0_rp
+#endif
+
+ real(kind=rp), parameter :: pig_Xhi = &
+#ifdef pig_Xhi_make
+  pig_Xhi_make
+#else
+  0.0_rp
+#endif
+
+ integer, parameter :: pig_nX = &
+#ifdef pig_nX_make
+  pig_nX_make
+#else
+  1
+#endif
+#endif
+
 #ifdef USE_GRAVITY_SOLVER
 
  real(kind=rp), parameter :: gs_tol = &
@@ -682,6 +747,36 @@ module source
   
 #endif
 
+#ifdef PIG_XVAR_EOS
+
+ integer, parameter :: &
+ id_f = 1, &
+ id_dfdT = 2, &
+ id_d2fdT2 = 3, & 
+ id_dfdrho = 4, &
+ id_d2fdrho2 = 5, &
+ id_d2fdrhodT = 6, &
+ id_d3fdrho2dT = 7, &
+ id_d3fdrhodT2 = 8, &
+ id_d4fdrho2dT2 = 9
+  
+ integer, parameter :: &
+ id_c = 1, &
+ id_dcdT = 2, &
+ id_dcdrho = 3, &
+ id_d2cdrhodT = 4
+
+ integer, parameter :: pig_nvars=9
+
+ real(kind=rp), save, dimension(1:pig_nX,1:pig_nvars,1:pig_nrho,1:pig_nT) :: pig_table_var
+ real(kind=rp), save, dimension(1:pig_nX,1:4,1:pig_nrho,1:pig_nT) :: dpdrho_table_var
+ real(kind=rp), save, dimension(1:pig_nrho) :: pig_rho
+ real(kind=rp), save, dimension(1:pig_nT) :: pig_T
+ real(kind=rp), save, dimension(1:pig_nX) :: pig_X
+ real(kind=rp), save :: pig_drho,pig_dT,pig_dX
+  
+#endif
+
 #ifdef USE_POINT_PROBES
 #ifdef USE_MHD
  integer, parameter :: n_probe_vars = 2 + sdims
@@ -830,6 +925,13 @@ module source
  pig_tol=em11
 #endif
 
+#ifdef PIG_XVAR_EOS
+ real(kind=rp), parameter :: &
+ Tl_eos = 10**pig_ltlo, &
+ Th_eos = 10**pig_lthi, &
+ pig_tol=em11
+#endif
+
 #ifdef HELMHOLTZ_EOS
  real(kind=rp), parameter :: &
  Tl_eos = 10**helm_ltlo, &
@@ -908,7 +1010,7 @@ module source
 
    type(p_flux), dimension(sdims) :: pn
 
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
 #ifdef USE_FASTEOS
    type(gamma_funcs), dimension(sdims) :: gammafL,gammafR
 #else
@@ -1231,7 +1333,7 @@ module source
     integer :: spj_dstep_dump, spj_inextoutput
 #endif
 
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
 #ifdef USE_FASTEOS
     real(kind=rp), allocatable, dimension(:,:,:,:) :: gammaf
 #endif
@@ -2005,7 +2107,7 @@ contains
 
 #endif
 
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
 
 #ifdef USE_FASTEOS
     allocate(lgrid%gammaf(1:2,lx1-ngc:ux1+ngc,lx2-ngc:ux2+ngc, &
@@ -2040,7 +2142,11 @@ contains
     call load_pig_table(pig_table_var,dpdrho_table_var,pig_rho,pig_T,pig_drho,pig_dT)
 #endif
 
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#ifdef PIG_XVAR_EOS
+    call load_pig_xvar_table(pig_table_var,dpdrho_table_var,pig_rho,pig_T,pig_X,pig_drho,pig_dT,pig_dX)
+#endif
+
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
 #ifndef USE_FASTEOS
     allocate(lgrid%ru%guess_temp(1)%val(lx1:ux1+1))
     allocate(lgrid%ru%guess_temp(2)%val(lx2:ux2+1))
@@ -2419,7 +2525,7 @@ contains
      deallocate(lgrid%ru%pn(ierr)%val)
     end do
 
-#if defined(USE_PRAD) || defined(HELMHOLTZ_EOS) || defined(PIG_EOS)
+#if defined(USE_PRAD) || defined(HELMHOLTZ_EOS) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
 
 #ifndef USE_FASTEOS
 
@@ -3263,6 +3369,12 @@ contains
       call hdf5_annotate_string(id,"use_pig","true")
 #else
       call hdf5_annotate_string(id,"use_pig","false")
+#endif
+
+#ifdef PIG_XVAR_EOS
+      call hdf5_annotate_string(id,"use_pig_xvar","true")
+#else
+      call hdf5_annotate_string(id,"use_pig_xvar","false")
 #endif
 
 #ifdef USE_GRAVITY_SOLVER
@@ -4191,6 +4303,12 @@ contains
 #elif defined(PIG_EOS)
 
         call pig_rhoT_given_entropy(rho,T,s)
+
+#elif defined(PIG_XVAR_EOS)
+
+        tmp = lgrid%prim(i_as1,i,j,k)
+
+        call pig_xvar_rhoT_given_entropy(rho,T,tmp,s)
 
 #elif defined(USE_PRAD)
 
@@ -6707,6 +6825,18 @@ contains
         call pig_rhoP_given(rho,p,T,eint,sound,.false.)
         eint = rho*eint
 #endif
+#elif defined(PIG_XVAR_EOS)
+        T = lgrid%temp(i,j,k)
+        tmp = lgrid%prim(i_as1,i,j,k)
+#ifdef USE_FASTEOS       
+        call pig_xvar_rhoP_given(rho,p,T,tmp,eint,sound,.true.)
+        eint = rho*eint
+        lgrid%gammaf(i_gammae,i,j,k) = p/eint+rp1
+        lgrid%gammaf(i_gammac,i,j,k) = sound*sound*rho/p
+#else
+        call pig_xvar_rhoP_given(rho,p,T,tmp,eint,sound,.false.)
+        eint = rho*eint
+#endif
 #else
         T =  p/(CONST_RGAS*rho*inv_mu)
         eint = p*igmm1
@@ -6824,6 +6954,15 @@ contains
 #elif defined(PIG_EOS)
         T = lgrid%temp(i,j,k)
         call pig_rhoT_given_full(rho,T,p,eint,sound,cv)                                                   
+        eint = rho*eint 
+#ifdef USE_FASTEOS
+        lgrid%gammaf(i_gammae,i,j,k) = p/eint+rp1
+        lgrid%gammaf(i_gammac,i,j,k) = sound*sound*rho/p
+#endif
+#elif defined(PIG_XVAR_EOS)
+        T = lgrid%temp(i,j,k)
+        tmp = lgrid%prim(i_as1,i,j,k)
+        call pig_xvar_rhoT_given_full(rho,T,tmp,p,eint,sound,cv)                                                   
         eint = rho*eint 
 #ifdef USE_FASTEOS
         lgrid%gammaf(i_gammae,i,j,k) = p/eint+rp1
@@ -7591,7 +7730,7 @@ contains
      call communicate_ndarray(mgrid,sdims,lx1,ux1,lx2,ux2,lx3,ux3,ngc,lgrid%b_cc,communicate_corners)
 #endif
 
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
      call communicate_array(mgrid,lx1,ux1,lx2,ux2,lx3,ux3,ngc,lgrid%temp,communicate_corners)
 #endif
 
@@ -7643,7 +7782,7 @@ contains
          lgrid%prim(i_vx3,i,j,k) = vx3 - rp2*vn*nn3
 #endif
 
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
          lgrid%temp(i,j,k) = lgrid%temp(ir,j,k)
 #endif
 #ifdef USE_FASTEOS
@@ -7700,7 +7839,7 @@ contains
          lgrid%prim(i_vx3,i,j,k) = vx3 - rp2*vn*nn3
 #endif
 
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
          lgrid%temp(i,j,k) = lgrid%temp(ir,j,k)
 #endif
 #ifdef USE_FASTEOS
@@ -7757,7 +7896,7 @@ contains
          lgrid%prim(i_vx3,i,j,k) = vx3 - rp2*vn*nn3
 #endif
 
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
          lgrid%temp(i,j,k) = lgrid%temp(i,ir,k)
 #endif
 #ifdef USE_FASTEOS
@@ -7814,7 +7953,7 @@ contains
          lgrid%prim(i_vx3,i,j,k) = vx3 - rp2*vn*nn3
 #endif
 
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
          lgrid%temp(i,j,k) = lgrid%temp(i,ir,k)
 #endif
 #ifdef USE_FASTEOS
@@ -7865,7 +8004,7 @@ contains
          lgrid%prim(i_vx2,i,j,k) = vx2 - rp2*vn*nn2
          lgrid%prim(i_vx3,i,j,k) = vx3 - rp2*vn*nn3
 
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
          lgrid%temp(i,j,k) = lgrid%temp(i,j,ir)
 #endif
 #ifdef USE_FASTEOS
@@ -7914,7 +8053,7 @@ contains
          lgrid%prim(i_vx2,i,j,k) = vx2 - rp2*vn*nn2
          lgrid%prim(i_vx3,i,j,k) = vx3 - rp2*vn*nn3
 
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
          lgrid%temp(i,j,k) = lgrid%temp(i,j,ir)
 #endif
 #ifdef USE_FASTEOS
@@ -7989,7 +8128,7 @@ contains
           lgrid%b_cc(iv,i,j,k) = bc_facb(iv)*lgrid%b_cc(iv,ir,j,k)
          end do
 #endif
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
          lgrid%temp(i,j,k) = lgrid%temp(ir,j,k)
 #endif
 #ifdef USE_FASTEOS
@@ -8059,7 +8198,7 @@ contains
            lgrid%b_cc(iv,i,j,k) = bc_facb(iv)*lgrid%b_cc(iv,ir,j,k)
          end do
 #endif
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
          lgrid%temp(i,j,k) = lgrid%temp(ir,j,k)
 #endif
 #ifdef USE_FASTEOS
@@ -8129,7 +8268,7 @@ contains
           lgrid%b_cc(iv,i,j,k) = bc_facb(iv)*lgrid%b_cc(iv,i,ir,k)
          end do
 #endif
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
          lgrid%temp(i,j,k) = lgrid%temp(i,ir,k)
 #endif
 #ifdef USE_FASTEOS
@@ -8199,7 +8338,7 @@ contains
            lgrid%b_cc(iv,i,j,k) = bc_facb(iv)*lgrid%b_cc(iv,i,ir,k)
          end do
 #endif
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
          lgrid%temp(i,j,k) = lgrid%temp(i,ir,k)
 #endif
 #ifdef USE_FASTEOS
@@ -8271,7 +8410,7 @@ contains
           lgrid%b_cc(iv,i,j,k) = bc_facb(iv)*lgrid%b_cc(iv,i,j,ir)
          end do
 #endif
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
          lgrid%temp(i,j,k) = lgrid%temp(i,j,ir)
 #endif
 #ifdef USE_FASTEOS
@@ -8341,7 +8480,7 @@ contains
            lgrid%b_cc(iv,i,j,k) = bc_facb(iv)*lgrid%b_cc(iv,i,j,ir)
          end do
 #endif
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
          lgrid%temp(i,j,k) = lgrid%temp(i,j,ir)
 #endif
 #ifdef USE_FASTEOS
@@ -8400,7 +8539,7 @@ contains
 #endif
 
 #ifndef HSE_BCS
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
           lgrid%temp(i-1,j,k) = lgrid%temp(i,j,k)
 #endif
 #ifdef USE_FASTEOS
@@ -8413,7 +8552,7 @@ contains
           rho = lgrid%prim(i_rho,i,j,k)
           lgrid%prim(i_p,i-1,j,k) = lgrid%prim(i_p,i,j,k)-rho*lgrid%grav(1,i,j,k)*lgrid%dx1
           lgrid%prim(i_rho,i-1,j,k) = rp2*rho-lgrid%prim(i_rho,i+1,j,k)
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
           lgrid%temp(i-1,j,k) = rp2*lgrid%temp(i,j,k)-lgrid%temp(i+1,j,k)
 #endif
 #ifdef USE_FASTEOS
@@ -8434,7 +8573,7 @@ contains
 #endif
 
 #ifndef HSE_BCS
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
            lgrid%temp(i-2,j,k) = lgrid%temp(i+1,j,k)
 #endif
 #ifdef USE_FASTEOS
@@ -8447,7 +8586,7 @@ contains
            rho = lgrid%prim(i_rho,i,j,k)
            lgrid%prim(i_p,i-2,j,k) = lgrid%prim(i_p,i,j,k)-rp2*rho*lgrid%grav(1,i,j,k)*lgrid%dx1
            lgrid%prim(i_rho,i-2,j,k) = rp3*rho-rp2*lgrid%prim(i_rho,i+1,j,k)
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
            lgrid%temp(i-2,j,k) = rp3*lgrid%temp(i,j,k)-rp2*lgrid%temp(i+1,j,k)
 #endif
 #ifdef USE_FASTEOS
@@ -8472,7 +8611,7 @@ contains
 #endif
 
 #ifndef HSE_BCS
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
           lgrid%temp(i+1,j,k) = lgrid%temp(i,j,k)
 #endif
 #ifdef USE_FASTEOS
@@ -8485,7 +8624,7 @@ contains
           rho = lgrid%prim(i_rho,i,j,k)
           lgrid%prim(i_p,i+1,j,k) = lgrid%prim(i_p,i,j,k)+rho*lgrid%grav(1,i,j,k)*lgrid%dx1
           lgrid%prim(i_rho,i+1,j,k) = rp2*rho-lgrid%prim(i_rho,i-1,j,k)
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
           lgrid%temp(i+1,j,k) = rp2*lgrid%temp(i,j,k)-lgrid%temp(i-1,j,k)
 #endif
 #ifdef USE_FASTEOS
@@ -8506,7 +8645,7 @@ contains
 #endif
 
 #ifndef HSE_BCS
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
            lgrid%temp(i+2,j,k) = lgrid%temp(i-1,j,k)
 #endif
 #ifdef USE_FASTEOS
@@ -8519,7 +8658,7 @@ contains
            rho = lgrid%prim(i_rho,i,j,k)
            lgrid%prim(i_p,i+2,j,k) = lgrid%prim(i_p,i,j,k)+rp2*rho*lgrid%grav(1,i,j,k)*lgrid%dx1
            lgrid%prim(i_rho,i+2,j,k) = rp3*rho-rp2*lgrid%prim(i_rho,i-1,j,k)
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
            lgrid%temp(i+2,j,k) = rp3*lgrid%temp(i,j,k)-rp2*lgrid%temp(i-1,j,k)
 #endif
 #ifdef USE_FASTEOS
@@ -8955,7 +9094,7 @@ contains
        end do
 #endif
 
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
 #ifndef USE_FASTEOS
        do i=lx1,ux1+1
         lgrid%ru%guess_temp(1)%val(i) = &
@@ -9612,7 +9751,7 @@ contains
 #endif
 
 #ifndef HSE_BCS
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
           lgrid%temp(i,j-1,k) = lgrid%temp(i,j,k)
 #endif
 #ifdef USE_FASTEOS
@@ -9625,7 +9764,7 @@ contains
           rho = lgrid%prim(i_rho,i,j,k)
           lgrid%prim(i_p,i,j-1,k) = lgrid%prim(i_p,i,j,k)-rho*lgrid%grav(2,i,j,k)*lgrid%dx2
           lgrid%prim(i_rho,i,j-1,k) = rp2*rho-lgrid%prim(i_rho,i,j+1,k)
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
           lgrid%temp(i,j-1,k) = rp2*lgrid%temp(i,j,k)-lgrid%temp(i,j+1,k)
 #endif
 #ifdef USE_FASTEOS
@@ -9646,7 +9785,7 @@ contains
 #endif
 
 #ifndef HSE_BCS
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
            lgrid%temp(i,j-2,k) = lgrid%temp(i,j+1,k)
 #endif
 #ifdef USE_FASTEOS
@@ -9659,7 +9798,7 @@ contains
            rho = lgrid%prim(i_rho,i,j,k)
            lgrid%prim(i_p,i,j-2,k) = lgrid%prim(i_p,i,j,k)-rp2*rho*lgrid%grav(2,i,j,k)*lgrid%dx2
            lgrid%prim(i_rho,i,j-2,k) = rp3*rho-rp2*lgrid%prim(i_rho,i,j+1,k)
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
            lgrid%temp(i,j-2,k) = rp3*lgrid%temp(i,j,k)-lgrid%temp(i,j+1,k)
 #endif
 #ifdef USE_FASTEOS
@@ -9684,7 +9823,7 @@ contains
 #endif
 
 #ifndef HSE_BCS
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
           lgrid%temp(i,j+1,k) = lgrid%temp(i,j,k)
 #endif
 #ifdef USE_FASTEOS
@@ -9697,7 +9836,7 @@ contains
           rho = lgrid%prim(i_rho,i,j,k)
           lgrid%prim(i_p,i,j+1,k) = lgrid%prim(i_p,i,j,k)+rho*lgrid%grav(2,i,j,k)*lgrid%dx2
           lgrid%prim(i_rho,i,j+1,k) = rp2*rho-lgrid%prim(i_rho,i,j-1,k)
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
           lgrid%temp(i,j+1,k) = rp2*lgrid%temp(i,j,k)-lgrid%temp(i,j-1,k)
 #endif
 #ifdef USE_FASTEOS
@@ -9718,7 +9857,7 @@ contains
 #endif
 
 #ifndef HSE_BCS
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
            lgrid%temp(i,j+2,k) = lgrid%temp(i,j-1,k)
 #endif
 #ifdef USE_FASTEOS
@@ -9731,7 +9870,7 @@ contains
            rho = lgrid%prim(i_rho,i,j,k)
            lgrid%prim(i_p,i,j+2,k) = lgrid%prim(i_p,i,j,k)+rp2*rho*lgrid%grav(2,i,j,k)*lgrid%dx2
            lgrid%prim(i_rho,i,j+2,k) = rp3*rho-rp2*lgrid%prim(i_rho,i,j-1,k)
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
            lgrid%temp(i,j+2,k) = rp3*lgrid%temp(i,j,k)-rp2*lgrid%temp(i,j-1,k)
 #endif
 #ifdef USE_FASTEOS
@@ -10300,7 +10439,7 @@ contains
 
 #endif
 
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
 #ifndef USE_FASTEOS
        do j=lx2,ux2+1
         lgrid%ru%guess_temp(2)%val(j) = &
@@ -10876,7 +11015,7 @@ contains
 #endif
 
 #ifndef HSE_BCS
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
           lgrid%temp(i,j,k-1) = lgrid%temp(i,j,k)
 #endif
 #ifdef USE_FASTEOS
@@ -10889,7 +11028,7 @@ contains
           rho = lgrid%prim(i_rho,i,j,k)
           lgrid%prim(i_p,i,j,k-1) = lgrid%prim(i_p,i,j,k)-rho*lgrid%grav(3,i,j,k)*lgrid%dx3
           lgrid%prim(i_rho,i,j,k-1) = rp2*rho-lgrid%prim(i_rho,i,j,k+1)
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
           lgrid%temp(i,j,k-1) = rp2*lgrid%temp(i,j,k)-lgrid%temp(i,j,k+1)
 #endif
 #ifdef USE_FASTEOS
@@ -10910,7 +11049,7 @@ contains
 #endif
 
 #ifndef HSE_BCS
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
            lgrid%temp(i,j,k-2) = lgrid%temp(i,j,k+1)
 #endif
 #ifdef USE_FASTEOS
@@ -10923,7 +11062,7 @@ contains
            rho = lgrid%prim(i_rho,i,j,k)
            lgrid%prim(i_p,i,j,k-2) = lgrid%prim(i_p,i,j,k)-rp2*rho*lgrid%grav(3,i,j,k)*lgrid%dx3
            lgrid%prim(i_rho,i,j,k-2) = rp3*rho-rp2*lgrid%prim(i_rho,i,j,k+1)
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
            lgrid%temp(i,j,k-2) = rp3*lgrid%temp(i,j,k)-rp2*lgrid%temp(i,j,k+1)
 #endif
 #ifdef USE_FASTEOS
@@ -10948,7 +11087,7 @@ contains
 #endif
 
 #ifndef HSE_BCS
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
           lgrid%temp(i,j,k+1) = lgrid%temp(i,j,k)
 #endif
 #ifdef USE_FASTEOS
@@ -10961,7 +11100,7 @@ contains
           rho = lgrid%prim(i_rho,i,j,k)
           lgrid%prim(i_p,i,j,k+1) = lgrid%prim(i_p,i,j,k)+rho*lgrid%grav(3,i,j,k)*lgrid%dx3
           lgrid%prim(i_rho,i,j,k+1) = rp2*rho-lgrid%prim(i_rho,i,j,k-1)
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
           lgrid%temp(i,j,k+1) = rp2*lgrid%temp(i,j,k)-lgrid%temp(i,j,k-1)
 #endif
 #ifdef USE_FASTEOS
@@ -10982,7 +11121,7 @@ contains
 #endif
 
 #ifndef HSE_BCS
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
            lgrid%temp(i,j,k+2) = lgrid%temp(i,j,k-1)
 #endif
 #ifdef USE_FASTEOS
@@ -10995,7 +11134,7 @@ contains
            rho = lgrid%prim(i_rho,i,j,k)
            lgrid%prim(i_p,i,j,k+2) = lgrid%prim(i_p,i,j,k)+rp2*rho*lgrid%grav(3,i,j,k)*lgrid%dx3
            lgrid%prim(i_rho,i,j,k+2) = rp3*rho-rp2*lgrid%prim(i_rho,i,j,k-1)
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
            lgrid%temp(i,j,k+2) = rp3*lgrid%temp(i,j,k)-rp2*lgrid%temp(i,j,k-1)
 #endif
 #ifdef USE_FASTEOS
@@ -11508,7 +11647,7 @@ contains
  
 #endif
 
-#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS)
+#if defined(HELMHOLTZ_EOS) || defined(USE_PRAD) || defined(PIG_EOS) || defined(PIG_XVAR_EOS)
 #ifndef USE_FASTEOS
        do k=lx3,ux3+1
         lgrid%ru%guess_temp(3)%val(k) = &
@@ -14270,6 +14409,18 @@ contains
 #endif
         lgrid%prim(i_p,i,j,k) = p
         lgrid%temp(i,j,k) = T
+#elif defined(PIG_XVAR_EOS)
+        T = lgrid%temp(i,j,k)
+        tmp = lgrid%prim(i_as1,i,j,k)
+#ifdef USE_FASTEOS       
+        call pig_xvar_rhoe_given(rho,eint*inv_rho,T,tmp,p,sound,.true.)
+        lgrid%gammaf(i_gammae,i,j,k) = p/eint+rp1
+        lgrid%gammaf(i_gammac,i,j,k) = sound*sound*rho/p
+#else
+        call pig_xvar_rhoe_given(rho,eint*inv_rho,T,tmp,p,sound,.false.)
+#endif
+        lgrid%prim(i_p,i,j,k) = p
+        lgrid%temp(i,j,k) = T
 #else
         p = gmm1*eint
         lgrid%prim(i_p,i,j,k) = p
@@ -14453,6 +14604,12 @@ contains
 
        T = lgrid%temp(i,j,k)
        call pig_rhoT_given_full(rho,T,p,ei,c,cv)
+
+#elif defined(PIG_XVAR_EOS)
+
+       T = lgrid%temp(i,j,k)
+       tmp = lgrid%prim(i_as1,i,j,k)
+       call pig_xvar_rhoT_given_full(rho,T,tmp,p,ei,c,cv)
 
 #else
 
@@ -14787,6 +14944,17 @@ contains
       eint = eint*rhoL
       c2L = sound*sound
 #endif
+#elif defined(PIG_XVAR_EOS)
+#ifdef USE_FASTEOS
+      eint = pL/(ru%gammafL(ru%dir)%val(i_gammae,idx)-rp1)
+      c2L = ru%gammafL(ru%dir)%val(i_gammac,idx)*pL*inv_rhoL
+#else
+      T = ru%guess_temp(ru%dir)%val(idx)
+      dummy = qL(i_as1,idx)
+      call pig_xvar_rhoP_given(rhoL,pL,T,dummy,eint,sound,.true.)
+      eint = eint*rhoL
+      c2L = sound*sound
+#endif
 #else   
       eint = pL*igmm1
       c2L = gm*pL*inv_rhoL
@@ -14908,6 +15076,17 @@ contains
 #else
       T = ru%guess_temp(ru%dir)%val(idx)
       call pig_rhoP_given(rhoR,pR,T,eint,sound,.true.)
+      eint = eint*rhoR
+      c2R = sound*sound
+#endif
+#elif defined(PIG_XVAR_EOS)
+#ifdef USE_FASTEOS
+      eint = pR/(ru%gammafR(ru%dir)%val(i_gammae,idx)-rp1)
+      c2R = ru%gammafR(ru%dir)%val(i_gammac,idx)*pR*inv_rhoR
+#else
+      T = ru%guess_temp(ru%dir)%val(idx)
+      dummy = qR(i_as1,idx)
+      call pig_xvar_rhoP_given(rhoR,pR,T,dummy,eint,sound,.true.)
       eint = eint*rhoR
       c2R = sound*sound
 #endif
@@ -15661,7 +15840,7 @@ contains
 
 #ifdef USE_PRAD
 #ifndef USE_FASTEOS
-   real(kind=rp) :: tmp,tmp1,tmp2,Res0,Res_prad,dRes_dT
+   real(kind=rp) :: tmp1,tmp2,Res0,Res_prad,dRes_dT
    integer :: iter
 #endif
 #endif
@@ -15810,6 +15989,16 @@ contains
       call pig_rhoP_given(rhoL,pL,T,eint,cL,.true.)
       eint = eint*rhoL
 #endif
+#elif defined(PIG_XVAR_EOS)
+#ifdef USE_FASTEOS
+      eint = pL/(ru%gammafL(ru%dir)%val(i_gammae,idx)-rp1)
+      cL = sqrt(ru%gammafL(ru%dir)%val(i_gammac,idx)*pL*inv_rhoL)
+#else
+      T = ru%guess_temp(ru%dir)%val(idx)
+      dummy = qL(i_as1,idx)
+      call pig_xvar_rhoP_given(rhoL,pL,T,dummy,eint,cL,.true.)
+      eint = eint*rhoL
+#endif
 #else
       eint = igmm1*pL
       cL = sqrt(gm*pL*inv_rhoL)
@@ -15923,6 +16112,16 @@ contains
 #else
       T = ru%guess_temp(ru%dir)%val(idx)
       call pig_rhoP_given(rhoR,pR,T,eint,cR,.true.)
+      eint = eint*rhoR
+#endif
+#elif defined(PIG_XVAR_EOS)
+#ifdef USE_FASTEOS
+      eint = pR/(ru%gammafR(ru%dir)%val(i_gammae,idx)-rp1)
+      cR = sqrt(ru%gammafR(ru%dir)%val(i_gammac,idx)*pR*inv_rhoR)
+#else
+      T = ru%guess_temp(ru%dir)%val(idx)
+      dummy = qR(i_as1,idx)
+      call pig_xvar_rhoP_given(rhoR,pR,T,dummy,eint,cR,.true.)
       eint = eint*rhoR
 #endif
 #else
@@ -16391,6 +16590,16 @@ contains
       call pig_rhoP_given(rhoL,pL,T,eint,cL,.true.)
       eint = eint*rhoL
 #endif
+#elif defined(PIG_XVAR_EOS)
+#ifdef USE_FASTEOS
+      eint = pL/(ru%gammafL(ru%dir)%val(i_gammae,idx)-rp1)
+      cL = sqrt(ru%gammafL(ru%dir)%val(i_gammac,idx)*pL*inv_rhoL)
+#else
+      T = ru%guess_temp(ru%dir)%val(idx)
+      dummy = qL(i_as1,idx)
+      call pig_xvar_rhoP_given(rhoL,pL,T,dummy,eint,cL,.true.)
+      eint = eint*rhoL
+#endif
 #else
       eint = igmm1*pL
       cL = sqrt(gm*pL*inv_rhoL)
@@ -16504,6 +16713,16 @@ contains
 #else
       T = ru%guess_temp(ru%dir)%val(idx)
       call pig_rhoP_given(rhoR,pR,T,eint,cR,.true.)
+      eint = eint*rhoR
+#endif
+#elif defined(PIG_XVAR_EOS)
+#ifdef USE_FASTEOS
+      eint = pR/(ru%gammafR(ru%dir)%val(i_gammae,idx)-rp1)
+      cR = sqrt(ru%gammafR(ru%dir)%val(i_gammac,idx)*pR*inv_rhoR)
+#else
+      T = ru%guess_temp(ru%dir)%val(idx)
+      dummy = qR(i_as1,idx)
+      call pig_xvar_rhoP_given(rhoR,pR,T,dummy,eint,cR,.true.)
       eint = eint*rhoR
 #endif
 #else
@@ -21081,7 +21300,15 @@ subroutine gmg_bcs(mgrid,lgrid,level)
       call  pig_rhoT_given_full(rho,T,p,eint,sound,cv)
  
       lgrid%icv(i,j,k) = rp1/(rho*cv)
-         
+  
+#elif defined(PIG_XVAR_EOS)
+
+      tmp1 = lgrid%prim(i_as1,i,j,k)
+
+      call  pig_xvar_rhoT_given_full(rho,T,tmp1,p,eint,sound,cv)
+ 
+      lgrid%icv(i,j,k) = rp1/(rho*cv)
+                
 #else
      
       lgrid%icv(i,j,k) = gmm1/(rho*inv_mu*CONST_RGAS)
@@ -21268,6 +21495,16 @@ subroutine gmg_bcs(mgrid,lgrid,level)
       lgrid%gammaf(i_gammae,i,j,k) = p/eint+rp1
       lgrid%gammaf(i_gammac,i,j,k) = sound*sound*rho/p
 #endif
+#elif defined(PIG_EOS)
+      tmp1 = lgrid%prim(i_as1,i,j,k)
+      call  pig_xvar_rhoT_given_full(rho,T,tmp,p,eint,sound,cv)
+      eint = rho*eint
+      lgrid%prim(i_p,i,j,k) = p
+      lgrid%eint(i,j,k) = eint
+#ifdef USE_FASTEOS
+      lgrid%gammaf(i_gammae,i,j,k) = p/eint+rp1
+      lgrid%gammaf(i_gammac,i,j,k) = sound*sound*rho/p
+#endif
 #else
 
       lgrid%prim(i_p,i,j,k) = &
@@ -21397,6 +21634,10 @@ subroutine gmg_bcs(mgrid,lgrid,level)
 #elif defined(PIG_EOS)
         T = lgrid%temp(i,j,k)
         call pig_rhoe_given(rho,eint/rho,T,p,sound,.false.)
+#elif defined(PIG_XVAR_EOS)
+        T = lgrid%temp(i,j,k)
+        tmp = lgrid%prim(i_as1,i,j,k)
+        call pig_xvar_rhoe_given(rho,eint/rho,T,tmp,p,sound,.false.)
 #else
         T = gmm1*eint/(inv_mu*rho*CONST_RGAS)
 #endif
@@ -27743,6 +27984,2107 @@ subroutine gmg_bcs(mgrid,lgrid,level)
   endif
 
  end subroutine pig_rhoe_given
+
+#endif
+
+#ifdef PIG_XVAR_EOS
+
+ subroutine load_pig_xvar_table(pig_table_var, dpdrho_table_var, pig_rho, pig_T, pig_X, pig_drho, pig_dT, pig_dX)
+  real(kind=rp), dimension(1:pig_nX,1:pig_nvars,1:pig_nrho,1:pig_nT), intent(out) :: pig_table_var
+  real(kind=rp), dimension(1:pig_nX,1:4,1:pig_nrho,1:pig_nT), intent(out) :: dpdrho_table_var 
+  real(kind=rp), dimension(1:pig_nrho), intent(out) :: pig_rho
+  real(kind=rp), dimension(1:pig_nT), intent(out) :: pig_T
+  real(kind=rp), dimension(1:pig_nX), intent(out) :: pig_X
+
+  real(kind=rp), intent(out) :: pig_drho, pig_dT, pig_dX
+
+  integer :: i,j,iX
+
+  real(kind=rp) :: dum1,dum2,dum3,dum4
+
+  open(unit=iunit,file=path_to_pig_table,status='old')
+
+  pig_dT = ((pig_lthi)-(pig_ltlo))/real(pig_nT-1,kind=rp)
+  pig_drho = ((pig_ldhi)-(pig_ldlo))/real(pig_nrho-1,kind=rp)
+  pig_dX = ((pig_Xhi)-(pig_Xlo))/real(pig_nX-1,kind=rp)
+
+  do iX=1,pig_nX
+
+     pig_X(iX) = pig_Xlo+real(iX-1,kind=rp)*pig_dX
+      
+     do j=1,pig_nT
+   
+      pig_T(j) = 10**((pig_ltlo)+real(j-1,kind=rp)*pig_dT)
+   
+      do i=1,pig_nrho
+   
+        pig_rho(i) = 10**((pig_ldlo)+real(i-1,kind=rp)*pig_drho)
+   
+        read(iunit,*) & 
+        pig_table_var(iX,id_f,i,j), &
+        pig_table_var(iX,id_dfdrho,i,j), &
+        pig_table_var(iX,id_dfdT,i,j), &
+        pig_table_var(iX,id_d2fdrho2,i,j), &
+        pig_table_var(iX,id_d2fdT2,i,j), &
+        pig_table_var(iX,id_d2fdrhodT,i,j), &
+        pig_table_var(iX,id_d3fdrho2dT,i,j), &
+        pig_table_var(iX,id_d3fdrhodT2,i,j), &
+        pig_table_var(iX,id_d4fdrho2dT2,i,j)
+   
+      end do
+     end do
+   
+     do j=1,pig_nT
+      do i=1,pig_nrho
+        read(iunit,*) &
+        dpdrho_table_var(iX,id_c,i,j), &
+        dpdrho_table_var(iX,id_dcdrho,i,j), &
+        dpdrho_table_var(iX,id_dcdT,i,j), &
+        dpdrho_table_var(iX,id_d2cdrhodT,i,j)
+      end do
+     end do
+    
+     do j=1,pig_nT
+      do i=1,pig_nrho
+        read(iunit,*) dum1,dum2,dum3,dum4
+      end do
+     end do
+     
+     do j=1,pig_nT
+      do i=1,pig_nrho
+        read(iunit,*) dum1,dum2,dum3,dum4
+      end do
+     end do
+      
+  end do
+
+  close(iunit)
+
+ end subroutine load_pig_xvar_table
+
+ subroutine pig_xvar_rhoT_given_full(rho,T,Xs,P,E,sound,cv)
+ real(kind=rp), intent(in) :: rho,T,Xs
+ real(kind=rp), intent(inout) :: P,E,sound,cv
+
+ real(kind=rp) :: &
+ loc_eos1, &
+ loc_eos2, &
+ loc_eos3, &
+ loc_eos4, &
+ loc_eos5, &
+ loc_eos6, &
+ loc_eos7, &
+ loc_eos8, &
+ loc_eos9, &
+ loc_eos10, &
+ loc_eos11, &
+ loc_eos12, &
+ loc_eos13, &
+ loc_eos14, &
+ loc_eos15, &
+ loc_eos16, &
+ loc_eos17, &
+ loc_eos18, &
+ loc_eos19, &
+ loc_eos20, &
+ loc_eos21, &
+ loc_eos22, &
+ loc_eos23, &
+ loc_eos24, &
+ loc_eos25, &
+ loc_eos26, &
+ loc_eos27, &
+ loc_eos28, &
+ loc_eos29, &
+ loc_eos30, &
+ loc_eos31, &
+ loc_eos32, &
+ loc_eos33, &
+ loc_eos34, &
+ loc_eos35, &
+ loc_eos36
+ 
+ real(kind=rp) :: &
+ loc1_eos1, &
+ loc1_eos2, &
+ loc1_eos3, &
+ loc1_eos4, &
+ loc1_eos5, &
+ loc1_eos6, &
+ loc1_eos7, &
+ loc1_eos8, &
+ loc1_eos9, &
+ loc1_eos10, &
+ loc1_eos11, &
+ loc1_eos12, &
+ loc1_eos13, &
+ loc1_eos14, &
+ loc1_eos15, &
+ loc1_eos16, &
+ loc1_eos17, &
+ loc1_eos18, &
+ loc1_eos19, &
+ loc1_eos20, &
+ loc1_eos21, &
+ loc1_eos22, &
+ loc1_eos23, &
+ loc1_eos24, &
+ loc1_eos25, &
+ loc1_eos26, &
+ loc1_eos27, &
+ loc1_eos28, &
+ loc1_eos29, &
+ loc1_eos30, &
+ loc1_eos31, &
+ loc1_eos32, &
+ loc1_eos33, &
+ loc1_eos34, &
+ loc1_eos35, &
+ loc1_eos36
+ 
+ real(kind=rp) :: &
+ loc2_eos1, &
+ loc2_eos2, &
+ loc2_eos3, &
+ loc2_eos4, &
+ loc2_eos5, &
+ loc2_eos6, &
+ loc2_eos7, &
+ loc2_eos8, &
+ loc2_eos9, &
+ loc2_eos10, &
+ loc2_eos11, &
+ loc2_eos12, &
+ loc2_eos13, &
+ loc2_eos14, &
+ loc2_eos15, &
+ loc2_eos16, &
+ loc2_eos17, &
+ loc2_eos18, &
+ loc2_eos19, &
+ loc2_eos20, &
+ loc2_eos21, &
+ loc2_eos22, &
+ loc2_eos23, &
+ loc2_eos24, &
+ loc2_eos25, &
+ loc2_eos26, &
+ loc2_eos27, &
+ loc2_eos28, &
+ loc2_eos29, &
+ loc2_eos30, &
+ loc2_eos31, &
+ loc2_eos32, &
+ loc2_eos33, &
+ loc2_eos34, &
+ loc2_eos35, &
+ loc2_eos36
+                
+ integer :: ih,jh,xh,xh1,xh2
+
+ real(kind=rp) :: df_drho,df_dT,df_drhodT,df_dT2
+ real(kind=rp) :: f,s,ds_dT,ds_drho,T2,T3,T4,rhos,Ye
+ real(kind=rp) :: zz,chiT,chirho,gam1,z,dP_drho,dP_dT,dE_drho,dE_dT
+
+ real(kind=rp) :: x,y,drho,drho2,dT,dT2,tmp
+ real(kind=rp) :: p0r,p0t,p0mr,p0mt,p1r,p1t,p1mr,p1mt,p2r,p2t,p2mr,p2mt,idrho,idrho2,idT,idT2
+ real(kind=rp) :: dp0r,dp1r,dp2r,dp0mr,dp1mr,dp2mr
+ real(kind=rp) :: dp0t,dp1t,dp2t,dp0mt,dp1mt,dp2mt
+ real(kind=rp) :: ddp0t,ddp1t,ddp2t,ddp0mt,ddp1mt,ddp2mt
+ real(kind=rp) :: omx,omy
+ real(kind=rp) :: x2,x3,x4,x5,y2,y3,y4,y5,omx2,omx3,omx4,omx5,omy2,omy3,omy4,omy5
+ 
+ real(kind=rp) :: Xss,omega,omomega
+
+ Ye = rp1 
+
+ rhos = rho*Ye
+
+ ih = int((log10(rhos)-log10(pig_rho(1)))/pig_drho) + 1
+ jh = int((log10(T)-log10(pig_T(1)))/pig_dT) + 1
+
+ tmp = pig_rho(ih)
+ drho = pig_rho(ih+1)-tmp
+ x = (rhos-tmp)/drho
+ omx = rp1-x
+
+ tmp = pig_T(jh)
+ dT = pig_T(jh+1)-tmp
+ y = (T-tmp)/dT
+ omy = rp1-y
+
+ drho2 = drho*drho
+ dT2 = dT*dT
+
+ idrho = rp1/drho
+ idrho2 = idrho*idrho
+
+ idT = rp1/dT
+ idT2 = idT*idT
+
+ !======================================!
+
+ !table interpolation in X
+
+ Xss = Xs
+
+ if(Xss<pig_Xlo) Xss = pig_Xlo
+ if(Xss>pig_Xhi) Xss = pig_Xhi
+
+ xh = int((Xss-pig_X(1))/pig_dX) + 1
+
+ if(xh==pig_nX) then
+  xh1 = xh
+  xh2 = xh
+  omega = rp0
+ else
+  xh1 = xh
+  xh2 = xh+1
+  omega = (Xs-pig_X(xh1))/(pig_X(xh2)-pig_X(xh1))
+ endif
+
+ omomega = rp1-omega
+
+ loc1_eos1 = pig_table_var(xh1,1,ih,jh)
+ loc1_eos2 = pig_table_var(xh1,1,ih+1,jh)
+ loc1_eos3 = pig_table_var(xh1,1,ih,jh+1)
+ loc1_eos4 = pig_table_var(xh1,1,ih+1,jh+1)
+ loc1_eos5 = pig_table_var(xh1,2,ih,jh)
+ loc1_eos6 = pig_table_var(xh1,2,ih+1,jh)
+ loc1_eos7 = pig_table_var(xh1,2,ih,jh+1)
+ loc1_eos8 = pig_table_var(xh1,2,ih+1,jh+1)
+ loc1_eos9 = pig_table_var(xh1,3,ih,jh)
+ loc1_eos10 = pig_table_var(xh1,3,ih+1,jh)
+ loc1_eos11 = pig_table_var(xh1,3,ih,jh+1)
+ loc1_eos12 = pig_table_var(xh1,3,ih+1,jh+1)
+ loc1_eos13 = pig_table_var(xh1,4,ih,jh)
+ loc1_eos14 = pig_table_var(xh1,4,ih+1,jh)
+ loc1_eos15 = pig_table_var(xh1,4,ih,jh+1)
+ loc1_eos16 = pig_table_var(xh1,4,ih+1,jh+1)
+ loc1_eos17 = pig_table_var(xh1,5,ih,jh)
+ loc1_eos18 = pig_table_var(xh1,5,ih+1,jh)
+ loc1_eos19 = pig_table_var(xh1,5,ih,jh+1)
+ loc1_eos20 = pig_table_var(xh1,5,ih+1,jh+1)
+ loc1_eos21 = pig_table_var(xh1,6,ih,jh)
+ loc1_eos22 = pig_table_var(xh1,6,ih+1,jh)
+ loc1_eos23 = pig_table_var(xh1,6,ih,jh+1)
+ loc1_eos24 = pig_table_var(xh1,6,ih+1,jh+1)
+ loc1_eos25 = pig_table_var(xh1,7,ih,jh)
+ loc1_eos26 = pig_table_var(xh1,7,ih+1,jh)
+ loc1_eos27 = pig_table_var(xh1,7,ih,jh+1)
+ loc1_eos28 = pig_table_var(xh1,7,ih+1,jh+1)
+ loc1_eos29 = pig_table_var(xh1,8,ih,jh)
+ loc1_eos30 = pig_table_var(xh1,8,ih+1,jh)
+ loc1_eos31 = pig_table_var(xh1,8,ih,jh+1)
+ loc1_eos32 = pig_table_var(xh1,8,ih+1,jh+1)
+ loc1_eos33 = pig_table_var(xh1,9,ih,jh)
+ loc1_eos34 = pig_table_var(xh1,9,ih+1,jh)
+ loc1_eos35 = pig_table_var(xh1,9,ih,jh+1)
+ loc1_eos36 = pig_table_var(xh1,9,ih+1,jh+1)
+
+ loc2_eos1 = pig_table_var(xh2,1,ih,jh)
+ loc2_eos2 = pig_table_var(xh2,1,ih+1,jh)
+ loc2_eos3 = pig_table_var(xh2,1,ih,jh+1)
+ loc2_eos4 = pig_table_var(xh2,1,ih+1,jh+1)
+ loc2_eos5 = pig_table_var(xh2,2,ih,jh)
+ loc2_eos6 = pig_table_var(xh2,2,ih+1,jh)
+ loc2_eos7 = pig_table_var(xh2,2,ih,jh+1)
+ loc2_eos8 = pig_table_var(xh2,2,ih+1,jh+1)
+ loc2_eos9 = pig_table_var(xh2,3,ih,jh)
+ loc2_eos10 = pig_table_var(xh2,3,ih+1,jh)
+ loc2_eos11 = pig_table_var(xh2,3,ih,jh+1)
+ loc2_eos12 = pig_table_var(xh2,3,ih+1,jh+1)
+ loc2_eos13 = pig_table_var(xh2,4,ih,jh)
+ loc2_eos14 = pig_table_var(xh2,4,ih+1,jh)
+ loc2_eos15 = pig_table_var(xh2,4,ih,jh+1)
+ loc2_eos16 = pig_table_var(xh2,4,ih+1,jh+1)
+ loc2_eos17 = pig_table_var(xh2,5,ih,jh)
+ loc2_eos18 = pig_table_var(xh2,5,ih+1,jh)
+ loc2_eos19 = pig_table_var(xh2,5,ih,jh+1)
+ loc2_eos20 = pig_table_var(xh2,5,ih+1,jh+1)
+ loc2_eos21 = pig_table_var(xh2,6,ih,jh)
+ loc2_eos22 = pig_table_var(xh2,6,ih+1,jh)
+ loc2_eos23 = pig_table_var(xh2,6,ih,jh+1)
+ loc2_eos24 = pig_table_var(xh2,6,ih+1,jh+1)
+ loc2_eos25 = pig_table_var(xh2,7,ih,jh)
+ loc2_eos26 = pig_table_var(xh2,7,ih+1,jh)
+ loc2_eos27 = pig_table_var(xh2,7,ih,jh+1)
+ loc2_eos28 = pig_table_var(xh2,7,ih+1,jh+1)
+ loc2_eos29 = pig_table_var(xh2,8,ih,jh)
+ loc2_eos30 = pig_table_var(xh2,8,ih+1,jh)
+ loc2_eos31 = pig_table_var(xh2,8,ih,jh+1)
+ loc2_eos32 = pig_table_var(xh2,8,ih+1,jh+1)
+ loc2_eos33 = pig_table_var(xh2,9,ih,jh)
+ loc2_eos34 = pig_table_var(xh2,9,ih+1,jh)
+ loc2_eos35 = pig_table_var(xh2,9,ih,jh+1)
+ loc2_eos36 = pig_table_var(xh2,9,ih+1,jh+1)
+ 
+ loc_eos1 = omomega*loc1_eos1 + omega*loc2_eos1
+ loc_eos2 = omomega*loc1_eos2 + omega*loc2_eos2
+ loc_eos3 = omomega*loc1_eos3 + omega*loc2_eos3
+ loc_eos4 = omomega*loc1_eos4 + omega*loc2_eos4
+ loc_eos5 = omomega*loc1_eos5 + omega*loc2_eos5
+ loc_eos6 = omomega*loc1_eos6 + omega*loc2_eos6
+ loc_eos7 = omomega*loc1_eos7 + omega*loc2_eos7
+ loc_eos8 = omomega*loc1_eos8 + omega*loc2_eos8
+ loc_eos9 = omomega*loc1_eos9 + omega*loc2_eos9
+ loc_eos10 = omomega*loc1_eos10 + omega*loc2_eos10
+ loc_eos11 = omomega*loc1_eos11 + omega*loc2_eos11
+ loc_eos12 = omomega*loc1_eos12 + omega*loc2_eos12
+ loc_eos13 = omomega*loc1_eos13 + omega*loc2_eos13
+ loc_eos14 = omomega*loc1_eos14 + omega*loc2_eos14
+ loc_eos15 = omomega*loc1_eos15 + omega*loc2_eos15
+ loc_eos16 = omomega*loc1_eos16 + omega*loc2_eos16
+ loc_eos17 = omomega*loc1_eos17 + omega*loc2_eos17
+ loc_eos18 = omomega*loc1_eos18 + omega*loc2_eos18
+ loc_eos19 = omomega*loc1_eos19 + omega*loc2_eos19
+ loc_eos20 = omomega*loc1_eos20 + omega*loc2_eos20
+ loc_eos21 = omomega*loc1_eos21 + omega*loc2_eos21
+ loc_eos22 = omomega*loc1_eos22 + omega*loc2_eos22
+ loc_eos23 = omomega*loc1_eos23 + omega*loc2_eos23
+ loc_eos24 = omomega*loc1_eos24 + omega*loc2_eos24
+ loc_eos25 = omomega*loc1_eos25 + omega*loc2_eos25
+ loc_eos26 = omomega*loc1_eos26 + omega*loc2_eos26
+ loc_eos27 = omomega*loc1_eos27 + omega*loc2_eos27
+ loc_eos28 = omomega*loc1_eos28 + omega*loc2_eos28
+ loc_eos29 = omomega*loc1_eos29 + omega*loc2_eos29
+ loc_eos30 = omomega*loc1_eos30 + omega*loc2_eos30
+ loc_eos31 = omomega*loc1_eos31 + omega*loc2_eos31
+ loc_eos32 = omomega*loc1_eos32 + omega*loc2_eos32
+ loc_eos33 = omomega*loc1_eos33 + omega*loc2_eos33
+ loc_eos34 = omomega*loc1_eos34 + omega*loc2_eos34
+ loc_eos35 = omomega*loc1_eos35 + omega*loc2_eos35
+ loc_eos36 = omomega*loc1_eos36 + omega*loc2_eos36
+ 
+ !======================================!
+
+ x2 = x*x
+ x3 = x2*x
+ x4 = x3*x
+ x5 = x4*x
+ p0r = -rp6*x5 + rp15*x4 - rp10*x3 + rp1
+ p1r = (-rp3*x5 + rp8*x4 - rp6*x3 + x)*drho
+ p2r = (rph*(-x5 + rp3*x4 - rp3*x3 + x2))*drho2
+
+ omx2 = omx*omx
+ omx3 = omx2*omx
+ omx4 = omx3*omx
+ omx5 = omx4*omx
+ p0mr = -rp6*omx5 + rp15*omx4 - rp10*omx3 + rp1
+ p1mr =  (rp3*omx5 - rp8*omx4 + rp6*omx3 - omx)*drho
+ p2mr =  (rph*(-omx5 + rp3*omx4 - rp3*omx3 + omx2))*drho2
+
+ y2 = y*y
+ y3 = y2*y
+ y4 = y3*y
+ y5 = y4*y
+ p0t = -rp6*y5 + rp15*y4 - rp10*y3 + rp1
+ p1t = (-rp3*y5 + rp8*y4 - rp6*y3 + y)*dT
+ p2t = (rph*(-y5 + rp3*y4 - rp3*y3 + y2))*dT2
+
+ omy2 = omy*omy
+ omy3 = omy2*omy
+ omy4 = omy3*omy
+ omy5 = omy4*omy
+ p0mt = -rp6*omy5 + rp15*omy4 - rp10*omy3 + rp1
+ p1mt =  (rp3*omy5 - rp8*omy4 + rp6*omy3 - omy)*dT
+ p2mt =  (rph*(-omy5 + rp3*omy4 - rp3*omy3 + omy2))*dT2
+
+ f = &
+ loc_eos1*p0r*p0t + &
+ loc_eos2*p0mr*p0t + &
+ loc_eos3*p0r*p0mt + &
+ loc_eos4*p0mr*p0mt + &
+ loc_eos5*p0r*p1t + &
+ loc_eos6*p0mr*p1t + &
+ loc_eos7*p0r*p1mt + &
+ loc_eos8*p0mr*p1mt + &
+ loc_eos9*p0r*p2t + &
+ loc_eos10*p0mr*p2t + &
+ loc_eos11*p0r*p2mt + &
+ loc_eos12*p0mr*p2mt + &
+ loc_eos13*p1r*p0t + &
+ loc_eos14*p1mr*p0t + &
+ loc_eos15*p1r*p0mt + &
+ loc_eos16*p1mr*p0mt + &
+ loc_eos17*p2r*p0t + &
+ loc_eos18*p2mr*p0t + &
+ loc_eos19*p2r*p0mt + &
+ loc_eos20*p2mr*p0mt + &
+ loc_eos21*p1r*p1t + &
+ loc_eos22*p1mr*p1t + &
+ loc_eos23*p1r*p1mt + &
+ loc_eos24*p1mr*p1mt + &
+ loc_eos25*p2r*p1t + &
+ loc_eos26*p2mr*p1t + &
+ loc_eos27*p2r*p1mt + &
+ loc_eos28*p2mr*p1mt + &
+ loc_eos29*p1r*p2t + &
+ loc_eos30*p1mr*p2t + &
+ loc_eos31*p1r*p2mt + &
+ loc_eos32*p1mr*p2mt + &
+ loc_eos33*p2r*p2t + &
+ loc_eos34*p2mr*p2t + &
+ loc_eos35*p2r*p2mt + &
+ loc_eos36*p2mr*p2mt
+
+ dp0r =  (-rp30*x4 + rp60*x3 - rp30*x2)*idrho
+ dp1r =  (-rp15*x4 + rp32*x3 - rp18*x2 + rp1)
+ dp2r =  (rph*(-rp5*x4 + rp12*x3 - rp9*x2 + rp2*x))*drho
+
+ dp0mr = -(-rp30*omx4 + rp60*omx3 - rp30*omx2)*idrho
+ dp1mr =  (-rp15*omx4 + rp32*omx3 - rp18*omx2 + rp1)
+ dp2mr = -(rph*(-rp5*omx4 + rp12*omx3 - rp9*omx2 + rp2*omx))*drho
+
+ df_drho = &
+ loc_eos1*dp0r*p0t + &
+ loc_eos2*dp0mr*p0t + &
+ loc_eos3*dp0r*p0mt + &
+ loc_eos4*dp0mr*p0mt + &
+ loc_eos5*dp0r*p1t + &
+ loc_eos6*dp0mr*p1t + &
+ loc_eos7*dp0r*p1mt + &
+ loc_eos8*dp0mr*p1mt + &
+ loc_eos9*dp0r*p2t + &
+ loc_eos10*dp0mr*p2t + &
+ loc_eos11*dp0r*p2mt + &
+ loc_eos12*dp0mr*p2mt + &
+ loc_eos13*dp1r*p0t + &
+ loc_eos14*dp1mr*p0t + &
+ loc_eos15*dp1r*p0mt + &
+ loc_eos16*dp1mr*p0mt + &
+ loc_eos17*dp2r*p0t + &
+ loc_eos18*dp2mr*p0t + &
+ loc_eos19*dp2r*p0mt + &
+ loc_eos20*dp2mr*p0mt + &
+ loc_eos21*dp1r*p1t + &
+ loc_eos22*dp1mr*p1t + &
+ loc_eos23*dp1r*p1mt + &
+ loc_eos24*dp1mr*p1mt + &
+ loc_eos25*dp2r*p1t + &
+ loc_eos26*dp2mr*p1t + &
+ loc_eos27*dp2r*p1mt + &
+ loc_eos28*dp2mr*p1mt + &
+ loc_eos29*dp1r*p2t + &
+ loc_eos30*dp1mr*p2t + &
+ loc_eos31*dp1r*p2mt + &
+ loc_eos32*dp1mr*p2mt + &
+ loc_eos33*dp2r*p2t + &
+ loc_eos34*dp2mr*p2t + &
+ loc_eos35*dp2r*p2mt + &
+ loc_eos36*dp2mr*p2mt
+
+ dp0t =  (-rp30*y4 + rp60*y3 - rp30*y2)*idT
+ dp1t =  (-rp15*y4 + rp32*y3 - rp18*y2 + rp1)
+ dp2t =  (rph*(-rp5*y4 + rp12*y3 - rp9*y2 + rp2*y))*dT
+
+ dp0mt = -(-rp30*omy4 + rp60*omy3 - rp30*omy2)*idT
+ dp1mt =  (-rp15*omy4 + rp32*omy3 - rp18*omy2 + rp1)
+ dp2mt = -(rph*(-rp5*omy4 + rp12*omy3 - rp9*omy2 + rp2*omy))*dT
+
+ df_dT = &
+ loc_eos1*p0r*dp0t + &
+ loc_eos2*p0mr*dp0t + &
+ loc_eos3*p0r*dp0mt + &
+ loc_eos4*p0mr*dp0mt + &
+ loc_eos5*p0r*dp1t + &
+ loc_eos6*p0mr*dp1t + &
+ loc_eos7*p0r*dp1mt + &
+ loc_eos8*p0mr*dp1mt + &
+ loc_eos9*p0r*dp2t + &
+ loc_eos10*p0mr*dp2t + &
+ loc_eos11*p0r*dp2mt + &
+ loc_eos12*p0mr*dp2mt + &
+ loc_eos13*p1r*dp0t + &
+ loc_eos14*p1mr*dp0t + &
+ loc_eos15*p1r*dp0mt + &
+ loc_eos16*p1mr*dp0mt + &
+ loc_eos17*p2r*dp0t + &
+ loc_eos18*p2mr*dp0t + &
+ loc_eos19*p2r*dp0mt + &
+ loc_eos20*p2mr*dp0mt + &
+ loc_eos21*p1r*dp1t + &
+ loc_eos22*p1mr*dp1t + &
+ loc_eos23*p1r*dp1mt + &
+ loc_eos24*p1mr*dp1mt + &
+ loc_eos25*p2r*dp1t + &
+ loc_eos26*p2mr*dp1t + &
+ loc_eos27*p2r*dp1mt + &
+ loc_eos28*p2mr*dp1mt + &
+ loc_eos29*p1r*dp2t + &
+ loc_eos30*p1mr*dp2t + &
+ loc_eos31*p1r*dp2mt + &
+ loc_eos32*p1mr*dp2mt + &
+ loc_eos33*p2r*dp2t + &
+ loc_eos34*p2mr*dp2t + &
+ loc_eos35*p2r*dp2mt + &
+ loc_eos36*p2mr*dp2mt
+
+ df_drhodT = &
+ loc_eos1*dp0r*dp0t + &
+ loc_eos2*dp0mr*dp0t + &
+ loc_eos3*dp0r*dp0mt + &
+ loc_eos4*dp0mr*dp0mt + &
+ loc_eos5*dp0r*dp1t + &
+ loc_eos6*dp0mr*dp1t + &
+ loc_eos7*dp0r*dp1mt + &
+ loc_eos8*dp0mr*dp1mt + &
+ loc_eos9*dp0r*dp2t + &
+ loc_eos10*dp0mr*dp2t + &
+ loc_eos11*dp0r*dp2mt + &
+ loc_eos12*dp0mr*dp2mt + &
+ loc_eos13*dp1r*dp0t + &
+ loc_eos14*dp1mr*dp0t + &
+ loc_eos15*dp1r*dp0mt + &
+ loc_eos16*dp1mr*dp0mt + &
+ loc_eos17*dp2r*dp0t + &
+ loc_eos18*dp2mr*dp0t + &
+ loc_eos19*dp2r*dp0mt + &
+ loc_eos20*dp2mr*dp0mt + &
+ loc_eos21*dp1r*dp1t + &
+ loc_eos22*dp1mr*dp1t + &
+ loc_eos23*dp1r*dp1mt + &
+ loc_eos24*dp1mr*dp1mt + &
+ loc_eos25*dp2r*dp1t + &
+ loc_eos26*dp2mr*dp1t + &
+ loc_eos27*dp2r*dp1mt + &
+ loc_eos28*dp2mr*dp1mt + &
+ loc_eos29*dp1r*dp2t + &
+ loc_eos30*dp1mr*dp2t + &
+ loc_eos31*dp1r*dp2mt + &
+ loc_eos32*dp1mr*dp2mt + &
+ loc_eos33*dp2r*dp2t + &
+ loc_eos34*dp2mr*dp2t + &
+ loc_eos35*dp2r*dp2mt + &
+ loc_eos36*dp2mr*dp2mt
+
+ ddp0t =  (-rp120*y3 + rp180*y2 - rp60*y)*idT2
+ ddp1t =  (-rp60*y3 + rp96*y2 - rp36*y)*idT
+ ddp2t =  (rph*(-rp20*y3 + rp36*y2 - rp18*y + rp2))
+
+ ddp0mt =  (-rp120*omy3 + rp180*omy2 - rp60*omy)*idT2
+ ddp1mt = -(-rp60*omy3 + rp96*omy2 - rp36*omy)*idT
+ ddp2mt =  (rph*(-rp20*omy3 + rp36*omy2 - rp18*omy + rp2))
+
+ df_dT2 = &
+ loc_eos1*p0r*ddp0t + &
+ loc_eos2*p0mr*ddp0t + &
+ loc_eos3*p0r*ddp0mt + &
+ loc_eos4*p0mr*ddp0mt + &
+ loc_eos5*p0r*ddp1t + &
+ loc_eos6*p0mr*ddp1t + &
+ loc_eos7*p0r*ddp1mt + &
+ loc_eos8*p0mr*ddp1mt + &
+ loc_eos9*p0r*ddp2t + &
+ loc_eos10*p0mr*ddp2t + &
+ loc_eos11*p0r*ddp2mt + &
+ loc_eos12*p0mr*ddp2mt + &
+ loc_eos13*p1r*ddp0t + &
+ loc_eos14*p1mr*ddp0t + &
+ loc_eos15*p1r*ddp0mt + &
+ loc_eos16*p1mr*ddp0mt + &
+ loc_eos17*p2r*ddp0t + &
+ loc_eos18*p2mr*ddp0t + &
+ loc_eos19*p2r*ddp0mt + &
+ loc_eos20*p2mr*ddp0mt + &
+ loc_eos21*p1r*ddp1t + &
+ loc_eos22*p1mr*ddp1t + &
+ loc_eos23*p1r*ddp1mt + &
+ loc_eos24*p1mr*ddp1mt + &
+ loc_eos25*p2r*ddp1t + &
+ loc_eos26*p2mr*ddp1t + &
+ loc_eos27*p2r*ddp1mt + &
+ loc_eos28*p2mr*ddp1mt + &
+ loc_eos29*p1r*ddp2t + &
+ loc_eos30*p1mr*ddp2t + &
+ loc_eos31*p1r*ddp2mt + &
+ loc_eos32*p1mr*ddp2mt + &
+ loc_eos33*p2r*ddp2t + &
+ loc_eos34*p2mr*ddp2t + &
+ loc_eos35*p2r*ddp2mt + &
+ loc_eos36*p2mr*ddp2mt
+
+ p0r = rp2*x3-rp3*x2+rp1
+ p1r = (x3-rp2*x2+x)*drho
+
+ p0mr = rp2*omx3-rp3*omx2+rp1
+ p1mr = -(omx3-rp2*omx2+omx)*drho
+
+ p0t = rp2*y3-rp3*y2+rp1
+ p1t = (y3-rp2*y2+y)*dT
+
+ p0mt = rp2*omy3-rp3*omy2+rp1
+ p1mt = -(omy3-rp2*omy2+omy)*dT
+
+ !======================================!
+
+ !table interpolation in X
+
+ loc1_eos1 = dpdrho_table_var(xh1,1,ih,jh)
+ loc1_eos2 = dpdrho_table_var(xh1,1,ih+1,jh)
+ loc1_eos3 = dpdrho_table_var(xh1,1,ih,jh+1)
+ loc1_eos4 = dpdrho_table_var(xh1,1,ih+1,jh+1)
+ loc1_eos5 = dpdrho_table_var(xh1,2,ih,jh)
+ loc1_eos6 = dpdrho_table_var(xh1,2,ih+1,jh)
+ loc1_eos7 = dpdrho_table_var(xh1,2,ih,jh+1)
+ loc1_eos8 = dpdrho_table_var(xh1,2,ih+1,jh+1)
+ loc1_eos9 = dpdrho_table_var(xh1,3,ih,jh)
+ loc1_eos10 = dpdrho_table_var(xh1,3,ih+1,jh)
+ loc1_eos11 = dpdrho_table_var(xh1,3,ih,jh+1)
+ loc1_eos12 = dpdrho_table_var(xh1,3,ih+1,jh+1)
+ loc1_eos13 = dpdrho_table_var(xh1,4,ih,jh)
+ loc1_eos14 = dpdrho_table_var(xh1,4,ih+1,jh)
+ loc1_eos15 = dpdrho_table_var(xh1,4,ih,jh+1)
+ loc1_eos16 = dpdrho_table_var(xh1,4,ih+1,jh+1)
+
+ loc2_eos1 = dpdrho_table_var(xh2,1,ih,jh)
+ loc2_eos2 = dpdrho_table_var(xh2,1,ih+1,jh)
+ loc2_eos3 = dpdrho_table_var(xh2,1,ih,jh+1)
+ loc2_eos4 = dpdrho_table_var(xh2,1,ih+1,jh+1)
+ loc2_eos5 = dpdrho_table_var(xh2,2,ih,jh)
+ loc2_eos6 = dpdrho_table_var(xh2,2,ih+1,jh)
+ loc2_eos7 = dpdrho_table_var(xh2,2,ih,jh+1)
+ loc2_eos8 = dpdrho_table_var(xh2,2,ih+1,jh+1)
+ loc2_eos9 = dpdrho_table_var(xh2,3,ih,jh)
+ loc2_eos10 = dpdrho_table_var(xh2,3,ih+1,jh)
+ loc2_eos11 = dpdrho_table_var(xh2,3,ih,jh+1)
+ loc2_eos12 = dpdrho_table_var(xh2,3,ih+1,jh+1)
+ loc2_eos13 = dpdrho_table_var(xh2,4,ih,jh)
+ loc2_eos14 = dpdrho_table_var(xh2,4,ih+1,jh)
+ loc2_eos15 = dpdrho_table_var(xh2,4,ih,jh+1)
+ loc2_eos16 = dpdrho_table_var(xh2,4,ih+1,jh+1)
+
+ loc_eos1 = omomega*loc1_eos1 + omega*loc2_eos1
+ loc_eos2 = omomega*loc1_eos2 + omega*loc2_eos2
+ loc_eos3 = omomega*loc1_eos3 + omega*loc2_eos3
+ loc_eos4 = omomega*loc1_eos4 + omega*loc2_eos4
+ loc_eos5 = omomega*loc1_eos5 + omega*loc2_eos5
+ loc_eos6 = omomega*loc1_eos6 + omega*loc2_eos6
+ loc_eos7 = omomega*loc1_eos7 + omega*loc2_eos7
+ loc_eos8 = omomega*loc1_eos8 + omega*loc2_eos8
+ loc_eos9 = omomega*loc1_eos9 + omega*loc2_eos9
+ loc_eos10 = omomega*loc1_eos10 + omega*loc2_eos10
+ loc_eos11 = omomega*loc1_eos11 + omega*loc2_eos11
+ loc_eos12 = omomega*loc1_eos12 + omega*loc2_eos12
+ loc_eos13 = omomega*loc1_eos13 + omega*loc2_eos13
+ loc_eos14 = omomega*loc1_eos14 + omega*loc2_eos14
+ loc_eos15 = omomega*loc1_eos15 + omega*loc2_eos15
+ loc_eos16 = omomega*loc1_eos16 + omega*loc2_eos16
+
+ !======================================!
+
+ dP_drho = &
+ loc_eos1*p0r*p0t + &
+ loc_eos2*p0mr*p0t + &
+ loc_eos3*p0r*p0mt + &
+ loc_eos4*p0mr*p0mt + &
+ loc_eos5*p0r*p1t + &
+ loc_eos6*p0mr*p1t + &
+ loc_eos7*p0r*p1mt + &
+ loc_eos8*p0mr*p1mt + &
+ loc_eos9*p1r*p0t + &
+ loc_eos10*p1mr*p0t + &
+ loc_eos11*p1r*p0mt + &
+ loc_eos12*p1mr*p0mt + &
+ loc_eos13*p1r*p1t + &
+ loc_eos14*p1mr*p1t + &
+ loc_eos15*p1r*p1mt + &
+ loc_eos16*p1mr*p1mt
+
+ tmp = rhos*rhos
+ P = tmp*df_drho
+ dP_dT = tmp*df_drhodT
+ s = -Ye*df_dT
+ ds_dT = -Ye*df_dT2
+ tmp = Ye*Ye
+ ds_drho = -df_drhodT*tmp
+ E = Ye*f + T*s 
+ dE_dT = T*ds_dT
+ dE_drho = df_drho*tmp + T*ds_drho
+
+ T2 = T*T
+ T3 = T2*T
+ T4 = T3*T
+
+ P = P + CONST_RAD*T4*othird
+ dP_dT = dP_dT + fthirds*CONST_RAD*T3
+
+ E = E + CONST_RAD*T4/rho 
+ dE_dT = dE_dT + rp4*CONST_RAD*T3/rho
+ dE_drho = dE_drho - CONST_RAD*T4/(rho*rho)
+
+ zz = P/rho
+ cv = dE_dT
+ chiT = T/P*dP_dT
+ chirho = dP_drho/zz
+ x = zz*chiT/(T*cv)
+ gam1 = chiT*x+chirho
+ z = rp1 + (E+CONST_C2)/zz
+ sound = CONST_C*sqrt(gam1/z)
+
+ end subroutine pig_xvar_rhoT_given_full
+
+ subroutine pig_xvar_rhoT_given_entropy(rho,T,Xs,stot)
+ real(kind=rp), intent(in) :: rho,T,Xs
+ real(kind=rp), intent(inout) :: stot
+
+ real(kind=rp) :: &
+ loc_eos1, &
+ loc_eos2, &
+ loc_eos3, &
+ loc_eos4, &
+ loc_eos5, &
+ loc_eos6, &
+ loc_eos7, &
+ loc_eos8, &
+ loc_eos9, &
+ loc_eos10, &
+ loc_eos11, &
+ loc_eos12, &
+ loc_eos13, &
+ loc_eos14, &
+ loc_eos15, &
+ loc_eos16, &
+ loc_eos17, &
+ loc_eos18, &
+ loc_eos19, &
+ loc_eos20, &
+ loc_eos21, &
+ loc_eos22, &
+ loc_eos23, &
+ loc_eos24, &
+ loc_eos25, &
+ loc_eos26, &
+ loc_eos27, &
+ loc_eos28, &
+ loc_eos29, &
+ loc_eos30, &
+ loc_eos31, &
+ loc_eos32, &
+ loc_eos33, &
+ loc_eos34, &
+ loc_eos35, &
+ loc_eos36
+ 
+ real(kind=rp) :: &
+ loc1_eos1, &
+ loc1_eos2, &
+ loc1_eos3, &
+ loc1_eos4, &
+ loc1_eos5, &
+ loc1_eos6, &
+ loc1_eos7, &
+ loc1_eos8, &
+ loc1_eos9, &
+ loc1_eos10, &
+ loc1_eos11, &
+ loc1_eos12, &
+ loc1_eos13, &
+ loc1_eos14, &
+ loc1_eos15, &
+ loc1_eos16, &
+ loc1_eos17, &
+ loc1_eos18, &
+ loc1_eos19, &
+ loc1_eos20, &
+ loc1_eos21, &
+ loc1_eos22, &
+ loc1_eos23, &
+ loc1_eos24, &
+ loc1_eos25, &
+ loc1_eos26, &
+ loc1_eos27, &
+ loc1_eos28, &
+ loc1_eos29, &
+ loc1_eos30, &
+ loc1_eos31, &
+ loc1_eos32, &
+ loc1_eos33, &
+ loc1_eos34, &
+ loc1_eos35, &
+ loc1_eos36
+ 
+ real(kind=rp) :: &
+ loc2_eos1, &
+ loc2_eos2, &
+ loc2_eos3, &
+ loc2_eos4, &
+ loc2_eos5, &
+ loc2_eos6, &
+ loc2_eos7, &
+ loc2_eos8, &
+ loc2_eos9, &
+ loc2_eos10, &
+ loc2_eos11, &
+ loc2_eos12, &
+ loc2_eos13, &
+ loc2_eos14, &
+ loc2_eos15, &
+ loc2_eos16, &
+ loc2_eos17, &
+ loc2_eos18, &
+ loc2_eos19, &
+ loc2_eos20, &
+ loc2_eos21, &
+ loc2_eos22, &
+ loc2_eos23, &
+ loc2_eos24, &
+ loc2_eos25, &
+ loc2_eos26, &
+ loc2_eos27, &
+ loc2_eos28, &
+ loc2_eos29, &
+ loc2_eos30, &
+ loc2_eos31, &
+ loc2_eos32, &
+ loc2_eos33, &
+ loc2_eos34, &
+ loc2_eos35, &
+ loc2_eos36
+                
+ integer :: ih,jh,xh,xh1,xh2
+
+ real(kind=rp) :: df_dT
+ real(kind=rp) :: T4,Ye,rhos
+
+ real(kind=rp) :: x,y,drho,drho2,dT,tmp
+ real(kind=rp) :: p0r,p0mr,p1r,p1mr,p2r,p2mr,idT
+ real(kind=rp) :: dp0t,dp1t,dp2t,dp0mt,dp1mt,dp2mt
+ real(kind=rp) :: omx,omy
+ real(kind=rp) :: x2,x3,x4,x5,y2,y3,y4,omx2,omx3,omx4,omx5,omy2,omy3,omy4
+
+ real(kind=rp) :: Erad,Prad,sgas,srad
+
+ real(kind=rp) :: Xss,omega,omomega
+
+ Ye = rp1
+ rhos = rho*Ye
+
+ ih = int((log10(rhos)-log10(pig_rho(1)))/pig_drho) + 1
+ jh = int((log10(T)-log10(pig_T(1)))/pig_dT) + 1
+
+ tmp = pig_rho(ih)
+ drho = pig_rho(ih+1)-tmp
+ x = (rhos-tmp)/drho
+ omx = rp1-x
+
+ tmp = pig_T(jh)
+ dT = pig_T(jh+1)-tmp
+ y = (T-tmp)/dT
+ omy = rp1-y
+
+ drho2 = drho*drho
+ idT = rp1/dT
+
+ !======================================!
+
+ !table interpolation in X
+
+ Xss = Xs
+
+ if(Xss<pig_Xlo) Xss = pig_Xlo
+ if(Xss>pig_Xhi) Xss = pig_Xhi
+
+ xh = int((Xss-pig_X(1))/pig_dX) + 1
+
+ if(xh==pig_nX) then
+  xh1 = xh
+  xh2 = xh
+  omega = rp0
+ else
+  xh1 = xh
+  xh2 = xh+1
+  omega = (Xs-pig_X(xh1))/(pig_X(xh2)-pig_X(xh1))
+ endif
+
+ omomega = rp1-omega
+
+ loc1_eos1 = pig_table_var(xh1,1,ih,jh)
+ loc1_eos2 = pig_table_var(xh1,1,ih+1,jh)
+ loc1_eos3 = pig_table_var(xh1,1,ih,jh+1)
+ loc1_eos4 = pig_table_var(xh1,1,ih+1,jh+1)
+ loc1_eos5 = pig_table_var(xh1,2,ih,jh)
+ loc1_eos6 = pig_table_var(xh1,2,ih+1,jh)
+ loc1_eos7 = pig_table_var(xh1,2,ih,jh+1)
+ loc1_eos8 = pig_table_var(xh1,2,ih+1,jh+1)
+ loc1_eos9 = pig_table_var(xh1,3,ih,jh)
+ loc1_eos10 = pig_table_var(xh1,3,ih+1,jh)
+ loc1_eos11 = pig_table_var(xh1,3,ih,jh+1)
+ loc1_eos12 = pig_table_var(xh1,3,ih+1,jh+1)
+ loc1_eos13 = pig_table_var(xh1,4,ih,jh)
+ loc1_eos14 = pig_table_var(xh1,4,ih+1,jh)
+ loc1_eos15 = pig_table_var(xh1,4,ih,jh+1)
+ loc1_eos16 = pig_table_var(xh1,4,ih+1,jh+1)
+ loc1_eos17 = pig_table_var(xh1,5,ih,jh)
+ loc1_eos18 = pig_table_var(xh1,5,ih+1,jh)
+ loc1_eos19 = pig_table_var(xh1,5,ih,jh+1)
+ loc1_eos20 = pig_table_var(xh1,5,ih+1,jh+1)
+ loc1_eos21 = pig_table_var(xh1,6,ih,jh)
+ loc1_eos22 = pig_table_var(xh1,6,ih+1,jh)
+ loc1_eos23 = pig_table_var(xh1,6,ih,jh+1)
+ loc1_eos24 = pig_table_var(xh1,6,ih+1,jh+1)
+ loc1_eos25 = pig_table_var(xh1,7,ih,jh)
+ loc1_eos26 = pig_table_var(xh1,7,ih+1,jh)
+ loc1_eos27 = pig_table_var(xh1,7,ih,jh+1)
+ loc1_eos28 = pig_table_var(xh1,7,ih+1,jh+1)
+ loc1_eos29 = pig_table_var(xh1,8,ih,jh)
+ loc1_eos30 = pig_table_var(xh1,8,ih+1,jh)
+ loc1_eos31 = pig_table_var(xh1,8,ih,jh+1)
+ loc1_eos32 = pig_table_var(xh1,8,ih+1,jh+1)
+ loc1_eos33 = pig_table_var(xh1,9,ih,jh)
+ loc1_eos34 = pig_table_var(xh1,9,ih+1,jh)
+ loc1_eos35 = pig_table_var(xh1,9,ih,jh+1)
+ loc1_eos36 = pig_table_var(xh1,9,ih+1,jh+1)
+
+ loc2_eos1 = pig_table_var(xh2,1,ih,jh)
+ loc2_eos2 = pig_table_var(xh2,1,ih+1,jh)
+ loc2_eos3 = pig_table_var(xh2,1,ih,jh+1)
+ loc2_eos4 = pig_table_var(xh2,1,ih+1,jh+1)
+ loc2_eos5 = pig_table_var(xh2,2,ih,jh)
+ loc2_eos6 = pig_table_var(xh2,2,ih+1,jh)
+ loc2_eos7 = pig_table_var(xh2,2,ih,jh+1)
+ loc2_eos8 = pig_table_var(xh2,2,ih+1,jh+1)
+ loc2_eos9 = pig_table_var(xh2,3,ih,jh)
+ loc2_eos10 = pig_table_var(xh2,3,ih+1,jh)
+ loc2_eos11 = pig_table_var(xh2,3,ih,jh+1)
+ loc2_eos12 = pig_table_var(xh2,3,ih+1,jh+1)
+ loc2_eos13 = pig_table_var(xh2,4,ih,jh)
+ loc2_eos14 = pig_table_var(xh2,4,ih+1,jh)
+ loc2_eos15 = pig_table_var(xh2,4,ih,jh+1)
+ loc2_eos16 = pig_table_var(xh2,4,ih+1,jh+1)
+ loc2_eos17 = pig_table_var(xh2,5,ih,jh)
+ loc2_eos18 = pig_table_var(xh2,5,ih+1,jh)
+ loc2_eos19 = pig_table_var(xh2,5,ih,jh+1)
+ loc2_eos20 = pig_table_var(xh2,5,ih+1,jh+1)
+ loc2_eos21 = pig_table_var(xh2,6,ih,jh)
+ loc2_eos22 = pig_table_var(xh2,6,ih+1,jh)
+ loc2_eos23 = pig_table_var(xh2,6,ih,jh+1)
+ loc2_eos24 = pig_table_var(xh2,6,ih+1,jh+1)
+ loc2_eos25 = pig_table_var(xh2,7,ih,jh)
+ loc2_eos26 = pig_table_var(xh2,7,ih+1,jh)
+ loc2_eos27 = pig_table_var(xh2,7,ih,jh+1)
+ loc2_eos28 = pig_table_var(xh2,7,ih+1,jh+1)
+ loc2_eos29 = pig_table_var(xh2,8,ih,jh)
+ loc2_eos30 = pig_table_var(xh2,8,ih+1,jh)
+ loc2_eos31 = pig_table_var(xh2,8,ih,jh+1)
+ loc2_eos32 = pig_table_var(xh2,8,ih+1,jh+1)
+ loc2_eos33 = pig_table_var(xh2,9,ih,jh)
+ loc2_eos34 = pig_table_var(xh2,9,ih+1,jh)
+ loc2_eos35 = pig_table_var(xh2,9,ih,jh+1)
+ loc2_eos36 = pig_table_var(xh2,9,ih+1,jh+1)
+ 
+ loc_eos1 = omomega*loc1_eos1 + omega*loc2_eos1
+ loc_eos2 = omomega*loc1_eos2 + omega*loc2_eos2
+ loc_eos3 = omomega*loc1_eos3 + omega*loc2_eos3
+ loc_eos4 = omomega*loc1_eos4 + omega*loc2_eos4
+ loc_eos5 = omomega*loc1_eos5 + omega*loc2_eos5
+ loc_eos6 = omomega*loc1_eos6 + omega*loc2_eos6
+ loc_eos7 = omomega*loc1_eos7 + omega*loc2_eos7
+ loc_eos8 = omomega*loc1_eos8 + omega*loc2_eos8
+ loc_eos9 = omomega*loc1_eos9 + omega*loc2_eos9
+ loc_eos10 = omomega*loc1_eos10 + omega*loc2_eos10
+ loc_eos11 = omomega*loc1_eos11 + omega*loc2_eos11
+ loc_eos12 = omomega*loc1_eos12 + omega*loc2_eos12
+ loc_eos13 = omomega*loc1_eos13 + omega*loc2_eos13
+ loc_eos14 = omomega*loc1_eos14 + omega*loc2_eos14
+ loc_eos15 = omomega*loc1_eos15 + omega*loc2_eos15
+ loc_eos16 = omomega*loc1_eos16 + omega*loc2_eos16
+ loc_eos17 = omomega*loc1_eos17 + omega*loc2_eos17
+ loc_eos18 = omomega*loc1_eos18 + omega*loc2_eos18
+ loc_eos19 = omomega*loc1_eos19 + omega*loc2_eos19
+ loc_eos20 = omomega*loc1_eos20 + omega*loc2_eos20
+ loc_eos21 = omomega*loc1_eos21 + omega*loc2_eos21
+ loc_eos22 = omomega*loc1_eos22 + omega*loc2_eos22
+ loc_eos23 = omomega*loc1_eos23 + omega*loc2_eos23
+ loc_eos24 = omomega*loc1_eos24 + omega*loc2_eos24
+ loc_eos25 = omomega*loc1_eos25 + omega*loc2_eos25
+ loc_eos26 = omomega*loc1_eos26 + omega*loc2_eos26
+ loc_eos27 = omomega*loc1_eos27 + omega*loc2_eos27
+ loc_eos28 = omomega*loc1_eos28 + omega*loc2_eos28
+ loc_eos29 = omomega*loc1_eos29 + omega*loc2_eos29
+ loc_eos30 = omomega*loc1_eos30 + omega*loc2_eos30
+ loc_eos31 = omomega*loc1_eos31 + omega*loc2_eos31
+ loc_eos32 = omomega*loc1_eos32 + omega*loc2_eos32
+ loc_eos33 = omomega*loc1_eos33 + omega*loc2_eos33
+ loc_eos34 = omomega*loc1_eos34 + omega*loc2_eos34
+ loc_eos35 = omomega*loc1_eos35 + omega*loc2_eos35
+ loc_eos36 = omomega*loc1_eos36 + omega*loc2_eos36
+ 
+ !======================================!
+
+ x2 = x*x
+ x3 = x2*x
+ x4 = x3*x
+ x5 = x4*x
+ p0r = -rp6*x5 + rp15*x4 - rp10*x3 + rp1
+ p1r = (-rp3*x5 + rp8*x4 - rp6*x3 + x)*drho
+ p2r = (rph*(-x5 + rp3*x4 - rp3*x3 + x2))*drho2
+
+ omx2 = omx*omx
+ omx3 = omx2*omx
+ omx4 = omx3*omx
+ omx5 = omx4*omx
+ p0mr = -rp6*omx5 + rp15*omx4 - rp10*omx3 + rp1
+ p1mr =  (rp3*omx5 - rp8*omx4 + rp6*omx3 - omx)*drho
+ p2mr =  (rph*(-omx5 + rp3*omx4 - rp3*omx3 + omx2))*drho2
+
+ y2 = y*y
+ y3 = y2*y
+ y4 = y3*y
+
+ omy2 = omy*omy
+ omy3 = omy2*omy
+ omy4 = omy3*omy
+
+ dp0t =  (-rp30*y4 + rp60*y3 - rp30*y2)*idT
+ dp1t =  (-rp15*y4 + rp32*y3 - rp18*y2 + rp1)
+ dp2t =  (rph*(-rp5*y4 + rp12*y3 - rp9*y2 + rp2*y))*dT
+
+ dp0mt = -(-rp30*omy4 + rp60*omy3 - rp30*omy2)*idT
+ dp1mt =  (-rp15*omy4 + rp32*omy3 - rp18*omy2 + rp1)
+ dp2mt = -(rph*(-rp5*omy4 + rp12*omy3 - rp9*omy2 + rp2*omy))*dT
+
+ df_dT = &
+ loc_eos1*p0r*dp0t + &
+ loc_eos2*p0mr*dp0t + &
+ loc_eos3*p0r*dp0mt + &
+ loc_eos4*p0mr*dp0mt + &
+ loc_eos5*p0r*dp1t + &
+ loc_eos6*p0mr*dp1t + &
+ loc_eos7*p0r*dp1mt + &
+ loc_eos8*p0mr*dp1mt + &
+ loc_eos9*p0r*dp2t + &
+ loc_eos10*p0mr*dp2t + &
+ loc_eos11*p0r*dp2mt + &
+ loc_eos12*p0mr*dp2mt + &
+ loc_eos13*p1r*dp0t + &
+ loc_eos14*p1mr*dp0t + &
+ loc_eos15*p1r*dp0mt + &
+ loc_eos16*p1mr*dp0mt + &
+ loc_eos17*p2r*dp0t + &
+ loc_eos18*p2mr*dp0t + &
+ loc_eos19*p2r*dp0mt + &
+ loc_eos20*p2mr*dp0mt + &
+ loc_eos21*p1r*dp1t + &
+ loc_eos22*p1mr*dp1t + &
+ loc_eos23*p1r*dp1mt + &
+ loc_eos24*p1mr*dp1mt + &
+ loc_eos25*p2r*dp1t + &
+ loc_eos26*p2mr*dp1t + &
+ loc_eos27*p2r*dp1mt + &
+ loc_eos28*p2mr*dp1mt + &
+ loc_eos29*p1r*dp2t + &
+ loc_eos30*p1mr*dp2t + &
+ loc_eos31*p1r*dp2mt + &
+ loc_eos32*p1mr*dp2mt + &
+ loc_eos33*p2r*dp2t + &
+ loc_eos34*p2mr*dp2t + &
+ loc_eos35*p2r*dp2mt + &
+ loc_eos36*p2mr*dp2mt
+
+ sgas = -Ye*df_dT
+
+ T4 = T*T*T*T
+ Prad = CONST_RAD*T4*othird
+ Erad = CONST_RAD*T4/rho
+ srad = (Prad/rho+Erad)/T
+
+ stot = sgas + srad 
+
+ end subroutine pig_xvar_rhoT_given_entropy
+
+ subroutine pig_xvar_rhoT_given1(rho,T,Xs,P,dP_dT,return_dP_dT)
+ real(kind=rp), intent(in) :: rho,T,Xs
+ real(kind=rp), intent(inout) :: P,dP_dT
+ logical, intent(in) :: return_dP_dT
+
+ real(kind=rp) :: &
+ loc_eos1, &
+ loc_eos2, &
+ loc_eos3, &
+ loc_eos4, &
+ loc_eos5, &
+ loc_eos6, &
+ loc_eos7, &
+ loc_eos8, &
+ loc_eos9, &
+ loc_eos10, &
+ loc_eos11, &
+ loc_eos12, &
+ loc_eos13, &
+ loc_eos14, &
+ loc_eos15, &
+ loc_eos16, &
+ loc_eos17, &
+ loc_eos18, &
+ loc_eos19, &
+ loc_eos20, &
+ loc_eos21, &
+ loc_eos22, &
+ loc_eos23, &
+ loc_eos24, &
+ loc_eos25, &
+ loc_eos26, &
+ loc_eos27, &
+ loc_eos28, &
+ loc_eos29, &
+ loc_eos30, &
+ loc_eos31, &
+ loc_eos32, &
+ loc_eos33, &
+ loc_eos34, &
+ loc_eos35, &
+ loc_eos36
+  
+ real(kind=rp) :: &
+ loc1_eos1, &
+ loc1_eos2, &
+ loc1_eos3, &
+ loc1_eos4, &
+ loc1_eos5, &
+ loc1_eos6, &
+ loc1_eos7, &
+ loc1_eos8, &
+ loc1_eos9, &
+ loc1_eos10, &
+ loc1_eos11, &
+ loc1_eos12, &
+ loc1_eos13, &
+ loc1_eos14, &
+ loc1_eos15, &
+ loc1_eos16, &
+ loc1_eos17, &
+ loc1_eos18, &
+ loc1_eos19, &
+ loc1_eos20, &
+ loc1_eos21, &
+ loc1_eos22, &
+ loc1_eos23, &
+ loc1_eos24, &
+ loc1_eos25, &
+ loc1_eos26, &
+ loc1_eos27, &
+ loc1_eos28, &
+ loc1_eos29, &
+ loc1_eos30, &
+ loc1_eos31, &
+ loc1_eos32, &
+ loc1_eos33, &
+ loc1_eos34, &
+ loc1_eos35, &
+ loc1_eos36
+ 
+ real(kind=rp) :: &
+ loc2_eos1, &
+ loc2_eos2, &
+ loc2_eos3, &
+ loc2_eos4, &
+ loc2_eos5, &
+ loc2_eos6, &
+ loc2_eos7, &
+ loc2_eos8, &
+ loc2_eos9, &
+ loc2_eos10, &
+ loc2_eos11, &
+ loc2_eos12, &
+ loc2_eos13, &
+ loc2_eos14, &
+ loc2_eos15, &
+ loc2_eos16, &
+ loc2_eos17, &
+ loc2_eos18, &
+ loc2_eos19, &
+ loc2_eos20, &
+ loc2_eos21, &
+ loc2_eos22, &
+ loc2_eos23, &
+ loc2_eos24, &
+ loc2_eos25, &
+ loc2_eos26, &
+ loc2_eos27, &
+ loc2_eos28, &
+ loc2_eos29, &
+ loc2_eos30, &
+ loc2_eos31, &
+ loc2_eos32, &
+ loc2_eos33, &
+ loc2_eos34, &
+ loc2_eos35, &
+ loc2_eos36
+             
+ integer :: ih,jh,xh,xh1,xh2
+
+ real(kind=rp) :: df_drho,df_drhodT
+ real(kind=rp) :: T2,T3,T4,Ye,rhos
+
+ real(kind=rp) :: x,y,drho,drho2,dT,dT2,tmp
+ real(kind=rp) :: p0r,p0t,p0mr,p0mt,p1r,p1t,p1mr,p1mt,p2r,p2t,p2mr,p2mt,idrho,idrho2,idT,idT2
+ real(kind=rp) :: dp0r,dp1r,dp2r,dp0mr,dp1mr,dp2mr
+ real(kind=rp) :: dp0t,dp1t,dp2t,dp0mt,dp1mt,dp2mt
+ real(kind=rp) :: omx,omy
+ real(kind=rp) :: x2,x3,x4,x5,y2,y3,y4,y5,omx2,omx3,omx4,omx5,omy2,omy3,omy4,omy5
+
+ real(kind=rp) :: Xss,omega,omomega
+ 
+ Ye = rp1
+
+ rhos = rho*Ye
+
+ ih = int((log10(rhos)-log10(pig_rho(1)))/pig_drho) + 1
+ jh = int((log10(T)-log10(pig_T(1)))/pig_dT) + 1
+
+ tmp = pig_rho(ih)
+ drho = pig_rho(ih+1)-tmp
+ x = (rhos-tmp)/drho
+ omx = rp1-x
+
+ tmp = pig_T(jh)
+ dT = pig_T(jh+1)-tmp
+ y = (T-tmp)/dT
+ omy = rp1-y
+
+ drho2 = drho*drho
+ dT2 = dT*dT
+
+ idrho = rp1/drho
+ idrho2 = idrho*idrho
+
+ idT = rp1/dT
+ idT2 = idT*idT
+
+ !======================================!
+
+ !table interpolation in X
+
+ Xss = Xs
+
+ if(Xss<pig_Xlo) Xss = pig_Xlo
+ if(Xss>pig_Xhi) Xss = pig_Xhi
+
+ xh = int((Xss-pig_X(1))/pig_dX) + 1
+
+ if(xh==pig_nX) then
+  xh1 = xh
+  xh2 = xh
+  omega = rp0
+ else
+  xh1 = xh
+  xh2 = xh+1
+  omega = (Xs-pig_X(xh1))/(pig_X(xh2)-pig_X(xh1))
+ endif
+
+ omomega = rp1-omega
+
+ loc1_eos1 = pig_table_var(xh1,1,ih,jh)
+ loc1_eos2 = pig_table_var(xh1,1,ih+1,jh)
+ loc1_eos3 = pig_table_var(xh1,1,ih,jh+1)
+ loc1_eos4 = pig_table_var(xh1,1,ih+1,jh+1)
+ loc1_eos5 = pig_table_var(xh1,2,ih,jh)
+ loc1_eos6 = pig_table_var(xh1,2,ih+1,jh)
+ loc1_eos7 = pig_table_var(xh1,2,ih,jh+1)
+ loc1_eos8 = pig_table_var(xh1,2,ih+1,jh+1)
+ loc1_eos9 = pig_table_var(xh1,3,ih,jh)
+ loc1_eos10 = pig_table_var(xh1,3,ih+1,jh)
+ loc1_eos11 = pig_table_var(xh1,3,ih,jh+1)
+ loc1_eos12 = pig_table_var(xh1,3,ih+1,jh+1)
+ loc1_eos13 = pig_table_var(xh1,4,ih,jh)
+ loc1_eos14 = pig_table_var(xh1,4,ih+1,jh)
+ loc1_eos15 = pig_table_var(xh1,4,ih,jh+1)
+ loc1_eos16 = pig_table_var(xh1,4,ih+1,jh+1)
+ loc1_eos17 = pig_table_var(xh1,5,ih,jh)
+ loc1_eos18 = pig_table_var(xh1,5,ih+1,jh)
+ loc1_eos19 = pig_table_var(xh1,5,ih,jh+1)
+ loc1_eos20 = pig_table_var(xh1,5,ih+1,jh+1)
+ loc1_eos21 = pig_table_var(xh1,6,ih,jh)
+ loc1_eos22 = pig_table_var(xh1,6,ih+1,jh)
+ loc1_eos23 = pig_table_var(xh1,6,ih,jh+1)
+ loc1_eos24 = pig_table_var(xh1,6,ih+1,jh+1)
+ loc1_eos25 = pig_table_var(xh1,7,ih,jh)
+ loc1_eos26 = pig_table_var(xh1,7,ih+1,jh)
+ loc1_eos27 = pig_table_var(xh1,7,ih,jh+1)
+ loc1_eos28 = pig_table_var(xh1,7,ih+1,jh+1)
+ loc1_eos29 = pig_table_var(xh1,8,ih,jh)
+ loc1_eos30 = pig_table_var(xh1,8,ih+1,jh)
+ loc1_eos31 = pig_table_var(xh1,8,ih,jh+1)
+ loc1_eos32 = pig_table_var(xh1,8,ih+1,jh+1)
+ loc1_eos33 = pig_table_var(xh1,9,ih,jh)
+ loc1_eos34 = pig_table_var(xh1,9,ih+1,jh)
+ loc1_eos35 = pig_table_var(xh1,9,ih,jh+1)
+ loc1_eos36 = pig_table_var(xh1,9,ih+1,jh+1)
+
+ loc2_eos1 = pig_table_var(xh2,1,ih,jh)
+ loc2_eos2 = pig_table_var(xh2,1,ih+1,jh)
+ loc2_eos3 = pig_table_var(xh2,1,ih,jh+1)
+ loc2_eos4 = pig_table_var(xh2,1,ih+1,jh+1)
+ loc2_eos5 = pig_table_var(xh2,2,ih,jh)
+ loc2_eos6 = pig_table_var(xh2,2,ih+1,jh)
+ loc2_eos7 = pig_table_var(xh2,2,ih,jh+1)
+ loc2_eos8 = pig_table_var(xh2,2,ih+1,jh+1)
+ loc2_eos9 = pig_table_var(xh2,3,ih,jh)
+ loc2_eos10 = pig_table_var(xh2,3,ih+1,jh)
+ loc2_eos11 = pig_table_var(xh2,3,ih,jh+1)
+ loc2_eos12 = pig_table_var(xh2,3,ih+1,jh+1)
+ loc2_eos13 = pig_table_var(xh2,4,ih,jh)
+ loc2_eos14 = pig_table_var(xh2,4,ih+1,jh)
+ loc2_eos15 = pig_table_var(xh2,4,ih,jh+1)
+ loc2_eos16 = pig_table_var(xh2,4,ih+1,jh+1)
+ loc2_eos17 = pig_table_var(xh2,5,ih,jh)
+ loc2_eos18 = pig_table_var(xh2,5,ih+1,jh)
+ loc2_eos19 = pig_table_var(xh2,5,ih,jh+1)
+ loc2_eos20 = pig_table_var(xh2,5,ih+1,jh+1)
+ loc2_eos21 = pig_table_var(xh2,6,ih,jh)
+ loc2_eos22 = pig_table_var(xh2,6,ih+1,jh)
+ loc2_eos23 = pig_table_var(xh2,6,ih,jh+1)
+ loc2_eos24 = pig_table_var(xh2,6,ih+1,jh+1)
+ loc2_eos25 = pig_table_var(xh2,7,ih,jh)
+ loc2_eos26 = pig_table_var(xh2,7,ih+1,jh)
+ loc2_eos27 = pig_table_var(xh2,7,ih,jh+1)
+ loc2_eos28 = pig_table_var(xh2,7,ih+1,jh+1)
+ loc2_eos29 = pig_table_var(xh2,8,ih,jh)
+ loc2_eos30 = pig_table_var(xh2,8,ih+1,jh)
+ loc2_eos31 = pig_table_var(xh2,8,ih,jh+1)
+ loc2_eos32 = pig_table_var(xh2,8,ih+1,jh+1)
+ loc2_eos33 = pig_table_var(xh2,9,ih,jh)
+ loc2_eos34 = pig_table_var(xh2,9,ih+1,jh)
+ loc2_eos35 = pig_table_var(xh2,9,ih,jh+1)
+ loc2_eos36 = pig_table_var(xh2,9,ih+1,jh+1)
+ 
+ loc_eos1 = omomega*loc1_eos1 + omega*loc2_eos1
+ loc_eos2 = omomega*loc1_eos2 + omega*loc2_eos2
+ loc_eos3 = omomega*loc1_eos3 + omega*loc2_eos3
+ loc_eos4 = omomega*loc1_eos4 + omega*loc2_eos4
+ loc_eos5 = omomega*loc1_eos5 + omega*loc2_eos5
+ loc_eos6 = omomega*loc1_eos6 + omega*loc2_eos6
+ loc_eos7 = omomega*loc1_eos7 + omega*loc2_eos7
+ loc_eos8 = omomega*loc1_eos8 + omega*loc2_eos8
+ loc_eos9 = omomega*loc1_eos9 + omega*loc2_eos9
+ loc_eos10 = omomega*loc1_eos10 + omega*loc2_eos10
+ loc_eos11 = omomega*loc1_eos11 + omega*loc2_eos11
+ loc_eos12 = omomega*loc1_eos12 + omega*loc2_eos12
+ loc_eos13 = omomega*loc1_eos13 + omega*loc2_eos13
+ loc_eos14 = omomega*loc1_eos14 + omega*loc2_eos14
+ loc_eos15 = omomega*loc1_eos15 + omega*loc2_eos15
+ loc_eos16 = omomega*loc1_eos16 + omega*loc2_eos16
+ loc_eos17 = omomega*loc1_eos17 + omega*loc2_eos17
+ loc_eos18 = omomega*loc1_eos18 + omega*loc2_eos18
+ loc_eos19 = omomega*loc1_eos19 + omega*loc2_eos19
+ loc_eos20 = omomega*loc1_eos20 + omega*loc2_eos20
+ loc_eos21 = omomega*loc1_eos21 + omega*loc2_eos21
+ loc_eos22 = omomega*loc1_eos22 + omega*loc2_eos22
+ loc_eos23 = omomega*loc1_eos23 + omega*loc2_eos23
+ loc_eos24 = omomega*loc1_eos24 + omega*loc2_eos24
+ loc_eos25 = omomega*loc1_eos25 + omega*loc2_eos25
+ loc_eos26 = omomega*loc1_eos26 + omega*loc2_eos26
+ loc_eos27 = omomega*loc1_eos27 + omega*loc2_eos27
+ loc_eos28 = omomega*loc1_eos28 + omega*loc2_eos28
+ loc_eos29 = omomega*loc1_eos29 + omega*loc2_eos29
+ loc_eos30 = omomega*loc1_eos30 + omega*loc2_eos30
+ loc_eos31 = omomega*loc1_eos31 + omega*loc2_eos31
+ loc_eos32 = omomega*loc1_eos32 + omega*loc2_eos32
+ loc_eos33 = omomega*loc1_eos33 + omega*loc2_eos33
+ loc_eos34 = omomega*loc1_eos34 + omega*loc2_eos34
+ loc_eos35 = omomega*loc1_eos35 + omega*loc2_eos35
+ loc_eos36 = omomega*loc1_eos36 + omega*loc2_eos36
+ 
+ !======================================!
+
+ x2 = x*x
+ x3 = x2*x
+ x4 = x3*x
+ x5 = x4*x
+ p0r = -rp6*x5 + rp15*x4 - rp10*x3 + rp1
+ p1r = (-rp3*x5 + rp8*x4 - rp6*x3 + x)*drho
+ p2r = (rph*(-x5 + rp3*x4 - rp3*x3 + x2))*drho2
+
+ omx2 = omx*omx
+ omx3 = omx2*omx
+ omx4 = omx3*omx
+ omx5 = omx4*omx
+ p0mr = -rp6*omx5 + rp15*omx4 - rp10*omx3 + rp1
+ p1mr =  (rp3*omx5 - rp8*omx4 + rp6*omx3 - omx)*drho
+ p2mr =  (rph*(-omx5 + rp3*omx4 - rp3*omx3 + omx2))*drho2
+
+ y2 = y*y
+ y3 = y2*y
+ y4 = y3*y
+ y5 = y4*y
+ p0t = -rp6*y5 + rp15*y4 - rp10*y3 + rp1
+ p1t = (-rp3*y5 + rp8*y4 - rp6*y3 + y)*dT
+ p2t = (rph*(-y5 + rp3*y4 - rp3*y3 + y2))*dT2
+
+ omy2 = omy*omy
+ omy3 = omy2*omy
+ omy4 = omy3*omy
+ omy5 = omy4*omy
+ p0mt = -rp6*omy5 + rp15*omy4 - rp10*omy3 + rp1
+ p1mt =  (rp3*omy5 - rp8*omy4 + rp6*omy3 - omy)*dT
+ p2mt =  (rph*(-omy5 + rp3*omy4 - rp3*omy3 + omy2))*dT2
+
+ dp0r =  (-rp30*x4 + rp60*x3 - rp30*x2)*idrho
+ dp1r =  (-rp15*x4 + rp32*x3 - rp18*x2 + rp1)
+ dp2r =  (rph*(-rp5*x4 + rp12*x3 - rp9*x2 + rp2*x))*drho
+
+ dp0mr = -(-rp30*omx4 + rp60*omx3 - rp30*omx2)*idrho
+ dp1mr =  (-rp15*omx4 + rp32*omx3 - rp18*omx2 + rp1)
+ dp2mr = -(rph*(-rp5*omx4 + rp12*omx3 - rp9*omx2 + rp2*omx))*drho
+
+ df_drho = &
+ loc_eos1*dp0r*p0t + &
+ loc_eos2*dp0mr*p0t + &
+ loc_eos3*dp0r*p0mt + &
+ loc_eos4*dp0mr*p0mt + &
+ loc_eos5*dp0r*p1t + &
+ loc_eos6*dp0mr*p1t + &
+ loc_eos7*dp0r*p1mt + &
+ loc_eos8*dp0mr*p1mt + &
+ loc_eos9*dp0r*p2t + &
+ loc_eos10*dp0mr*p2t + &
+ loc_eos11*dp0r*p2mt + &
+ loc_eos12*dp0mr*p2mt + &
+ loc_eos13*dp1r*p0t + &
+ loc_eos14*dp1mr*p0t + &
+ loc_eos15*dp1r*p0mt + &
+ loc_eos16*dp1mr*p0mt + &
+ loc_eos17*dp2r*p0t + &
+ loc_eos18*dp2mr*p0t + &
+ loc_eos19*dp2r*p0mt + &
+ loc_eos20*dp2mr*p0mt + &
+ loc_eos21*dp1r*p1t + &
+ loc_eos22*dp1mr*p1t + &
+ loc_eos23*dp1r*p1mt + &
+ loc_eos24*dp1mr*p1mt + &
+ loc_eos25*dp2r*p1t + &
+ loc_eos26*dp2mr*p1t + &
+ loc_eos27*dp2r*p1mt + &
+ loc_eos28*dp2mr*p1mt + &
+ loc_eos29*dp1r*p2t + &
+ loc_eos30*dp1mr*p2t + &
+ loc_eos31*dp1r*p2mt + &
+ loc_eos32*dp1mr*p2mt + &
+ loc_eos33*dp2r*p2t + &
+ loc_eos34*dp2mr*p2t + &
+ loc_eos35*dp2r*p2mt + &
+ loc_eos36*dp2mr*p2mt
+
+ dp0t =  (-rp30*y4 + rp60*y3 - rp30*y2)*idT
+ dp1t =  (-rp15*y4 + rp32*y3 - rp18*y2 + rp1)
+ dp2t =  (rph*(-rp5*y4 + rp12*y3 - rp9*y2 + rp2*y))*dT
+
+ dp0mt = -(-rp30*omy4 + rp60*omy3 - rp30*omy2)*idT
+ dp1mt =  (-rp15*omy4 + rp32*omy3 - rp18*omy2 + rp1)
+ dp2mt = -(rph*(-rp5*omy4 + rp12*omy3 - rp9*omy2 + rp2*omy))*dT
+
+ df_drhodT = rp0
+
+ if(return_dP_dT) then
+
+ df_drhodT = &
+ loc_eos1*dp0r*dp0t + &
+ loc_eos2*dp0mr*dp0t + &
+ loc_eos3*dp0r*dp0mt + &
+ loc_eos4*dp0mr*dp0mt + &
+ loc_eos5*dp0r*dp1t + &
+ loc_eos6*dp0mr*dp1t + &
+ loc_eos7*dp0r*dp1mt + &
+ loc_eos8*dp0mr*dp1mt + &
+ loc_eos9*dp0r*dp2t + &
+ loc_eos10*dp0mr*dp2t + &
+ loc_eos11*dp0r*dp2mt + &
+ loc_eos12*dp0mr*dp2mt + &
+ loc_eos13*dp1r*dp0t + &
+ loc_eos14*dp1mr*dp0t + &
+ loc_eos15*dp1r*dp0mt + &
+ loc_eos16*dp1mr*dp0mt + &
+ loc_eos17*dp2r*dp0t + &
+ loc_eos18*dp2mr*dp0t + &
+ loc_eos19*dp2r*dp0mt + &
+ loc_eos20*dp2mr*dp0mt + &
+ loc_eos21*dp1r*dp1t + &
+ loc_eos22*dp1mr*dp1t + &
+ loc_eos23*dp1r*dp1mt + &
+ loc_eos24*dp1mr*dp1mt + &
+ loc_eos25*dp2r*dp1t + &
+ loc_eos26*dp2mr*dp1t + &
+ loc_eos27*dp2r*dp1mt + &
+ loc_eos28*dp2mr*dp1mt + &
+ loc_eos29*dp1r*dp2t + &
+ loc_eos30*dp1mr*dp2t + &
+ loc_eos31*dp1r*dp2mt + &
+ loc_eos32*dp1mr*dp2mt + &
+ loc_eos33*dp2r*dp2t + &
+ loc_eos34*dp2mr*dp2t + &
+ loc_eos35*dp2r*dp2mt + &
+ loc_eos36*dp2mr*dp2mt
+
+ endif
+
+ tmp = rhos*rhos
+ P = tmp*df_drho
+ dP_dT = tmp*df_drhodT
+
+ T2 = T*T
+ T3 = T2*T
+ T4 = T3*T
+
+ P = P + CONST_RAD*T4*othird
+ dP_dT = dP_dT + fthirds*CONST_RAD*T3
+
+ end subroutine pig_xvar_rhoT_given1
+
+ subroutine pig_xvar_rhoT_given2(rho,T,Xs,E,dE_dT,return_dE_dT)
+ real(kind=rp), intent(in) :: rho,T,Xs
+ real(kind=rp), intent(inout) :: E,dE_dT
+ logical, intent(in) :: return_dE_dT
+
+ real(kind=rp) :: &
+ loc_eos1, &
+ loc_eos2, &
+ loc_eos3, &
+ loc_eos4, &
+ loc_eos5, &
+ loc_eos6, &
+ loc_eos7, &
+ loc_eos8, &
+ loc_eos9, &
+ loc_eos10, &
+ loc_eos11, &
+ loc_eos12, &
+ loc_eos13, &
+ loc_eos14, &
+ loc_eos15, &
+ loc_eos16, &
+ loc_eos17, &
+ loc_eos18, &
+ loc_eos19, &
+ loc_eos20, &
+ loc_eos21, &
+ loc_eos22, &
+ loc_eos23, &
+ loc_eos24, &
+ loc_eos25, &
+ loc_eos26, &
+ loc_eos27, &
+ loc_eos28, &
+ loc_eos29, &
+ loc_eos30, &
+ loc_eos31, &
+ loc_eos32, &
+ loc_eos33, &
+ loc_eos34, &
+ loc_eos35, &
+ loc_eos36
+
+ real(kind=rp) :: &
+ loc1_eos1, &
+ loc1_eos2, &
+ loc1_eos3, &
+ loc1_eos4, &
+ loc1_eos5, &
+ loc1_eos6, &
+ loc1_eos7, &
+ loc1_eos8, &
+ loc1_eos9, &
+ loc1_eos10, &
+ loc1_eos11, &
+ loc1_eos12, &
+ loc1_eos13, &
+ loc1_eos14, &
+ loc1_eos15, &
+ loc1_eos16, &
+ loc1_eos17, &
+ loc1_eos18, &
+ loc1_eos19, &
+ loc1_eos20, &
+ loc1_eos21, &
+ loc1_eos22, &
+ loc1_eos23, &
+ loc1_eos24, &
+ loc1_eos25, &
+ loc1_eos26, &
+ loc1_eos27, &
+ loc1_eos28, &
+ loc1_eos29, &
+ loc1_eos30, &
+ loc1_eos31, &
+ loc1_eos32, &
+ loc1_eos33, &
+ loc1_eos34, &
+ loc1_eos35, &
+ loc1_eos36
+ 
+ real(kind=rp) :: &
+ loc2_eos1, &
+ loc2_eos2, &
+ loc2_eos3, &
+ loc2_eos4, &
+ loc2_eos5, &
+ loc2_eos6, &
+ loc2_eos7, &
+ loc2_eos8, &
+ loc2_eos9, &
+ loc2_eos10, &
+ loc2_eos11, &
+ loc2_eos12, &
+ loc2_eos13, &
+ loc2_eos14, &
+ loc2_eos15, &
+ loc2_eos16, &
+ loc2_eos17, &
+ loc2_eos18, &
+ loc2_eos19, &
+ loc2_eos20, &
+ loc2_eos21, &
+ loc2_eos22, &
+ loc2_eos23, &
+ loc2_eos24, &
+ loc2_eos25, &
+ loc2_eos26, &
+ loc2_eos27, &
+ loc2_eos28, &
+ loc2_eos29, &
+ loc2_eos30, &
+ loc2_eos31, &
+ loc2_eos32, &
+ loc2_eos33, &
+ loc2_eos34, &
+ loc2_eos35, &
+ loc2_eos36
+             
+ integer :: ih,jh,xh,xh1,xh2
+
+ real(kind=rp) :: df_dT,df_dT2
+ real(kind=rp) :: f,s,ds_dT
+ real(kind=rp) :: Ye,T2,T3,T4,rhos
+
+ real(kind=rp) :: x,y,drho,drho2,dT,dT2,tmp
+ real(kind=rp) :: p0r,p0t,p0mr,p0mt,p1r,p1t,p1mr,p1mt,p2r,p2t,p2mr,p2mt,idrho,idrho2,idT,idT2
+ real(kind=rp) :: dp0t,dp1t,dp2t,dp0mt,dp1mt,dp2mt
+ real(kind=rp) :: ddp0t,ddp1t,ddp2t,ddp0mt,ddp1mt,ddp2mt
+ real(kind=rp) :: omx,omy
+ real(kind=rp) :: x2,x3,x4,x5,y2,y3,y4,y5,omx2,omx3,omx4,omx5,omy2,omy3,omy4,omy5
+
+ real(kind=rp) :: Xss,omega,omomega
+
+ Ye = rp1
+ rhos = rho*Ye
+
+ ih = int((log10(rhos)-log10(pig_rho(1)))/pig_drho) + 1
+ jh = int((log10(T)-log10(pig_T(1)))/pig_dT) + 1
+
+ tmp = pig_rho(ih)
+ drho = pig_rho(ih+1)-tmp
+ x = (rhos-tmp)/drho
+ omx = rp1-x
+
+ tmp = pig_T(jh)
+ dT = pig_T(jh+1)-tmp
+ y = (T-tmp)/dT
+ omy = rp1-y
+
+ drho2 = drho*drho
+ dT2 = dT*dT
+
+ idrho = rp1/drho
+ idrho2 = idrho*idrho
+
+ idT = rp1/dT
+ idT2 = idT*idT
+
+ !======================================!
+
+ !table interpolation in X
+
+ Xss = Xs
+
+ if(Xss<pig_Xlo) Xss = pig_Xlo
+ if(Xss>pig_Xhi) Xss = pig_Xhi
+
+ xh = int((Xss-pig_X(1))/pig_dX) + 1
+
+ if(xh==pig_nX) then
+  xh1 = xh
+  xh2 = xh
+  omega = rp0
+ else
+  xh1 = xh
+  xh2 = xh+1
+  omega = (Xs-pig_X(xh1))/(pig_X(xh2)-pig_X(xh1))
+ endif
+
+ omomega = rp1-omega
+
+ loc1_eos1 = pig_table_var(xh1,1,ih,jh)
+ loc1_eos2 = pig_table_var(xh1,1,ih+1,jh)
+ loc1_eos3 = pig_table_var(xh1,1,ih,jh+1)
+ loc1_eos4 = pig_table_var(xh1,1,ih+1,jh+1)
+ loc1_eos5 = pig_table_var(xh1,2,ih,jh)
+ loc1_eos6 = pig_table_var(xh1,2,ih+1,jh)
+ loc1_eos7 = pig_table_var(xh1,2,ih,jh+1)
+ loc1_eos8 = pig_table_var(xh1,2,ih+1,jh+1)
+ loc1_eos9 = pig_table_var(xh1,3,ih,jh)
+ loc1_eos10 = pig_table_var(xh1,3,ih+1,jh)
+ loc1_eos11 = pig_table_var(xh1,3,ih,jh+1)
+ loc1_eos12 = pig_table_var(xh1,3,ih+1,jh+1)
+ loc1_eos13 = pig_table_var(xh1,4,ih,jh)
+ loc1_eos14 = pig_table_var(xh1,4,ih+1,jh)
+ loc1_eos15 = pig_table_var(xh1,4,ih,jh+1)
+ loc1_eos16 = pig_table_var(xh1,4,ih+1,jh+1)
+ loc1_eos17 = pig_table_var(xh1,5,ih,jh)
+ loc1_eos18 = pig_table_var(xh1,5,ih+1,jh)
+ loc1_eos19 = pig_table_var(xh1,5,ih,jh+1)
+ loc1_eos20 = pig_table_var(xh1,5,ih+1,jh+1)
+ loc1_eos21 = pig_table_var(xh1,6,ih,jh)
+ loc1_eos22 = pig_table_var(xh1,6,ih+1,jh)
+ loc1_eos23 = pig_table_var(xh1,6,ih,jh+1)
+ loc1_eos24 = pig_table_var(xh1,6,ih+1,jh+1)
+ loc1_eos25 = pig_table_var(xh1,7,ih,jh)
+ loc1_eos26 = pig_table_var(xh1,7,ih+1,jh)
+ loc1_eos27 = pig_table_var(xh1,7,ih,jh+1)
+ loc1_eos28 = pig_table_var(xh1,7,ih+1,jh+1)
+ loc1_eos29 = pig_table_var(xh1,8,ih,jh)
+ loc1_eos30 = pig_table_var(xh1,8,ih+1,jh)
+ loc1_eos31 = pig_table_var(xh1,8,ih,jh+1)
+ loc1_eos32 = pig_table_var(xh1,8,ih+1,jh+1)
+ loc1_eos33 = pig_table_var(xh1,9,ih,jh)
+ loc1_eos34 = pig_table_var(xh1,9,ih+1,jh)
+ loc1_eos35 = pig_table_var(xh1,9,ih,jh+1)
+ loc1_eos36 = pig_table_var(xh1,9,ih+1,jh+1)
+
+ loc2_eos1 = pig_table_var(xh2,1,ih,jh)
+ loc2_eos2 = pig_table_var(xh2,1,ih+1,jh)
+ loc2_eos3 = pig_table_var(xh2,1,ih,jh+1)
+ loc2_eos4 = pig_table_var(xh2,1,ih+1,jh+1)
+ loc2_eos5 = pig_table_var(xh2,2,ih,jh)
+ loc2_eos6 = pig_table_var(xh2,2,ih+1,jh)
+ loc2_eos7 = pig_table_var(xh2,2,ih,jh+1)
+ loc2_eos8 = pig_table_var(xh2,2,ih+1,jh+1)
+ loc2_eos9 = pig_table_var(xh2,3,ih,jh)
+ loc2_eos10 = pig_table_var(xh2,3,ih+1,jh)
+ loc2_eos11 = pig_table_var(xh2,3,ih,jh+1)
+ loc2_eos12 = pig_table_var(xh2,3,ih+1,jh+1)
+ loc2_eos13 = pig_table_var(xh2,4,ih,jh)
+ loc2_eos14 = pig_table_var(xh2,4,ih+1,jh)
+ loc2_eos15 = pig_table_var(xh2,4,ih,jh+1)
+ loc2_eos16 = pig_table_var(xh2,4,ih+1,jh+1)
+ loc2_eos17 = pig_table_var(xh2,5,ih,jh)
+ loc2_eos18 = pig_table_var(xh2,5,ih+1,jh)
+ loc2_eos19 = pig_table_var(xh2,5,ih,jh+1)
+ loc2_eos20 = pig_table_var(xh2,5,ih+1,jh+1)
+ loc2_eos21 = pig_table_var(xh2,6,ih,jh)
+ loc2_eos22 = pig_table_var(xh2,6,ih+1,jh)
+ loc2_eos23 = pig_table_var(xh2,6,ih,jh+1)
+ loc2_eos24 = pig_table_var(xh2,6,ih+1,jh+1)
+ loc2_eos25 = pig_table_var(xh2,7,ih,jh)
+ loc2_eos26 = pig_table_var(xh2,7,ih+1,jh)
+ loc2_eos27 = pig_table_var(xh2,7,ih,jh+1)
+ loc2_eos28 = pig_table_var(xh2,7,ih+1,jh+1)
+ loc2_eos29 = pig_table_var(xh2,8,ih,jh)
+ loc2_eos30 = pig_table_var(xh2,8,ih+1,jh)
+ loc2_eos31 = pig_table_var(xh2,8,ih,jh+1)
+ loc2_eos32 = pig_table_var(xh2,8,ih+1,jh+1)
+ loc2_eos33 = pig_table_var(xh2,9,ih,jh)
+ loc2_eos34 = pig_table_var(xh2,9,ih+1,jh)
+ loc2_eos35 = pig_table_var(xh2,9,ih,jh+1)
+ loc2_eos36 = pig_table_var(xh2,9,ih+1,jh+1)
+ 
+ loc_eos1 = omomega*loc1_eos1 + omega*loc2_eos1
+ loc_eos2 = omomega*loc1_eos2 + omega*loc2_eos2
+ loc_eos3 = omomega*loc1_eos3 + omega*loc2_eos3
+ loc_eos4 = omomega*loc1_eos4 + omega*loc2_eos4
+ loc_eos5 = omomega*loc1_eos5 + omega*loc2_eos5
+ loc_eos6 = omomega*loc1_eos6 + omega*loc2_eos6
+ loc_eos7 = omomega*loc1_eos7 + omega*loc2_eos7
+ loc_eos8 = omomega*loc1_eos8 + omega*loc2_eos8
+ loc_eos9 = omomega*loc1_eos9 + omega*loc2_eos9
+ loc_eos10 = omomega*loc1_eos10 + omega*loc2_eos10
+ loc_eos11 = omomega*loc1_eos11 + omega*loc2_eos11
+ loc_eos12 = omomega*loc1_eos12 + omega*loc2_eos12
+ loc_eos13 = omomega*loc1_eos13 + omega*loc2_eos13
+ loc_eos14 = omomega*loc1_eos14 + omega*loc2_eos14
+ loc_eos15 = omomega*loc1_eos15 + omega*loc2_eos15
+ loc_eos16 = omomega*loc1_eos16 + omega*loc2_eos16
+ loc_eos17 = omomega*loc1_eos17 + omega*loc2_eos17
+ loc_eos18 = omomega*loc1_eos18 + omega*loc2_eos18
+ loc_eos19 = omomega*loc1_eos19 + omega*loc2_eos19
+ loc_eos20 = omomega*loc1_eos20 + omega*loc2_eos20
+ loc_eos21 = omomega*loc1_eos21 + omega*loc2_eos21
+ loc_eos22 = omomega*loc1_eos22 + omega*loc2_eos22
+ loc_eos23 = omomega*loc1_eos23 + omega*loc2_eos23
+ loc_eos24 = omomega*loc1_eos24 + omega*loc2_eos24
+ loc_eos25 = omomega*loc1_eos25 + omega*loc2_eos25
+ loc_eos26 = omomega*loc1_eos26 + omega*loc2_eos26
+ loc_eos27 = omomega*loc1_eos27 + omega*loc2_eos27
+ loc_eos28 = omomega*loc1_eos28 + omega*loc2_eos28
+ loc_eos29 = omomega*loc1_eos29 + omega*loc2_eos29
+ loc_eos30 = omomega*loc1_eos30 + omega*loc2_eos30
+ loc_eos31 = omomega*loc1_eos31 + omega*loc2_eos31
+ loc_eos32 = omomega*loc1_eos32 + omega*loc2_eos32
+ loc_eos33 = omomega*loc1_eos33 + omega*loc2_eos33
+ loc_eos34 = omomega*loc1_eos34 + omega*loc2_eos34
+ loc_eos35 = omomega*loc1_eos35 + omega*loc2_eos35
+ loc_eos36 = omomega*loc1_eos36 + omega*loc2_eos36
+ 
+ !======================================!
+
+ x2 = x*x
+ x3 = x2*x
+ x4 = x3*x
+ x5 = x4*x
+ p0r = -rp6*x5 + rp15*x4 - rp10*x3 + rp1
+ p1r = (-rp3*x5 + rp8*x4 - rp6*x3 + x)*drho
+ p2r = ( rph*(-x5 + rp3*x4 - rp3*x3 + x2))*drho2
+
+ omx2 = omx*omx
+ omx3 = omx2*omx
+ omx4 = omx3*omx
+ omx5 = omx4*omx
+ p0mr = -rp6*omx5 + rp15*omx4 - rp10*omx3 + rp1
+ p1mr =  (rp3*omx5 - rp8*omx4 + rp6*omx3 - omx)*drho
+ p2mr =  (rph*(-omx5 + rp3*omx4 - rp3*omx3 + omx2))*drho2
+
+ y2 = y*y
+ y3 = y2*y
+ y4 = y3*y
+ y5 = y4*y
+ p0t = -rp6*y5 + rp15*y4 - rp10*y3 + rp1
+ p1t = (-rp3*y5 + rp8*y4 - rp6*y3 + y)*dT
+ p2t = ( rph*(-y5 + rp3*y4 - rp3*y3 + y2))*dT2
+
+ omy2 = omy*omy
+ omy3 = omy2*omy
+ omy4 = omy3*omy
+ omy5 = omy4*omy
+ p0mt = -rp6*omy5 + rp15*omy4 - rp10*omy3 + rp1
+ p1mt =  (rp3*omy5 - rp8*omy4 + rp6*omy3 - omy)*dT
+ p2mt =  (rph*(-omy5 + rp3*omy4 - rp3*omy3 + omy2))*dT2
+
+ f = &
+ loc_eos1*p0r*p0t + &
+ loc_eos2*p0mr*p0t + &
+ loc_eos3*p0r*p0mt + &
+ loc_eos4*p0mr*p0mt + &
+ loc_eos5*p0r*p1t + &
+ loc_eos6*p0mr*p1t + &
+ loc_eos7*p0r*p1mt + &
+ loc_eos8*p0mr*p1mt + &
+ loc_eos9*p0r*p2t + &
+ loc_eos10*p0mr*p2t + &
+ loc_eos11*p0r*p2mt + &
+ loc_eos12*p0mr*p2mt + &
+ loc_eos13*p1r*p0t + &
+ loc_eos14*p1mr*p0t + &
+ loc_eos15*p1r*p0mt + &
+ loc_eos16*p1mr*p0mt + &
+ loc_eos17*p2r*p0t + &
+ loc_eos18*p2mr*p0t + &
+ loc_eos19*p2r*p0mt + &
+ loc_eos20*p2mr*p0mt + &
+ loc_eos21*p1r*p1t + &
+ loc_eos22*p1mr*p1t + &
+ loc_eos23*p1r*p1mt + &
+ loc_eos24*p1mr*p1mt + &
+ loc_eos25*p2r*p1t + &
+ loc_eos26*p2mr*p1t + &
+ loc_eos27*p2r*p1mt + &
+ loc_eos28*p2mr*p1mt + &
+ loc_eos29*p1r*p2t + &
+ loc_eos30*p1mr*p2t + &
+ loc_eos31*p1r*p2mt + &
+ loc_eos32*p1mr*p2mt + &
+ loc_eos33*p2r*p2t + &
+ loc_eos34*p2mr*p2t + &
+ loc_eos35*p2r*p2mt + &
+ loc_eos36*p2mr*p2mt
+
+ dp0t =  (-rp30*y4 + rp60*y3 - rp30*y2)*idT
+ dp1t =  (-rp15*y4 + rp32*y3 - rp18*y2 + rp1)
+ dp2t =  (rph*(-rp5*y4 + rp12*y3 - rp9*y2 + rp2*y))*dT
+
+ dp0mt = -(-rp30*omy4 + rp60*omy3 - rp30*omy2)*idT
+ dp1mt =  (-rp15*omy4 + rp32*omy3 - rp18*omy2 + rp1)
+ dp2mt = -(rph*(-rp5*omy4 + rp12*omy3 - rp9*omy2 + rp2*omy))*dT
+
+ df_dT = &
+ loc_eos1*p0r*dp0t + &
+ loc_eos2*p0mr*dp0t + &
+ loc_eos3*p0r*dp0mt + &
+ loc_eos4*p0mr*dp0mt + &
+ loc_eos5*p0r*dp1t + &
+ loc_eos6*p0mr*dp1t + &
+ loc_eos7*p0r*dp1mt + &
+ loc_eos8*p0mr*dp1mt + &
+ loc_eos9*p0r*dp2t + &
+ loc_eos10*p0mr*dp2t + &
+ loc_eos11*p0r*dp2mt + &
+ loc_eos12*p0mr*dp2mt + &
+ loc_eos13*p1r*dp0t + &
+ loc_eos14*p1mr*dp0t + &
+ loc_eos15*p1r*dp0mt + &
+ loc_eos16*p1mr*dp0mt + &
+ loc_eos17*p2r*dp0t + &
+ loc_eos18*p2mr*dp0t + &
+ loc_eos19*p2r*dp0mt + &
+ loc_eos20*p2mr*dp0mt + &
+ loc_eos21*p1r*dp1t + &
+ loc_eos22*p1mr*dp1t + &
+ loc_eos23*p1r*dp1mt + &
+ loc_eos24*p1mr*dp1mt + &
+ loc_eos25*p2r*dp1t + &
+ loc_eos26*p2mr*dp1t + &
+ loc_eos27*p2r*dp1mt + &
+ loc_eos28*p2mr*dp1mt + &
+ loc_eos29*p1r*dp2t + &
+ loc_eos30*p1mr*dp2t + &
+ loc_eos31*p1r*dp2mt + &
+ loc_eos32*p1mr*dp2mt + &
+ loc_eos33*p2r*dp2t + &
+ loc_eos34*p2mr*dp2t + &
+ loc_eos35*p2r*dp2mt + &
+ loc_eos36*p2mr*dp2mt
+
+ df_dT2 = rp0
+
+ if(return_dE_dT) then
+
+ ddp0t =  (-rp120*y3 + rp180*y2 - rp60*y)*idT2
+ ddp1t =  (-rp60*y3 + rp96*y2 - rp36*y)*idT
+ ddp2t =  (rph*(-rp20*y3 + rp36*y2 - rp18*y + rp2))
+
+ ddp0mt =  (-rp120*omy3 + rp180*omy2 - rp60*omy)*idT2
+ ddp1mt = -(-rp60*omy3 + rp96*omy2 - rp36*omy)*idT
+ ddp2mt =  (rph*(-rp20*omy3 + rp36*omy2 - rp18*omy + rp2))
+
+ df_dT2 = &
+ loc_eos1*p0r*ddp0t + &
+ loc_eos2*p0mr*ddp0t + &
+ loc_eos3*p0r*ddp0mt + &
+ loc_eos4*p0mr*ddp0mt + &
+ loc_eos5*p0r*ddp1t + &
+ loc_eos6*p0mr*ddp1t + &
+ loc_eos7*p0r*ddp1mt + &
+ loc_eos8*p0mr*ddp1mt + &
+ loc_eos9*p0r*ddp2t + &
+ loc_eos10*p0mr*ddp2t + &
+ loc_eos11*p0r*ddp2mt + &
+ loc_eos12*p0mr*ddp2mt + &
+ loc_eos13*p1r*ddp0t + &
+ loc_eos14*p1mr*ddp0t + &
+ loc_eos15*p1r*ddp0mt + &
+ loc_eos16*p1mr*ddp0mt + &
+ loc_eos17*p2r*ddp0t + &
+ loc_eos18*p2mr*ddp0t + &
+ loc_eos19*p2r*ddp0mt + &
+ loc_eos20*p2mr*ddp0mt + &
+ loc_eos21*p1r*ddp1t + &
+ loc_eos22*p1mr*ddp1t + &
+ loc_eos23*p1r*ddp1mt + &
+ loc_eos24*p1mr*ddp1mt + &
+ loc_eos25*p2r*ddp1t + &
+ loc_eos26*p2mr*ddp1t + &
+ loc_eos27*p2r*ddp1mt + &
+ loc_eos28*p2mr*ddp1mt + &
+ loc_eos29*p1r*ddp2t + &
+ loc_eos30*p1mr*ddp2t + &
+ loc_eos31*p1r*ddp2mt + &
+ loc_eos32*p1mr*ddp2mt + &
+ loc_eos33*p2r*ddp2t + &
+ loc_eos34*p2mr*ddp2t + &
+ loc_eos35*p2r*ddp2mt + &
+ loc_eos36*p2mr*ddp2mt
+
+ endif
+
+ s = -Ye*df_dT
+ ds_dT = -Ye*df_dT2
+ E = Ye*f + T*s 
+ dE_dT = T*ds_dT
+
+ T2 = T*T
+ T3 = T2*T
+ T4 = T3*T
+
+ E = E + CONST_RAD*T4/rho
+ dE_dT = dE_dT + rp4*CONST_RAD*T3/rho
+
+ end subroutine pig_xvar_rhoT_given2
+
+ subroutine pig_xvar_rhoP_given(rho,P0,T,Xs,E,sound,return_sound)
+  real(kind=rp), intent(in) :: rho,P0,Xs
+  real(kind=rp), intent(inout) :: T,E,sound
+  logical, intent(in) :: return_sound
+
+  real(kind=rp) :: error,P,dP_dT,res,dE_dT,cv,Told
+  integer :: iter
+
+  sound = rp0
+  cv = rp0
+  error = rp1
+
+  Told = T
+
+  do iter=1,100
+
+   call pig_xvar_rhoT_given1(rho,T,Xs,P,dP_dT,.true.)
+   res = P-P0
+   T = T - res/dP_dT
+
+   error = abs(res/P0)
+
+   if( (T<Tl_eos) .or. (T>Th_eos) ) then
+    T = Told
+    error = em15
+   endif
+
+   if(error<pig_tol) exit
+
+  end do
+
+  if(return_sound) then 
+   call pig_xvar_rhoT_given_full(rho,T,Xs,P,E,sound,cv)
+  else    
+   call pig_xvar_rhoT_given2(rho,T,Xs,E,dE_dT,.false.)         
+  endif
+
+ end subroutine pig_xvar_rhoP_given
+
+ subroutine pig_xvar_rhoe_given(rho,E0,T,Xs,P,sound,return_sound)
+  real(kind=rp), intent(in) :: rho,E0,Xs
+  real(kind=rp), intent(inout) :: T,P,sound
+  logical, intent(in) :: return_sound
+
+  real(kind=rp) :: error,E,dE_dT,res,dP_dT,cv,Told
+  integer :: iter
+
+  error = rp1
+  cv = rp0
+  sound = rp0
+
+  Told = T
+
+  do iter=1,100
+
+   call pig_xvar_rhoT_given2(rho,T,Xs,E,dE_dT,.true.)
+   res = E-E0
+   T = T - res/dE_dT
+
+   error = abs(res/E0)
+
+   if( (T<Tl_eos) .or. (T>Th_eos) ) then
+    T = Told
+    error=em15
+   endif
+
+   if(error<pig_tol) exit
+
+  end do
+
+  if(return_sound) then 
+   call pig_xvar_rhoT_given_full(rho,T,Xs,P,E,sound,cv)
+  else    
+   call pig_xvar_rhoT_given1(rho,T,Xs,P,dP_dT,.false.)
+  endif
+
+ end subroutine pig_xvar_rhoe_given
 
 #endif
 

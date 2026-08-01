@@ -1903,7 +1903,7 @@ def file_list(path=""):
 class h5grid:
 
     def __init__(self,filename,path='./grids',mode='i',data_path=data,helm_table='helm_table_timmes_x2.dat',pig_table='401x401_pig_table_h2_offset.dat',
-    NRHO=541,NT=201,LOGRHOMIN=-12.0,LOGRHOMAX=15.0,LOGTMIN=3.0,LOGTMAX=13.0):
+    NRHO=541,NT=201,NX=1,LOGRHOMIN=-12.0,LOGRHOMAX=15.0,LOGTMIN=3.0,LOGTMAX=13.0,XMIN=0.0,XMAX=1.0):
         if(mode=='n'):
             filename = os.path.join(path, 'grid_n{:05}.h5'.format(filename))
         elif(mode=='i'):
@@ -1943,6 +1943,10 @@ class h5grid:
          self.use_pig = self.grid0.attrs['use_pig'].decode('ASCII')
         except:
          self.use_pig = 'false'
+        try:
+         self.use_pig_xvar = self.grid0.attrs['use_pig_xvar'].decode('ASCII')
+        except:
+         self.use_pig_xvar = 'false'
 
         try:
          self.use_gravity_solver = self.grid0.attrs['use_gravity_solver'].decode('ASCII')
@@ -2000,19 +2004,31 @@ class h5grid:
         helm_table_path = os.path.join(data_path, helm_table)
         pig_table_path = os.path.join(data_path, pig_table)
 
-        if(self.use_pig=='true'):
+        if(self.use_pig=='true' or self.use_pig_xvar=='true'):
          table_path = pig_table_path
         else:
          table_path = helm_table_path
 
-        eos_key = (table_path, NRHO, NT, LOGRHOMIN, LOGRHOMAX, LOGTMIN, LOGTMAX)
-        if eos_key in _EOS_TABLE_CACHE:
-         self.eos_table = _EOS_TABLE_CACHE[eos_key]
-        else:
-         self.eos_table = eos_fort.eos_fort_mod.load_table(table_path,NRHO,NT,
-         LOGRHOMIN,LOGRHOMAX,LOGTMIN,LOGTMAX)
-         _EOS_TABLE_CACHE[eos_key] = self.eos_table
+        if(self.use_pig_xvar=='true'):
+
+          eos_key = (table_path, NRHO, NT, NX, LOGRHOMIN, LOGRHOMAX, LOGTMIN, LOGTMAX, XMIN, XMAX)
+          if eos_key in _EOS_TABLE_CACHE:
+           self.eos_table = _EOS_TABLE_CACHE[eos_key]
+          else:
+           self.eos_table = eos_fort.eos_fort_mod.load_table_pxvar(table_path,NRHO,NT,NX,
+           LOGRHOMIN,LOGRHOMAX,LOGTMIN,LOGTMAX,XMIN,XMAX)
+           _EOS_TABLE_CACHE[eos_key] = self.eos_table
  
+        else:
+
+          eos_key = (table_path, NRHO, NT, LOGRHOMIN, LOGRHOMAX, LOGTMIN, LOGTMAX)
+          if eos_key in _EOS_TABLE_CACHE:
+           self.eos_table = _EOS_TABLE_CACHE[eos_key]
+          else:
+           self.eos_table = eos_fort.eos_fort_mod.load_table(table_path,NRHO,NT,
+           LOGRHOMIN,LOGRHOMAX,LOGTMIN,LOGTMAX)
+           _EOS_TABLE_CACHE[eos_key] = self.eos_table
+       
         self.eos_evaluated = False
        
         self.eos_mode = ['ideal']
@@ -2028,6 +2044,9 @@ class h5grid:
 
         if(self.use_pig=='true'):
           self.eos_mode = ['radiation','pig']
+
+        if(self.use_pig_xvar=='true'):
+          self.eos_mode = ['radiation','pig_xvar']
 
         try:
          self.time = self.grid['time'][()]
@@ -2136,6 +2155,8 @@ class h5grid:
         else:
           if(self.use_pig=='true'):
            return np.ones_like(self.rho(ix=ix,iy=iy,iz=iz))
+          elif(self.use_pig_xvar=='true'):
+           return self.asc(ix=ix,iy=iy,iz=iz)[0]
           else:
            return np.ones_like(self.rho(ix=ix,iy=iy,iz=iz))*(self.mub/(1.0-self.mub/2.0))
 

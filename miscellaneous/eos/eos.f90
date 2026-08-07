@@ -8,6 +8,9 @@ module eos_fort_mod
   Ps_given_3d, &
   load_table, &
   rhoT_given_3d_pxvar, &
+  rhoP_given_3d_pxvar, &
+  PT_given_3d_pxvar, &
+  Ps_given_3d_pxvar, &
   load_table_pxvar
 
   double precision, parameter :: &
@@ -92,14 +95,14 @@ subroutine load_table_pxvar(path_to_table, &
   character(len=*) :: path_to_table 
   integer, intent(in) :: NRHO,NT,NX
   double precision, intent(in) :: LOGRHOMIN,LOGRHOMAX,LOGTMIN,LOGTMAX,XMIN,XMAX
-  double precision, dimension(1:NX,1:21,1:NRHO,1:NT), intent(out) :: table_var
+  double precision, dimension(1:NX,1:13,1:NRHO,1:NT), intent(out) :: table_var
   double precision, dimension(1:NRHO), intent(out) :: table_rho
   double precision, dimension(1:NT), intent(out) :: table_T
   double precision, dimension(1:NX), intent(out) :: table_X
   double precision, intent(out) :: table_drho, table_dT, table_dX
 
-  integer :: i,j,iX
   double precision :: dum1,dum2,dum3,dum4
+  integer :: i,j,iX
 
   open(unit=21,file=path_to_table,status='old', &
   form='unformatted', access='stream',action='read')
@@ -145,23 +148,7 @@ subroutine load_table_pxvar(path_to_table, &
   
      end do
     end do
-  
-    do j=1,NT
-     do i=1,NRHO
-  
-       read(21) dum1,dum2,dum3,dum4
-  
-     end do
-    end do
-  
-    do j=1,NT
-     do i=1,NRHO
-  
-       read(21) dum1,dum2,dum3,dum4
-  
-     end do
-    end do
-  
+ 
   end do
 
   close(21)
@@ -342,7 +329,7 @@ subroutine rhoT_given_3d_pxvar(rho_arr,T_arr,X_arr, &
 
   nnx = size(table_X,1)
 
-  Ye = 1
+  Ye = 1.0d0
 
   do k=1,n3
    do j=1,n2
@@ -986,6 +973,308 @@ subroutine rhoT_given_3d_pxvar(rho_arr,T_arr,X_arr, &
   end do
 
 end subroutine rhoT_given_3d_pxvar
+
+subroutine rhoP_given_3d_pxvar(rho_arr,P_arr,Tg_arr,X_arr, &
+                         radiation, &
+                         table, &
+                         table_rho, table_T, table_X, &
+                         table_drho, table_dT, table_dX, &
+                         eos_arr, &
+                         T_arr)
+
+  implicit none
+
+  double precision, intent(in)  :: rho_arr(:,:,:)
+  double precision, intent(in)  :: P_arr(:,:,:)
+  double precision, intent(in)  :: Tg_arr(:,:,:)
+  double precision, intent(in)  :: X_arr(:,:,:)
+
+  logical, intent(in) :: radiation
+
+  double precision, intent(in) :: table(:,:,:,:)
+  double precision, intent(in) :: table_rho(:),table_T(:),table_X(:)
+  double precision, intent(in) :: table_drho,table_dT,table_dX
+  double precision, intent(out) :: eos_arr(1:23,size(rho_arr,1),size(rho_arr,2),size(rho_arr,3))
+  double precision, intent(out) :: T_arr(size(rho_arr,1),size(rho_arr,2),size(rho_arr,3))
+
+  integer :: i,j,k,iv,iter
+  integer :: n1,n2,n3
+
+  double precision :: T_sc(1,1,1),rho_sc(1,1,1),X_sc(1,1,1), &
+  eos_sc(1:23,1,1,1)
+
+  double precision :: error,P,res,Tmin,Tmax
+
+  n1 = size(rho_arr,1)
+  n2 = size(rho_arr,2)
+  n3 = size(rho_arr,3)
+
+  Tmin = minval(table_T)
+  Tmax = maxval(table_T)
+
+  do k=1,n3
+   do j=1,n2
+    do i=1,n1
+
+        rho_sc(1,1,1) = rho_arr(i,j,k) 
+        X_sc(1,1,1) = X_arr(i,j,k)
+        P = P_arr(i,j,k)
+
+        T_sc(1,1,1) = Tg_arr(i,j,k)
+
+        if(T_sc(1,1,1)<0.0d0) then
+         T_sc(1,1,1) = P/(rho_sc(1,1,1)*CONST_RGAS)
+        endif
+
+        do iter=1,1000
+
+         call rhoT_given_3d_pxvar(rho_sc,T_sc,X_sc, &
+         radiation, &
+         table, &
+         table_rho, table_T, table_X, &
+         table_drho, table_dT, table_dX, &
+         eos_sc)
+
+         res = eos_sc(id_P,1,1,1)-P
+
+         T_sc(1,1,1) = T_sc(1,1,1) - res/eos_sc(id_dPdT,1,1,1)
+
+         if(T_sc(1,1,1)<Tmin) then 
+           T_sc(1,1,1) = 1.1d0*Tmin
+         endif
+         if(T_sc(1,1,1)>Tmax) then 
+           T_sc(1,1,1) = 0.9d0*Tmax
+         endif
+        
+         error = abs(res/P)
+
+         if(error<1.0d-11) exit
+
+        end do
+
+        if(iter>1000) write(*,*) 'NR not converged', error
+
+        do iv=1,23
+         eos_arr(iv,i,j,k) = eos_sc(iv,1,1,1)
+        end do
+
+        T_arr(i,j,k) = T_sc(1,1,1)
+
+    end do
+   end do
+  end do
+
+end subroutine rhoP_given_3d_pxvar
+
+subroutine PT_given_3d_pxvar(P_arr,T_arr,rhog_arr,X_arr, &
+                         radiation, &
+                         table, &
+                         table_rho, table_T, table_X, &
+                         table_drho, table_dT, table_dX, &
+                         eos_arr, &
+                         rho_arr)
+
+  implicit none
+
+  double precision, intent(in)  :: P_arr(:,:,:)
+  double precision, intent(in)  :: T_arr(:,:,:)
+  double precision, intent(in)  :: rhog_arr(:,:,:)
+  double precision, intent(in)  :: X_arr(:,:,:)
+
+  logical, intent(in) :: radiation
+
+  double precision, intent(in) :: table(:,:,:,:)
+  double precision, intent(in) :: table_rho(:),table_T(:),table_X(:)
+  double precision, intent(in) :: table_drho,table_dT,table_dX
+  double precision, intent(out) :: eos_arr(1:23,size(P_arr,1),size(P_arr,2),size(P_arr,3))
+  double precision, intent(out) :: rho_arr(size(P_arr,1),size(P_arr,2),size(P_arr,3))
+
+  integer :: i,j,k,iv,iter
+  integer :: n1,n2,n3
+
+  double precision :: T_sc(1,1,1),rho_sc(1,1,1),X_sc(1,1,1), &
+  eos_sc(1:23,1,1,1)
+
+  double precision :: error,P,res,rhomin,rhomax
+
+  n1 = size(P_arr,1)
+  n2 = size(P_arr,2)
+  n3 = size(P_arr,3)
+
+  rhomin = minval(table_rho)
+  rhomax = maxval(table_rho)
+
+  do k=1,n3
+   do j=1,n2
+    do i=1,n1
+
+        T_sc(1,1,1) = T_arr(i,j,k) 
+        X_sc(1,1,1) = X_arr(i,j,k)
+
+        P = P_arr(i,j,k)
+
+        rho_sc(1,1,1) = rhog_arr(i,j,k)
+
+        if(rho_sc(1,1,1)<0.0d0) then
+         rho_sc(1,1,1) = P/(T_sc(1,1,1)*CONST_RGAS)
+        endif
+
+        do iter=1,1000
+
+         call rhoT_given_3d_pxvar(rho_sc,T_sc,X_sc, &
+         radiation, &
+         table, &
+         table_rho, table_T, table_X, &
+         table_drho, table_dT, table_dX, &
+         eos_sc)
+
+         res = eos_sc(id_P,1,1,1)-P
+
+         rho_sc(1,1,1) = rho_sc(1,1,1) - res/eos_sc(id_dPdrho,1,1,1)
+
+         if(rho_sc(1,1,1)<rhomin) then 
+           rho_sc(1,1,1) = 1.1d0*rhomin
+         endif
+         if(rho_sc(1,1,1)>rhomax) then 
+           rho_sc(1,1,1) = 0.9d0*rhomax
+         endif
+        
+         error = abs(res/P)
+
+         if(error<1.0d-11) exit
+
+        end do
+
+        if(iter>1000) write(*,*) 'NR not converged', error
+
+        do iv=1,23
+         eos_arr(iv,i,j,k) = eos_sc(iv,1,1,1)
+        end do
+
+        rho_arr(i,j,k) = rho_sc(1,1,1)
+
+    end do
+   end do
+  end do
+
+end subroutine PT_given_3d_pxvar
+
+subroutine Ps_given_3d_pxvar(P_arr,s_arr,rhog_arr,Tg_arr,X_arr, &
+                         radiation, &
+                         table, &
+                         table_rho, table_T, table_X, &
+                         table_drho, table_dT, table_dX, &
+                         eos_arr, &
+                         rho_arr,T_arr)
+
+  implicit none
+
+  double precision, intent(in)  :: P_arr(:,:,:)
+  double precision, intent(in)  :: s_arr(:,:,:)
+  double precision, intent(in)  :: rhog_arr(:,:,:)
+  double precision, intent(in)  :: Tg_arr(:,:,:)
+  double precision, intent(in)  :: X_arr(:,:,:)
+
+  logical, intent(in) :: radiation
+
+  double precision, intent(in) :: table(:,:,:,:)
+  double precision, intent(in) :: table_rho(:),table_T(:),table_X(:)
+  double precision, intent(in) :: table_drho,table_dT,table_dX
+  double precision, intent(out) :: eos_arr(1:23,size(P_arr,1),size(P_arr,2),size(P_arr,3))
+  double precision, intent(out) :: rho_arr(size(P_arr,1),size(P_arr,2),size(P_arr,3))
+  double precision, intent(out) :: T_arr(size(P_arr,1),size(P_arr,2),size(P_arr,3))
+
+  integer :: i,j,k,iv,iter
+  integer :: n1,n2,n3
+
+  double precision :: rho_sc(1,1,1),T_sc(1,1,1),X_sc(1,1,1), &
+  eos_sc(1:23,1,1,1)
+
+  double precision :: error,P,s,res(1:2),jac(2,2),ijac(2,2),rhomin,rhomax,Tmin,Tmax,det
+
+  n1 = size(P_arr,1)
+  n2 = size(P_arr,2)
+  n3 = size(P_arr,3)
+
+  rhomin = minval(table_rho)
+  rhomax = maxval(table_rho)
+
+  Tmin = minval(table_T)
+  Tmax = maxval(table_T)
+
+  do k=1,n3
+   do j=1,n2
+    do i=1,n1
+
+        rho_sc(1,1,1) = rhog_arr(i,j,k)
+        T_sc(1,1,1) = Tg_arr(i,j,k) 
+        X_sc(1,1,1) = X_arr(i,j,k)
+
+        P = P_arr(i,j,k)
+        s = s_arr(i,j,k)
+
+        do iter=1,1000
+
+         call rhoT_given_3d_pxvar(rho_sc,T_sc,X_sc, &
+         radiation, &
+         table, &
+         table_rho, table_T, table_X, &
+         table_drho, table_dT, table_dX, &
+         eos_sc)
+
+         res(1) = eos_sc(id_P,1,1,1)-P
+         res(2) = eos_sc(id_s,1,1,1)-s
+
+         jac(1,1) = eos_sc(id_dPdrho,1,1,1)
+         jac(1,2) = eos_sc(id_dPdT,1,1,1)
+         jac(2,1) = eos_sc(id_dsdrho,1,1,1)
+         jac(2,2) = eos_sc(id_dsdT,1,1,1)
+          
+         det = jac(1,1)*jac(2,2)-jac(1,2)*jac(2,1)
+         det = 1.0d0/det
+
+         ijac(1,1) = jac(2,2)*det
+         ijac(1,2) = -jac(1,2)*det
+         ijac(2,1) = -jac(2,1)*det
+         ijac(2,2) = jac(1,1)*det
+
+         rho_sc(1,1,1) = rho_sc(1,1,1) - ijac(1,1)*res(1) - ijac(1,2)*res(2)
+         T_sc(1,1,1) = T_sc(1,1,1) - ijac(2,1)*res(1) - ijac(2,2)*res(2)
+         
+         if(rho_sc(1,1,1)<rhomin) then 
+           rho_sc(1,1,1) = 1.1d0*rhomin
+         endif
+         if(rho_sc(1,1,1)>rhomax) then 
+           rho_sc(1,1,1) = 0.9d0*rhomax
+         endif
+ 
+         if(T_sc(1,1,1)<Tmin) then 
+           T_sc(1,1,1) = 1.1d0*Tmin
+         endif
+         if(T_sc(1,1,1)>Tmax) then 
+           T_sc(1,1,1) = 0.9d0*Tmax
+         endif
+        
+         error = abs(res(1)/P) + abs(res(2)/s)
+
+         if(error<1.0d-11) exit
+
+        end do
+
+        if(iter>1000) write(*,*) 'NR not converged', error
+
+        do iv=1,23
+         eos_arr(iv,i,j,k) = eos_sc(iv,1,1,1)
+        end do
+
+        rho_arr(i,j,k) = rho_sc(1,1,1)
+        T_arr(i,j,k) = T_sc(1,1,1)
+
+    end do
+   end do
+  end do
+
+end subroutine Ps_given_3d_pxvar
 
 !==================================================================================!
 

@@ -875,26 +875,6 @@ contains
      end do
     end do
 
-    do j=1,NT+1
-     do i=1,Nrho+1
-      write(u) &
-      real(0.0_rp,kind=8), &
-      real(0.0_rp,kind=8), &
-      real(0.0_rp,kind=8), &
-      real(0.0_rp,kind=8)
-     end do
-    end do
-
-    do j=1,NT+1
-     do i=1,Nrho+1
-      write(u) &
-      real(0.0_rp,kind=8), &
-      real(0.0_rp,kind=8), &
-      real(0.0_rp,kind=8), &
-      real(0.0_rp,kind=8)
-     end do
-    end do
-
     close(u)
 
    end if

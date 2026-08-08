@@ -2185,7 +2185,7 @@ class h5grid:
          abar = self.abar(ix=ix,iy=iy,iz=iz)
          zbar = self.zbar(ix=ix,iy=iy,iz=iz)
          mu = abar / (zbar+1.0)
-        return abar/(zbar+1.0)
+        return mu
  
     def bfield(self,ix=-1,iy=-1,iz=-1):
         return self.vec4d(self.grid['bfield'],ix=ix,iy=iy,iz=iz)

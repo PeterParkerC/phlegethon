@@ -20812,7 +20812,7 @@ subroutine gmg_bcs(mgrid,lgrid,level)
   if (dlog10 <= drel10) then
     ocond = oh
   else if (dlog10 < drelim) then
-    farg = pi*(dlog10 - drel10)/(drelim - drel10)
+    farg  = pi*(dlog10 - drel10)/(drelim - drel10)
     ffac  = 0.5_rp*(1.0_rp - cos(farg))
     ocond = exp((1.0_rp-ffac)*log(oh) + ffac*log(ov))
   else

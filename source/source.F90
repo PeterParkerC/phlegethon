@@ -852,10 +852,6 @@ module source
     real(kind=rp), allocatable, dimension(:,:,:) :: tmp
     real(kind=rp), allocatable, dimension(:,:,:,:) :: coords
     real(kind=rp), allocatable, dimension(:,:,:,:) :: nodes
-    real(kind=rp), allocatable, dimension(:,:,:) :: coords_x1
-    real(kind=rp), allocatable, dimension(:,:,:) :: coords_x2
-    real(kind=rp), allocatable, dimension(:,:,:) :: coords_x3
-    real(kind=rp), allocatable, dimension(:,:,:) :: vol
     integer, dimension(3) :: i1,i2
 
  end type
@@ -1686,26 +1682,6 @@ contains
      lgrid%gmgv(ierr)%i1(2)-1:lgrid%gmgv(ierr)%i2(2)+1+1, &
      lgrid%gmgv(ierr)%i1(3)-1:lgrid%gmgv(ierr)%i2(3)+1+1 ) )
 
-     allocate(lgrid%gmgv(ierr)%coords_x1( &
-     lgrid%gmgv(ierr)%i1(1)-1:lgrid%gmgv(ierr)%i2(1)+1+1, &
-     lgrid%gmgv(ierr)%i1(2)-1:lgrid%gmgv(ierr)%i2(2)+1, &
-     lgrid%gmgv(ierr)%i1(3)-1:lgrid%gmgv(ierr)%i2(3)+1 ) )
-
-     allocate(lgrid%gmgv(ierr)%coords_x2( &
-     lgrid%gmgv(ierr)%i1(1)-1:lgrid%gmgv(ierr)%i2(1)+1, &
-     lgrid%gmgv(ierr)%i1(2)-1:lgrid%gmgv(ierr)%i2(2)+1+1, &
-     lgrid%gmgv(ierr)%i1(3)-1:lgrid%gmgv(ierr)%i2(3)+1 ) )
-
-     allocate(lgrid%gmgv(ierr)%coords_x3( &
-     lgrid%gmgv(ierr)%i1(1)-1:lgrid%gmgv(ierr)%i2(1)+1, &
-     lgrid%gmgv(ierr)%i1(2)-1:lgrid%gmgv(ierr)%i2(2)+1, &
-     lgrid%gmgv(ierr)%i1(3)-1:lgrid%gmgv(ierr)%i2(3)+1+1 ) )
-
-     allocate(lgrid%gmgv(ierr)%vol( &
-     lgrid%gmgv(ierr)%i1(1)-1:lgrid%gmgv(ierr)%i2(1)+1, &
-     lgrid%gmgv(ierr)%i1(2)-1:lgrid%gmgv(ierr)%i2(2)+1, &
-     lgrid%gmgv(ierr)%i1(3)-1:lgrid%gmgv(ierr)%i2(3)+1 ) )
-
     end do
 
 #endif
@@ -2105,10 +2081,15 @@ contains
     mgrid%rays_i2(3) = int((mgrid%coords_dd(3)+1)*mgrid%rays_nx3)
 
     allocate(lgrid%rays(1:rays_nvars, &
-    mgrid%rays_i1(1):mgrid%rays_i2(1), &
-    mgrid%rays_i1(2):mgrid%rays_i2(2), &
-    mgrid%rays_i1(3):mgrid%rays_i2(3)))
-     
+    mgrid%rays_i1(1)-ngc:mgrid%rays_i2(1)+ngc, &
+    mgrid%rays_i1(2)-ngc:mgrid%rays_i2(2)+ngc, &
+#if sdims_make==2
+    mgrid%rays_i1(3):mgrid%rays_i2(3))) 
+#endif
+#if sdims_make==3
+    mgrid%rays_i1(3)-ngc:mgrid%rays_i2(3)+ngc))
+#endif
+
 #endif
 
 #ifdef COMPUTE_PMAX
@@ -2203,10 +2184,6 @@ contains
      deallocate(lgrid%gmgv(ierr)%tmp)
      deallocate(lgrid%gmgv(ierr)%coords)
      deallocate(lgrid%gmgv(ierr)%nodes)
-     deallocate(lgrid%gmgv(ierr)%coords_x1)
-     deallocate(lgrid%gmgv(ierr)%coords_x2)
-     deallocate(lgrid%gmgv(ierr)%coords_x3)
-     deallocate(lgrid%gmgv(ierr)%vol)
     end do
 #endif
 #endif
@@ -2940,7 +2917,7 @@ contains
     integer :: error
     integer(HID_T) :: dataset_id,dataspace_id,memspace_id
     
-    integer(HID_T) :: start(3),cnt(3),dims(3)
+    integer(HSIZE_T) :: start(3),cnt(3),dims(3)
 
     call h5dopen_f(group_id,dsetname,dataset_id,error) 
 
@@ -2992,7 +2969,7 @@ contains
     integer :: error
     integer(HID_T) :: dataset_id,dataspace_id,memspace_id
     
-    integer(HID_T) :: start(4),cnt(4),dims(4)
+    integer(HSIZE_T) :: start(4),cnt(4),dims(4)
 
     call h5dopen_f(group_id,dsetname,dataset_id,error) 
 
@@ -3035,7 +3012,7 @@ contains
     type(h5_file) :: h5
 
     integer :: error
-    integer(HID_T) :: file_id,group_id
+    integer(HID_T) :: file_id,group_id,plist_id
     
     write(h5%filename, "('./restarts/restart_n',I0.5,'.h5')") lgrid%step
 
@@ -3064,7 +3041,13 @@ contains
     h5%pref_dtypei = H5T_STD_I32BE
 #endif
 
-    call h5fopen_f(h5%filename,H5F_ACC_RDONLY_F,file_id,error)
+    call h5pcreate_f(H5P_FILE_ACCESS_F,plist_id,error)
+
+    call h5pset_fapl_mpio_f(plist_id,mgrid%comm_cart,MPI_INFO_NULL,error)
+
+    call h5fopen_f(h5%filename,H5F_ACC_RDONLY_F,file_id,error,plist_id)
+
+    call h5pclose_f(plist_id,error)
 
     call h5gopen_f(file_id,"grid",group_id,error)
 
@@ -3107,7 +3090,7 @@ contains
     mgrid%i1(3),mgrid%i2(3),&
     ngc,lgrid%phi_cc)
 
-    call  read_ndarray(h5,group_id,"grav",mgrid,nvars,&
+    call  read_ndarray(h5,group_id,"grav",mgrid,sdims,&
     mgrid%i1(1),mgrid%i2(1),&
     mgrid%i1(2),mgrid%i2(2),&
     mgrid%i1(3),mgrid%i2(3),&
@@ -3116,7 +3099,7 @@ contains
 #endif
 #ifdef USE_MONOPOLE_GRAVITY
 
-    call  read_ndarray(h5,group_id,"grav",mgrid,nvars,&
+    call  read_ndarray(h5,group_id,"grav",mgrid,sdims,&
     mgrid%i1(1),mgrid%i2(1),&
     mgrid%i1(2),mgrid%i2(2),&
     mgrid%i1(3),mgrid%i2(3),&
@@ -4145,11 +4128,11 @@ contains
         cos_phi = cos(phi)
         sin_phi = sin(phi)
         vr = (x*vx1+y*vx2+z*vx3)/r
-        vt1 = cos_theta*cos_phi*vx1+cos_theta*sin_theta*vx2-sin_theta*vx3
+        vt1 = cos_theta*cos_phi*vx1+cos_theta*sin_phi*vx2-sin_theta*vx3
         vt2 = -sin_phi*vx1+cos_phi*vx2
 #ifdef USE_MHD
         br = (x*bx1+y*bx2+z*bx3)/r
-        bt1 = cos_theta*cos_phi*bx1+cos_theta*sin_theta*bx2-sin_theta*bx3
+        bt1 = cos_theta*cos_phi*bx1+cos_theta*sin_phi*bx2-sin_theta*bx3
         bt2 = -sin_phi*bx1+cos_phi*bx2
 #endif
 #ifdef USE_GRAVITY
@@ -4164,11 +4147,11 @@ contains
         cos_phi = cos(phi)
         sin_phi = sin(phi)
         vr = (x*vx1+y*vx2+z*vx3)/r
-        vt1 = cos_theta*cos_phi*vx1+cos_theta*sin_theta*vx2-sin_theta*vx3
+        vt1 = cos_theta*cos_phi*vx1+cos_theta*sin_phi*vx2-sin_theta*vx3
         vt2 = -sin_phi*vx1+cos_phi*vx2
 #ifdef USE_MHD
         br = (x*bx1+y*bx2+z*bx3)/r
-        bt1 = cos_theta*cos_phi*bx1+cos_theta*sin_theta*bx2-sin_theta*bx3
+        bt1 = cos_theta*cos_phi*bx1+cos_theta*sin_phi*bx2-sin_theta*bx3
         bt2 = -sin_phi*bx1+cos_phi*bx2
 #endif
 #elif defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL)
@@ -6022,28 +6005,32 @@ contains
 
  end subroutine hdf5_annotate_string
 
- subroutine hdf5_annotate_array_string(id,key,val,n)
-    integer(HID_T), intent(in) :: id
-    character(len=*), intent(in) :: key
-    character(len=filename_size), dimension(*), intent(in) :: val
-    integer, intent(in) :: n 
+ subroutine hdf5_annotate_array_string(id,name,val,n)
+   integer(HID_T), intent(in) :: id
+   character(len=*), intent(in) :: name
+   character(len=filename_size), dimension(*), intent(in) :: val
+   integer, intent(in) :: n
 
-    integer :: err
-    integer(HID_T) :: sid, aid, tid
-    integer(HSIZE_T), dimension(1) :: dims
-    integer(SIZE_T) :: strlen
+   integer :: err
+   integer(HID_T) :: sid, did, tid
+   integer(HSIZE_T), dimension(1) :: dims
+   integer(SIZE_T) :: strlen
 
-    strlen = filename_size 
-    dims(1) = n
+   strlen = filename_size
+   dims(1) = n
 
-    call h5tcopy_f(H5T_NATIVE_CHARACTER,tid,err)
-    call h5tset_size_f(tid,strlen,err)
-    call h5screate_simple_f(1,dims,sid,err)
-    call h5acreate_f(id,key,tid,sid,aid,err)
-    call h5awrite_f(aid,tid,val,dims,err)
-    call h5aclose_f(aid,err)
-    call h5sclose_f(sid,err)
-    call h5tclose_f(tid,err)
+   call h5tcopy_f(H5T_FORTRAN_S1, tid, err)
+   call h5tset_size_f(tid, strlen, err)
+
+   call h5screate_simple_f(1, dims, sid, err)
+
+   call h5dcreate_f(id, trim(name), tid, sid, did, err)
+
+   call h5dwrite_f(did, tid, val, dims, err)
+
+   call h5dclose_f(did, err)
+   call h5sclose_f(sid, err)
+   call h5tclose_f(tid, err)
 
  end subroutine hdf5_annotate_array_string
 
@@ -23638,6 +23625,8 @@ subroutine gmg_bcs(mgrid,lgrid,level)
 #endif
 
       T9 = T*em9
+
+      if(T9>rp10) T9=rp10
 
       do iv=1,nspecies
        Y0(iv) = Y(iv)

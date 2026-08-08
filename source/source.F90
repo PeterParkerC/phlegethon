@@ -20455,7 +20455,7 @@ subroutine gmg_bcs(mgrid,lgrid,level)
 
         call  helm_rhoT_given_extra(rho,T,abar,zbar,pep,eta,xf)
 
-        call sig99( &
+        call kapfxt( &
         T, &
         rho, &
         lgrid%prim(i_as1:i_as1+nspecies-1,i,j,k), &
@@ -20473,17 +20473,14 @@ subroutine gmg_bcs(mgrid,lgrid,level)
         endif
 #endif 
 
-
      end do
     end do
    end do
 
  end subroutine compute_timmes_kappa
 
- !This implementation is based on sig99.tar.xz available at https://cococubed.com/code_pages/kap.shtml (last accessed 10 April 2026).
- subroutine sig99(temp,den,xmass,zion,aion,ionmax,pep,xne,eta,opac)
-
-! this routine approximates an opacity.
+ !This implementation is based on kapfxt.tar.xz available at https://cococubed.com/code_pages/kap.shtml (last accessed 8 August 2026).
+ subroutine kapfxt(temp,den,xmass,zion,aion,ionmax,pep,xne,eta,opac)
 
 ! input:
 ! temp   = temperature temp (in K)
@@ -20520,9 +20517,9 @@ subroutine gmg_bcs(mgrid,lgrid,level)
                    xkcz,ochrs,th,fact,facetax,faceta,ocompt,tcut, &
                    cutfac,xkf,dlog10,zdel,zdell10,eta0,eta02,thpl, &
                    thpla,cfac1,cfac2,oh,pefac,pefacl,pefacal,dnefac, &
-                   wpar2,walf,walf10,thx,thy,thc,farg,ffac,xmas,ymas, &
+                   wpar2,walf,walf10,thx,thy,thc,xmas,ymas, &
                    wfac,cint,vie,cie,tpe,yg,xrel,beta2,jy,vee,cee, &
-                   ov1,ov,xdum,ydum,zdum
+                   ov1,ov,xdum,ydum,zdum,x,x1,x2,alfa,beta
 
 ! -------------------------------------------------------------------
 ! constants
@@ -20546,8 +20543,8 @@ subroutine gmg_bcs(mgrid,lgrid,level)
     con2    = 1.07726359439811217e-7_rp
 
   real(kind=rp), parameter :: &
-    t6_switch1 = 1.0_rp, &
-    t6_switch2 = 1.5_rp
+    t6_switch1 = 0.001_rp, &
+    t6_switch2 = 0.01_rp
 
   real(kind=rp) :: drel, drel10, drelim
 
@@ -20613,7 +20610,7 @@ subroutine gmg_bcs(mgrid,lgrid,level)
     xkw  = 4.05_rp*exp(-(0.306_rp - 0.04125_rp*xh) * &
            (log10(t6) - 0.18_rp + 0.1625_rp*xh)**2)
 
-    xkaz = 50.0_rp*xz*xka1 * exp(-0.5206_rp*((log(den)-d0log)/xkw)**2)
+    xkaz = xka1 * exp(-0.5206_rp*((log(den)-d0log)/xkw)**2) * xz/0.02_rp
 
     dbar2log = -(4.283_rp + 0.7196_rp*xh) + 3.86_rp*log(t6)
     dbar1log = -5.296_rp + 4.833_rp*log(t6)
@@ -20628,7 +20625,7 @@ subroutine gmg_bcs(mgrid,lgrid,level)
   if (t6 < t6_switch2 .and. xh >= 1.0e-5_rp) then
     t4    = temp*1.0e-4_rp
     t4r   = sqrt(t4)
-    t44   = t4**4
+    t44   = t4*t4*t4*t4
     t45   = t44*t4
     t46   = t45*t4
 
@@ -20653,8 +20650,8 @@ subroutine gmg_bcs(mgrid,lgrid,level)
     if (t6 < t6_switch1) then
       orad = ochrs
     else if (t6 <= t6_switch2) then
-      zdum = 1.0_rp/(t6_switch1 - t6_switch2)
-      xdum = (t6 - t6_switch2)*zdum
+      zdum = 1.0_rp/(t6_switch2 - t6_switch1)
+      xdum = (t6_switch2 - t6)*zdum
       ydum = (t6 - t6_switch1)*zdum
       orad = ochrs*xdum + oiben2*ydum
     else
@@ -20778,7 +20775,8 @@ subroutine gmg_bcs(mgrid,lgrid,level)
   end if
 
 ! -------------------------------------------------------------------
-! degenerate conductivity
+! degenerate conductivity -- kapfxt's whichk=2 branch
+! (Yakovlev & Urpin 1980 / Potekhin, Chabrier & Yakovlev 1997);
 
   if (dlog10 > drel10) then
     xmas   = meff*xne**third
@@ -20812,9 +20810,12 @@ subroutine gmg_bcs(mgrid,lgrid,level)
   if (dlog10 <= drel10) then
     ocond = oh
   else if (dlog10 < drelim) then
-    farg  = pi*(dlog10 - drel10)/(drelim - drel10)
-    ffac  = 0.5_rp*(1.0_rp - cos(farg))
-    ocond = exp((1.0_rp-ffac)*log(oh) + ffac*log(ov))
+    x     = den
+    x1    = 10.0_rp**drel10
+    x2    = 10.0_rp**drelim
+    alfa  = (x-x2)/(x1-x2)
+    beta  = (x-x1)/(x2-x1)
+    ocond = alfa*oh + beta*ov
   else
     ocond = ov
   end if
@@ -20824,8 +20825,8 @@ subroutine gmg_bcs(mgrid,lgrid,level)
 
   opac = orad*ocond/(ocond + orad)
 
- end subroutine sig99
-
+ end subroutine kapfxt
+ 
 #endif
 
 #ifdef THERMAL_DIFFUSION_STS

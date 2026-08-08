@@ -247,7 +247,7 @@ For `LHLL-type` solvers, if both low-Mach and supersonic flows need to be captur
 | `STS_EVOLVE_TEMP` | Solves the temperature equation rather than the internal energy equation during the radiative diffusion step (see Sect. 2.10). To increase performance, the heat capacity $c_v$ is held fixed during the time step, so that the EoS does not have to be evaluated in every substep of the super time stepper. |
 | `EVALUATE_PARABOLIC_TIMESTEP` | Adaptively changes the number of substeps in the super time stepper. |
 | `BALANCE_THERMAL_DIFFUSION` | Balances the thermal diffusion operator using the equilibrium states from the well-balancing method (needs `USE_WB`). |
-| `USE_TIMMES_KAPPA` | Enables the computation of radiative+conductive opacities as a function of density, composition and temperature according to [Timmes+2000](https://ui.adsabs.harvard.edu/abs/2000ApJ...528..913T/abstract) (implementation basde on [coccubed](https://cococubed.com/code_pages/kap.shtml)) |
+| `USE_TIMMES_KAPPA` | Enables the computation of radiative+conductive opacities as a function of density, composition and temperature according to [Timmes+2000](https://ui.adsabs.harvard.edu/abs/2000ApJ...528..913T/abstract) (implementation basde on [cococubed](https://cococubed.com/code_pages/kap.shtml)) |
 
 ### 11. Nuclear network options
 

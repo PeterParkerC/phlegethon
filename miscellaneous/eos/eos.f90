@@ -101,7 +101,6 @@ subroutine load_table_pxvar(path_to_table, &
   double precision, dimension(1:NX), intent(out) :: table_X
   double precision, intent(out) :: table_drho, table_dT, table_dX
 
-  double precision :: dum1,dum2,dum3,dum4
   integer :: i,j,iX
 
   open(unit=21,file=path_to_table,status='old', &

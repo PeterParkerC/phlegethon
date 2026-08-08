@@ -67,3 +67,50 @@ At this point, when loading a grid snapshot using the functionalities of phloutp
 sl = h5grid(-1,pig_table='pig_table.dat',NRHO=<NRHO>,NT=<NT>,LOGRHOMIN=<LOGRHOMIN>,LOGRHOMAX=<LOGRHOMAX>,LOGTMIN=<LOGTMIN>,LOGTMAX=<LOGTMAX>)
 ```
 Note: the call to h5grid will automatically `set eos_mode = ['radiation','pig']`, so that the ultimate EoS will include the selected mixture of partially ionized species and thermal radiation.
+
+## PIG XVAR EOS
+
+To generate a table with a varying hydrogen mass fraction at fixed metallicity, see `miscellaneous/generate_pig_xvar_table`. The `submit_jobs.py` script provides an example of how to call the Fortran subroutines to generate multiple tables, each considering a specific hydrogen mass fraction abundance, X, by submitting multiple jobs. The minimum and maximum values of X are enforced in `miscellaneous/generate_pig_xvar_table/setup/generate_pig_table.F90`.
+
+The script `miscellaneous/generate_pig_xvar_table/merge_tables.py` merges the individual tables into a single data cube.
+
+The resulting table has resolution `(NX+1) x (Nrho+1) x (NT+1)`.
+
+In a Phlegethon application, the table path, resolution, and ranges must be specified in the application's `Makefile`. For example, assuming the generated table has been moved to `$(DATA)`:
+
+```bash
+OPTS += path_to_pig_table=\"$(DATA)/pig_table.dat\"
+OPTS += pig_nT_make=161
+OPTS += pig_nrho_make=241
+OPTS += pig_nX_make=11
+OPTS += pig_ltlo_make=3.0_rp
+OPTS += pig_lthi_make=8.0_rp
+OPTS += pig_ldlo_make=-20.0_rp
+OPTS += pig_ldhi_make=0.0_rp
+OPTS += pig_Xlo_make=0.0_rp
+OPTS += pig_Xhi_make=0.732_rp
+```
+
+The resulting table can also be used for Python post-processing. To do so, copy the customized table to `$(DATA)`.
+
+When loading a grid snapshot using `phloutput`, specify the name of the customized table, along with its resolution and ranges. For example:
+
+```python
+sl = h5grid(
+    -1,
+    pig_table='pig_table_xvar.dat',
+    NRHO=<NRHO>,
+    NT=<NT>,
+    NX=<NX>,
+    LOGRHOMIN=<LOGRHOMIN>,
+    LOGRHOMAX=<LOGRHOMAX>,
+    LOGTMIN=<LOGTMIN>,
+    LOGTMAX=<LOGTMAX>,
+    XMIN=<XMIN>,
+    XMAX=<XMAX>
+)
+```
+
+Note that calling `h5grid` automatically sets `eos_mode = ['radiation', 'pig_xvar']`. The resulting EoS therefore includes both the selected mixture of partially ionized species and thermal radiation.
+
+

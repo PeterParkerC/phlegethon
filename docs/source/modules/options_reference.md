@@ -160,7 +160,7 @@ Alternatively, one can use the `PIG` Eos of Vetter et al. 2026, in prep.
 
 | Option | Meaning |
 | --- | --- |
-| `PIG_EOS` | Computes a partially-ionized-gas EoS using biquintic interpolation of the free energy (PIG, tabulated) + thermal radiation. All ionization states of a bunch of elements and the electron number density are computed using Maxwell--Boltzmann statistics, and radiation is in thermal equilibrium with the gas. As in the mode `USE_PRAD`, `lgrid%temp(i,j,k)` must be filled in `app.F90`. |
+| `PIG_EOS` | Computes a partially-ionized-gas EoS using biquintic interpolation of the free energy (PIG, tabulated) + thermal radiation for a fixed-composition medium. All ionization states of a bunch of elements and the electron number density are computed using Maxwell--Boltzmann statistics, and radiation is in thermal equilibrium with the gas. As in the mode `USE_PRAD`, `lgrid%temp(i,j,k)` must be filled in `app.F90`. |
 | `path_to_pig_table=\"$(DATA)/pig_table.dat\"` | This variable contains the path to the PIG EoS table and needs to be defined every time `PIG_EOS` is used. |
 |`pig_nT_make=401` | Number of nodes in the temperature axis in the PIG table. |
 |`pig_nrho_make=401` | Number of nodes in the density axis in the PIG table. |
@@ -169,7 +169,27 @@ Alternatively, one can use the `PIG` Eos of Vetter et al. 2026, in prep.
 |`pig_ldlo_make=-20.0_rp` | Minimum of $\mathrm{log}_{10}(\rho)$ in the PIG table. |
 |`pig_ldhi_make=0.0_rp` | Maximum of $\mathrm{log}_{10}(\rho)$ in the PIG table. |
 
-With `USE_PRAD`, `HELMHOLTZ_EOS`, or `PIG_EOS`, the option `USE_FASTEOS` reconstructs a pair of states for sound speed and internal energy at every grid cell interface to avoid calling the Helmholtz EoS within the Riemann solver subroutine (see Sect. 2.6). If this option is used in combination with `USE_WB`, the equilibrium state for the thermodynamic variable `gammae` must be provided at cell centers and cell faces (i.e., `lgrid%eq_gammae_cc(i,j,k)`, `lgrid%eq_gammae_x1(i,j,k)`, etc., see `./tests/hotbubble-2.0-helmholtz`).
+- `OPTION D`:
+
+Alternatively, one can use the `PIG_XVAR` Eos of Vetter et al. 2026, in prep.
+
+| Option | Meaning |
+| --- | --- |
+| `PIG_XVAR_EOS` | Computes a partially-ionized-gas EoS using biquintic interpolation of the free energy (PIG, tabulated) + thermal radiation. The method supports varying hydrogen and helium mass fractions at fixed metallicity. It linearly interpolates between tables in hydrogen mass fraction to construct an intermediate table, which is then interpolated in density and temperature. All ionization states of a bunch of elements and the electron number density are computed using Maxwell--Boltzmann statistics, and radiation is in thermal equilibrium with the gas. As in the mode `USE_PRAD`, `lgrid%temp(i,j,k)` must be filled in `app.F90`. |
+| `path_to_pig_table=\"$(DATA)/pig_table.dat\"` | This variable contains the path to the PIG EoS table and needs to be defined every time `PIG_XVAR_EOS` is used. |
+|`pig_nT_make=401` | Number of nodes in the temperature axis in the PIG table. |
+|`pig_nrho_make=401` | Number of nodes in the density axis in the PIG table. |
+|`pig_nX_make=11` | Number of nodes in the hydrogren mass fraction axis in the PIG table. |
+|`pig_ltlo_make=1.0_rp` | Minimum of $\mathrm{log}_{10}(T)$ in the PIG table. |
+|`pig_lthi_make=8.0_rp` | Maximum of $\mathrm{log}_{10}(T)$ in the PIG table. |
+|`pig_ldlo_make=-20.0_rp` | Minimum of $\mathrm{log}_{10}(\rho)$ in the PIG table. |
+|`pig_ldhi_make=0.0_rp` | Maximum of $\mathrm{log}_{10}(\rho)$ in the PIG table. |
+|`pig_Xlo_make=0.0_rp` | Minimum of the hydrogen mass fraction in the PIG table. |
+|`pig_Xhi_make=0.723_rp` | Maximum of the hydrogen mass fraction in the PIG table. |
+
+With `PIG_XVAR_EOS`, the hydrogen mass fraction abundance must be provided at cell centers in `lgrid%prim(i_as1,:,:,:)` in `app.F90`.
+
+With `USE_PRAD`, `HELMHOLTZ_EOS`, `PIG_EOS`, or `PIG_XVAR_EOS`, the option `USE_FASTEOS` reconstructs a pair of states for sound speed and internal energy at every grid cell interface to avoid calling the Helmholtz EoS within the Riemann solver subroutine (see Sect. 2.6). If this option is used in combination with `USE_WB`, the equilibrium state for the thermodynamic variable `gammae` must be provided at cell centers and cell faces (i.e., `lgrid%eq_gammae_cc(i,j,k)`, `lgrid%eq_gammae_x1(i,j,k)`, etc., see `./tests/hotbubble-2.0-helmholtz`).
 
 ### 7. Time Integration (see Sect. 2.9)
 

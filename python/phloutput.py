@@ -239,7 +239,7 @@ def spj_list(path=""):
 class h5spj:
 
     def __init__(self,filename,path='./spjs',path_to_grids='./grids',mode='i',data_path=data,helm_table='helm_table_timmes_x2.dat',pig_table='401x401_pig_table_h2_offset.dat',
-    NRHO=541,NT=201,LOGRHOMIN=-12.0,LOGRHOMAX=15.0,LOGTMIN=3.0,LOGTMAX=13.0):
+    NRHO=541,NT=201,NX=6,LOGRHOMIN=-12.0,LOGRHOMAX=15.0,LOGTMIN=3.0,LOGTMAX=13.0,XMIN=0.0,XMAX=0.723):
 
         if(mode=='n'):
             filename = os.path.join(path, 'spj_n{:05}.h5'.format(filename))
@@ -258,7 +258,7 @@ class h5spj:
         self.nhydro = self.grid['nhydro'][()]
 
         self.grid0 = h5grid(0,path=path_to_grids,data_path=data_path,helm_table=helm_table,pig_table=pig_table,
-        NRHO=NRHO,NT=NT,LOGRHOMIN=LOGRHOMIN,LOGRHOMAX=LOGRHOMAX,LOGTMIN=LOGTMIN,LOGTMAX=LOGTMAX)
+        NRHO=NRHO,NT=NT,NX=NX,LOGRHOMIN=LOGRHOMIN,LOGRHOMAX=LOGRHOMAX,LOGTMIN=LOGTMIN,LOGTMAX=LOGTMAX,XMIN=XMIN,XMAX=XMAX)
 
         self.eos_evaluated = False
 
@@ -365,6 +365,8 @@ class h5spj:
         else:
           if(self.grid0.use_pig=='true'):
            return np.ones_like(self.rho(ir=ir))
+          elif(self.grid0.use_pig_xvar=='true'):
+           return self.asc(ir=ir)[0]
           else:
            return np.ones_like(self.rho(ir=ir))*(self.grid0.mub/(1.0-self.grid0.mub/2.0))
 
@@ -376,11 +378,11 @@ class h5spj:
     
     def mu(self,ir=0):
 
-        if(self.grid0.use_pig=='true'):
+        if(self.grid0.use_pig=='true' or self.grid0.use_pig_xvar=='true'):
          rho = self.rho(ir=ir) 
          T = self.T(ir=ir)
          P = self.P(ir=ir)
-         mu = (rho*CONST_RGAS*T)/P
+         mu = (rho*CONST_RGAS*T)/(P-CONST_RAD*T**4/3.0)
         else:
          abar = self.abar(ir=ir)
          zbar = self.zbar(ir=ir)
@@ -654,7 +656,7 @@ def rprof_list(path=""):
 class h5rprof:
 
     def __init__(self,filename,eval_eos=False,path='./rprofs',path_to_grids='./grids',mode='i',data_path=data,helm_table='helm_table_timmes_x2.dat',pig_table='401x401_pig_table_h2_offset.dat',
-    NRHO=541,NT=201,LOGRHOMIN=-12.0,LOGRHOMAX=15.0,LOGTMIN=3.0,LOGTMAX=13.0):
+    NRHO=541,NT=201,NX=6,LOGRHOMIN=-12.0,LOGRHOMAX=15.0,LOGTMIN=3.0,LOGTMAX=13.0,XMIN=0.0,XMAX=0.723):
         if(mode=='n'):
             filename = os.path.join(path, 'rprofs_n{:05}.h5'.format(filename))
         elif(mode=='i'):
@@ -805,12 +807,16 @@ class h5rprof:
          self.dd['nabla'] = self.dd['rho']*0.0 
          self.dd['nabla_mu'] = self.dd['rho']*0.0
 
-        self.grid0 = h5grid(0,path=path_to_grids,data_path=data_path,helm_table=helm_table,pig_table=pig_table,NRHO=NRHO,NT=NT,LOGRHOMIN=LOGRHOMIN,LOGRHOMAX=LOGRHOMAX,LOGTMIN=LOGTMIN,LOGTMAX=LOGTMAX)
+        self.grid0 = h5grid(0,path=path_to_grids,data_path=data_path,helm_table=helm_table,pig_table=pig_table,NRHO=NRHO,NT=NT,NX=NX,LOGRHOMIN=LOGRHOMIN,LOGRHOMAX=LOGRHOMAX,LOGTMIN=LOGTMIN,LOGTMAX=LOGTMAX,XMIN=XMIN,XMAX=XMAX)
 
         if(eval_eos):
 
-         self.full = rhoT_given(self.grid0.eos_table,self.dd['rho'],self.dd['T'],abar=self.dd['abar'],zbar=self.dd['zbar'],
-         gamma_ideal=self.grid0.gamma_gas,eos_mode=self.grid0.eos_mode)
+         if(self.grid0.use_pig_xvar=='true'):
+          self.full = rhoT_given(self.grid0.eos_table,self.dd['rho'],self.dd['T'],abar=self.dd['rho_X'][0]/self.dd['rho'],zbar=self.dd['zbar'],
+          gamma_ideal=self.grid0.gamma_gas,eos_mode=self.grid0.eos_mode)
+         else:
+          self.full = rhoT_given(self.grid0.eos_table,self.dd['rho'],self.dd['T'],abar=self.dd['abar'],zbar=self.dd['zbar'],
+          gamma_ideal=self.grid0.gamma_gas,eos_mode=self.grid0.eos_mode)
 
          self.dd['dPdrho'] = self.full[id_dPdrho]
          self.dd['dPdT'] = self.full[id_dPdT]
@@ -841,15 +847,15 @@ class h5rprof:
 
 def ra_iles(i1,i2,delta=1,path='./rprofs',filename=None,
 path_to_grids='./grids',mode='i',data_path=data,helm_table='helm_table_timmes_x2.dat',pig_table='401x401_pig_table_h2_offset.dat',
-NRHO=541,NT=201,LOGRHOMIN=-12.0,LOGRHOMAX=15.0,LOGTMIN=3.0,LOGTMAX=13.0):
+NRHO=541,NT=201,NX=6,LOGRHOMIN=-12.0,LOGRHOMAX=15.0,LOGTMIN=3.0,LOGTMAX=13.0,XMIN=0.0,XMAX=0.723):
     
   r1 = h5rprof(i1,path=path,
   path_to_grids=path_to_grids,data_path=data_path,helm_table=helm_table,pig_table=pig_table,
-  NRHO=NRHO,NT=NT,LOGRHOMIN=LOGRHOMIN,LOGRHOMAX=LOGRHOMAX,LOGTMIN=LOGTMIN,LOGTMAX=LOGTMAX)
+  NRHO=NRHO,NT=NT,NX=NX,LOGRHOMIN=LOGRHOMIN,LOGRHOMAX=LOGRHOMAX,LOGTMIN=LOGTMIN,LOGTMAX=LOGTMAX,XMIN=XMIN,XMAX=XMAX)
 
   r2 = h5rprof(i2,path=path,
   path_to_grids=path_to_grids,data_path=data_path,helm_table=helm_table,pig_table=pig_table,
-  NRHO=NRHO,NT=NT,LOGRHOMIN=LOGRHOMIN,LOGRHOMAX=LOGRHOMAX,LOGTMIN=LOGTMIN,LOGTMAX=LOGTMAX)
+  NRHO=NRHO,NT=NT,NX=NX,LOGRHOMIN=LOGRHOMIN,LOGRHOMAX=LOGRHOMAX,LOGTMIN=LOGTMIN,LOGTMAX=LOGTMAX,XMIN=XMIN,XMAX=XMAX)
               
   dd = {}
   dd['t1'] = r1.time
@@ -863,7 +869,7 @@ NRHO=541,NT=201,LOGRHOMIN=-12.0,LOGRHOMAX=15.0,LOGTMIN=3.0,LOGTMAX=13.0):
  
     rpr = h5rprof(i,path=path,
     path_to_grids=path_to_grids,data_path=data_path,helm_table=helm_table,pig_table=pig_table,
-    NRHO=NRHO,NT=NT,LOGRHOMIN=LOGRHOMIN,LOGRHOMAX=LOGRHOMAX,LOGTMIN=LOGTMIN,LOGTMAX=LOGTMAX)
+    NRHO=NRHO,NT=NT,NX=NX,LOGRHOMIN=LOGRHOMIN,LOGRHOMAX=LOGRHOMAX,LOGTMIN=LOGTMIN,LOGTMAX=LOGTMAX,XMIN=XMIN,XMAX=XMAX)
               
     for key in r1.dd.keys():
      dd[key] += rpr.dd[key]
@@ -1084,7 +1090,7 @@ def plane_list(path=""):
 class h5plane:
 
     def __init__(self,filename,path='./planes',path_to_grids='./grids',mode='i',data_path=data,helm_table='helm_table_timmes_x2.dat',pig_table='401x401_pig_table_h2_offset.dat',
-    NRHO=541,NT=201,LOGRHOMIN=-12.0,LOGRHOMAX=15.0,LOGTMIN=3.0,LOGTMAX=13.0):
+    NRHO=541,NT=201,NX=6,LOGRHOMIN=-12.0,LOGRHOMAX=15.0,LOGTMIN=3.0,LOGTMAX=13.0,XMIN=0.0,XMAX=0.723):
         if(mode=='n'):
             filename = os.path.join(path, 'planes_n{:05}.h5'.format(filename))
         elif(mode=='i'):
@@ -1167,7 +1173,7 @@ class h5plane:
 
         self.eos_evaluated = False
  
-        self.grid0 = h5grid(0,path=path_to_grids,data_path=data_path,helm_table=helm_table,pig_table=pig_table,NRHO=NRHO,NT=NT,LOGRHOMIN=LOGRHOMIN,LOGRHOMAX=LOGRHOMAX,LOGTMIN=LOGTMIN,LOGTMAX=LOGTMAX)
+        self.grid0 = h5grid(0,path=path_to_grids,data_path=data_path,helm_table=helm_table,pig_table=pig_table,NRHO=NRHO,NT=NT,NX=NX,LOGRHOMIN=LOGRHOMIN,LOGRHOMAX=LOGRHOMAX,LOGTMIN=LOGTMIN,LOGTMAX=LOGTMAX,XMIN=XMIN,XMAX=XMAX)
 
         try:
 
@@ -1357,6 +1363,8 @@ class h5plane:
         else:
           if(self.grid0.use_pig=='true'):
            return np.ones_like(self.rho(ix=ix,iy=iy,iz=iz))
+          elif(self.grid0.use_pig_xvar=='true'):
+           return self.asc(ix=ix,iy=iy,iz=iz)[0]
           else:
            return np.ones_like(self.rho(ix=ix,iy=iy,iz=iz))*(self.grid0.mub/(1.0-self.grid0.mub/2.0))
 
@@ -1368,11 +1376,11 @@ class h5plane:
     
     def mu(self,ix=-1,iy=-1,iz=-1):
 
-        if(self.grid0.use_pig=='true'):
+        if(self.grid0.use_pig=='true' or self.grid0.use_pig_xvar=='true'):
          rho = self.rho(ix=ix,iy=iy,iz=iz)
          T = self.T(ix=ix,iy=iy,iz=iz)
          P = self.P(ix=ix,iy=iy,iz=iz)
-         mu = (rho*CONST_RGAS*T)/P
+         mu = (rho*CONST_RGAS*T)/(P-CONST_RAD*T**4/3.0)
         else:
          abar = self.abar(ix=ix,iy=iy,iz=iz)
          zbar = self.zbar(ix=ix,iy=iy,iz=iz)
@@ -1903,7 +1911,7 @@ def file_list(path=""):
 class h5grid:
 
     def __init__(self,filename,path='./grids',mode='i',data_path=data,helm_table='helm_table_timmes_x2.dat',pig_table='401x401_pig_table_h2_offset.dat',
-    NRHO=541,NT=201,NX=1,LOGRHOMIN=-12.0,LOGRHOMAX=15.0,LOGTMIN=3.0,LOGTMAX=13.0,XMIN=0.0,XMAX=1.0):
+    NRHO=541,NT=201,NX=6,LOGRHOMIN=-12.0,LOGRHOMAX=15.0,LOGTMIN=3.0,LOGTMAX=13.0,XMIN=0.0,XMAX=0.723):
         if(mode=='n'):
             filename = os.path.join(path, 'grid_n{:05}.h5'.format(filename))
         elif(mode=='i'):
@@ -2168,11 +2176,11 @@ class h5grid:
     
     def mu(self,ix=-1,iy=-1,iz=-1):
 
-        if(self.use_pig=='true'):
+        if(self.use_pig=='true' or self.use_pig_xvar=='true'):
          rho = self.rho(ix=ix,iy=iy,iz=iz) 
          T = self.T(ix=ix,iy=iy,iz=iz)
          P = self.P(ix=ix,iy=iy,iz=iz)
-         mu = (rho*CONST_RGAS*T)/P
+         mu = (rho*CONST_RGAS*T)/(P-CONST_RAD*T**4/3.0)
         else:
          abar = self.abar(ix=ix,iy=iy,iz=iz)
          zbar = self.zbar(ix=ix,iy=iy,iz=iz)

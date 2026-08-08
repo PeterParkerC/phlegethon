@@ -114,6 +114,7 @@ def rhoP_given(eos_table,rho,P,abar=1.0,zbar=1.0,Tguess=-1.0,gamma_ideal=5.0/3.0
     elepos = False
     coulomb = False
     pig = False
+    pig_xvar = False
 
     if('ideal' in eos_mode):
         ideal = True
@@ -202,6 +203,7 @@ def PT_given(eos_table,P,T,abar=1.0,zbar=1.0,rhoguess=-1.0,gamma_ideal=5.0/3.0,e
     elepos = False
     coulomb = False
     pig = False
+    pig_xvar = False
 
     if('ideal' in eos_mode):
         ideal = True
@@ -290,6 +292,7 @@ def Ps_given(eos_table,P,s,rhoguess,Tguess,abar=1.0,zbar=1.0,gamma_ideal=5.0/3.0
     elepos = False
     coulomb = False
     pig = False
+    pig_xvar = False
 
     if('ideal' in eos_mode):
         ideal = True

@@ -588,6 +588,8 @@ Br = r.br()        # radial component
 Bh = r.bh()        # tangential component
 ```
 
+With the optional argument `conv=True`, e.g. `r.T(conv=True)`, the `h5rays` class will return the accessed variable which was convolved with the triangular kernel `[[0.25,0.5,0.25],sdims]` at the original grid resolutoin inline. 
+
 All vector quantities are returned with the component index as the first axis. The remaining axes correspond to the subsampled computational grid stored in the ray output.
 
 

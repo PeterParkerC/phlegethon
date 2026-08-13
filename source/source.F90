@@ -1347,7 +1347,7 @@ module source
 #endif
 
 #ifdef SAVE_RAYS
-    real(kind=rp), allocatable, dimension(:,:,:,:) :: rays
+    real(kind=rp), allocatable, dimension(:,:,:,:) :: rays,rays_conv
     integer :: rays_dstep_dump,rays_inextoutput
 #endif
 
@@ -2183,14 +2183,14 @@ contains
     mgrid%rays_i2(3) = int((mgrid%coords_dd(3)+1)*mgrid%rays_nx3)
 
     allocate(lgrid%rays(1:rays_nvars, &
-    mgrid%rays_i1(1)-ngc:mgrid%rays_i2(1)+ngc, &
-    mgrid%rays_i1(2)-ngc:mgrid%rays_i2(2)+ngc, &
-#if sdims_make==2
+    mgrid%rays_i1(1):mgrid%rays_i2(1), &
+    mgrid%rays_i1(2):mgrid%rays_i2(2), &
     mgrid%rays_i1(3):mgrid%rays_i2(3))) 
-#endif
-#if sdims_make==3
-    mgrid%rays_i1(3)-ngc:mgrid%rays_i2(3)+ngc))
-#endif
+
+    allocate(lgrid%rays_conv(1:rays_nvars-sdims, &
+    mgrid%rays_i1(1):mgrid%rays_i2(1), &
+    mgrid%rays_i1(2):mgrid%rays_i2(2), &
+    mgrid%rays_i1(3):mgrid%rays_i2(3))) 
 
 #endif
 
@@ -2543,6 +2543,7 @@ contains
 
 #ifdef SAVE_RAYS
     deallocate(lgrid%rays)
+    deallocate(lgrid%rays_conv)
 #endif
 
  end subroutine finalize_simulation
@@ -3537,8 +3538,32 @@ contains
 
     type(h5_file) :: h5
 
-    integer :: error,i,j,k,iv
+    integer :: error,i,j,k,iv,ierr,ii,jj
     integer(HID_T) :: id,plist_id
+
+    integer :: lx1,ux1,lx2,ux2,lx3,ux3,rays_i,rays_j,rays_k
+
+#if sdims_make==2
+    real(kind=rp) :: kernel(1:3,1:3)
+    kernel(1,1) = 0.0625_rp
+    kernel(1,2) = 0.125_rp
+    kernel(1,3) = 0.0625_rp
+    kernel(2,1) = 0.125_rp
+    kernel(2,2) = 0.25_rp
+    kernel(2,3) = 0.125_rp
+    kernel(3,1) = 0.0625_rp
+    kernel(3,2) = 0.125_rp
+    kernel(3,3) = 0.0625_rp
+#endif
+    
+    ierr = 0
+
+    lx1 = mgrid%i1(1)
+    ux1 = mgrid%i2(1)
+    lx2 = mgrid%i1(2)
+    ux2 = mgrid%i2(2)
+    lx3 = mgrid%i1(3)
+    ux3 = mgrid%i2(3)
 
     write(h5%filename, "('./rays/rays_n',I0.5,'.h5')") lgrid%step
 
@@ -3615,43 +3640,106 @@ contains
 #endif
 
     endif
+ 
+#ifdef ENFORCE_BARRIERS
+    call mpi_barrier(mgrid%comm_cart,ierr)
+#endif
+    call communicate_ndarray(mgrid,nvars,lx1,ux1,lx2,ux2,lx3,ux3,ngc,lgrid%prim,.true.)
+#ifdef USE_MHD
+    call communicate_ndarray(mgrid,sdims,lx1,ux1,lx2,ux2,lx3,ux3,ngc,lgrid%b_cc,.true.)
+#endif
+
+    call communicate_array(mgrid,lx1,ux1,lx2,ux2,lx3,ux3,ngc,lgrid%temp,.true.)
 
     do k=mgrid%rays_i1(3),mgrid%rays_i2(3)
      do j=mgrid%rays_i1(2),mgrid%rays_i2(2)
       do i=mgrid%rays_i1(1),mgrid%rays_i2(1)
+ 
+       rays_i = (i-1)*rays_nx1_comp+1
+       rays_j = (j-1)*rays_nx2_comp+1
+       rays_k = (k-1)*rays_nx3_comp+1
 
        do iv=1,nvars
         lgrid%rays(iv,i,j,k) = lgrid%prim(iv, &
-        (i-1)*rays_nx1_comp+1, & 
-        (j-1)*rays_nx2_comp+1, & 
-        (k-1)*rays_nx3_comp+1 )
+        rays_i, & 
+        rays_j, & 
+        rays_k )
        end do
  
        lgrid%rays(nvars+1,i,j,k) = lgrid%temp( &
-       (i-1)*rays_nx1_comp+1, & 
-       (j-1)*rays_nx2_comp+1, & 
-       (k-1)*rays_nx3_comp+1 )
+       rays_i, & 
+       rays_j, & 
+       rays_k )
  
 #ifdef USE_MHD
        do iv=1,sdims
         lgrid%rays(nvars+1+iv,i,j,k) = lgrid%b_cc(iv, &
-        (i-1)*rays_nx1_comp+1, & 
-        (j-1)*rays_nx2_comp+1, & 
-        (k-1)*rays_nx3_comp+1 )
+        rays_i, & 
+        rays_j, & 
+        rays_k )
        end do
        
        do iv=1,sdims
         lgrid%rays(nvars+1+sdims+iv,i,j,k) = lgrid%coords(iv, &
-        (i-1)*rays_nx1_comp+1, & 
-        (j-1)*rays_nx2_comp+1, & 
-        (k-1)*rays_nx3_comp+1 )
+        rays_i, & 
+        rays_j, & 
+        rays_k )
        end do
 #else
        do iv=1,sdims
         lgrid%rays(nvars+1+iv,i,j,k) = lgrid%coords(iv, &
-        (i-1)*rays_nx1_comp+1, & 
-        (j-1)*rays_nx2_comp+1, & 
-        (k-1)*rays_nx3_comp+1 )
+        rays_i, & 
+        rays_j, & 
+        rays_k )
+       end do
+#endif
+
+       do iv=1,nvars
+
+        lgrid%rays_conv(iv,i,j,k) = 0.0_rp
+
+        do jj =-1,1
+         do ii =-1,1
+
+          lgrid%rays_conv(iv,i,j,k) = &
+          lgrid%rays_conv(iv,i,j,k) + &
+          kernel(ii+2,jj+2) * &
+          lgrid%prim(iv,rays_i+ii,rays_j+jj,rays_k)
+
+         end do
+        end do
+
+       end do
+
+       lgrid%rays_conv(nvars+1,i,j,k) = 0.0_rp
+
+       do jj=-1,1
+        do ii=-1,1
+
+         lgrid%rays_conv(nvars+1,i,j,k) = &
+         lgrid%rays_conv(nvars+1,i,j,k) + &
+         kernel(ii+2,jj+2) * &
+         lgrid%temp(rays_i+ii,rays_j+jj,rays_k)
+
+        end do
+       end do
+ 
+#ifdef USE_MHD
+       do iv=1,sdims
+
+        lgrid%rays_conv(nvars+1+iv,i,j,k) = 0.0_rp
+
+        do jj = -1, 1
+         do ii = -1, 1
+
+          lgrid%rays_conv(nvars+1+iv,i,j,k) = &
+          lgrid%rays_conv(nvars+1+iv,i,j,k) + &
+          kernel(ii+2,jj+2) * &
+          lgrid%b_cc(iv,rays_i+ii,rays_j+jj,rays_k)
+
+         end do
+        end do
+
        end do
 #endif
 
@@ -3662,6 +3750,10 @@ contains
     call hdf5_write_ndarray(h5,id,"rays",mgrid,rays_nvars, &
     mgrid%rays_i1(1),mgrid%rays_i2(1),mgrid%rays_i1(2),mgrid%rays_i2(2), &
     mgrid%rays_i1(3),mgrid%rays_i2(3),0,lgrid%rays(1,:,:,:),lgrid%rays,0)
+
+    call hdf5_write_ndarray(h5,id,"rays_conv",mgrid,rays_nvars-sdims, &
+    mgrid%rays_i1(1),mgrid%rays_i2(1),mgrid%rays_i1(2),mgrid%rays_i2(2), &
+    mgrid%rays_i1(3),mgrid%rays_i2(3),0,lgrid%rays_conv(1,:,:,:),lgrid%rays_conv,0)
 
     call h5gclose_f(id,error)
     call h5fclose_f(h5%file_id,error)

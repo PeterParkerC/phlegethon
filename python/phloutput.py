@@ -1849,38 +1849,47 @@ class h5rays:
     def r(self):
         return np.sqrt(np.sum(self.coords()**2,axis=0))
 
-    def rho(self):
-        return self.vec4d(self.grid['rays'])[self.i_rho]
+    def rho(self,conv=False):
+        if(conv):
+         return self.vec4d(self.grid['rays_conv'])[self.i_rho] 
+        else:
+         return self.vec4d(self.grid['rays'])[self.i_rho]
     
-    def P(self):
-        return self.vec4d(self.grid['rays'])[self.i_p]
+    def P(self,conv=False):
+        if(conv):
+         return self.vec4d(self.grid['rays_conv'])[self.i_p]
+        else:
+         return self.vec4d(self.grid['rays'])[self.i_p]
 
-    def T(self):
-        return self.vec4d(self.grid['rays'])[self.i_T]
+    def T(self,conv=False):
+        if(conv):
+         return self.vec4d(self.grid['rays_conv'])[self.i_T]
+        else:
+         return self.vec4d(self.grid['rays'])[self.i_T]
 
-    def vel(self):
-        return self.vec4d(self.grid['rays'])[self.i_vx1:self.i_vx3+1]
- 
-    def vr(self):
-        coords = self.coords()
-        vel = self.vel()
-        r = self.r()
-        return np.sum(coords*vel,axis=0)/r
+    def vel(self,conv=False):
+        if(conv):
+         return self.vec4d(self.grid['rays_conv'])[self.i_vx1:self.i_vx3+1]
+        else:
+         return self.vec4d(self.grid['rays'])[self.i_vx1:self.i_vx3+1]
+
+    def vr(self,conv=False):
+        return self.vel(conv=conv)[0]
      
-    def vh(self):
-        return np.sqrt(self.vel()**2-self.vr()**2)
+    def vh(self,conv=False):
+        return np.sqrt(np.sum(self.vel(conv=conv)**2,axis=0)-self.vr(conv=conv)**2)
  
-    def bfield(self):
-        return self.vec4d(self.grid['rays'])[self.i_bx1:self.i_bx3+1]
- 
-    def br(self):
-        coords = self.coords()
-        bfield = self.bfield()
-        r = self.r()
-        return np.sum(coords*bfield,axis=0)/r
+    def bfield(self,conv=False):
+        if(conv):
+         return self.vec4d(self.grid['rays_conv'])[self.i_bx1:self.i_bx3+1]
+        else:
+         return self.vec4d(self.grid['rays'])[self.i_bx1:self.i_bx3+1]
+
+    def br(self,conv=False):
+        return self.bfield(conv=conv)[0]
      
-    def bh(self):
-        return np.sqrt(self.bfield()**2-self.br()**2)
+    def bh(self,conv=False):
+        return np.sqrt(np.sum(self.bfield(conv=conv)**2,axis=0)-self.br(conv=conv)**2)
  
     def vec4d(self,vec):
 

@@ -164,7 +164,7 @@ path_to_data = '../../data/'
 
 full_output = True
 use_weak_rates = True
-jina_reaclib_file = 'jina_reaclib_default'
+jina_reaclib_file = 'jina_reaclib_2026-06-09'
 ```
 
 2. Running the script writes Fortran blocks like this into `tests/nuclear-network/app.F90`:

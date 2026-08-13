@@ -98,14 +98,14 @@ pip install --upgrade pip
 pip install numpy matplotlib scipy h5py ipython meson ninja
 ```
 
-### 4. Download Helmholtz EoS table and JINA REACLIB rates
+### 4. Download Helmholtz EoS table 
 
 In the root directory of **phlegethon**, run
 
 ```bash
 bash data/get_data.sh
 ```
-This bash script will download a 541x271 Helmholtz EoS table from Frank Timmes' [cococubed](https://cococubed.com/code_pages/eos.shtml) and the latest default [JINA REACLIB](https://reaclib.jinaweb.org/) rate library (version 24-06-2021).
+This bash script will download a 541x271 Helmholtz EoS table from Frank Timmes' [cococubed](https://cococubed.com/code_pages/eos.shtml).
 
 ### 5. Compile the Fortran EoS modules
 

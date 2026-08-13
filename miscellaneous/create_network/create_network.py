@@ -31,7 +31,7 @@ T9 = 0.2
 rho = 1e4
 tau = 1.0e5
 
-path_to_target = '../../tests/burning-bubble/'
+path_to_target = '../../tests/nuclear-network/'
 target = path_to_target + 'app.F90'
 end_target ='end program test'
 
@@ -40,7 +40,7 @@ path_to_data = '../../data/'
 full_output = True
 use_weak_rates = True
 
-jina_reaclib_file = 'jina_reaclib_default'
+jina_reaclib_file = 'jina_reaclib_2026-06-09'
 
 #----------------------------------------------------------#
 

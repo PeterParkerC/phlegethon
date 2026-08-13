@@ -159,7 +159,7 @@ For 2D simulations (`sdims==2`), the internal logic forces a single plane. The m
 ### EOS derived quantities
 
 Methods like `sound`, `cp`, `cv`, `nabla_ad`, `gamma1`, `s`, `delta`, `phi` call the EOS through `phleos`.
-So thermodynamic outputs are consistent with the run setup (ideal/radiation/Helmholtz/PIG depending on metadata saved in the 0th snapshot).
+So thermodynamic outputs are consistent with the run setup (ideal/radiation/Helmholtz/PIG/PIG_XVAR depending on metadata saved in the 0th snapshot).
 
 ## Comprehensive overview
 
@@ -186,8 +186,16 @@ grid = h5grid(
     data_path="../../data/",
     helm_table='helm_table_timmes_x2.dat',
     pig_table='401x401_pig_table_h2_offset.dat',
+    NRHO=401, 
+    NT=401,
+    LOGRHOMIN=-20.0, 
+    LOGRHOMAX=0.0,
+    LOGTMIN=1.0, 
+    LOGTMAX=8.0
 )
 ```
+
+In the example above, `NRHO`, `NT`, `LOGRHOMIN`, `LOGRHOMAX`, `LOGTMIN`, and `LOGTMAX` are parameters associated with the EoS table used to compute derived thermodynamic quantities (in this case for PIG, see also `phleos.md`).
 
 ### Metadata and geometry
 

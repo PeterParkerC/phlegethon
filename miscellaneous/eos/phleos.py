@@ -39,6 +39,7 @@ def rhoT_given(eos_table,rho,T,abar=1.0,zbar=1.0,gamma_ideal=5.0/3.0,eos_mode=['
     elepos = False
     coulomb = False
     pig = False
+    pig_xvar = False
 
     if('ideal' in eos_mode):
         ideal = True
@@ -59,6 +60,9 @@ def rhoT_given(eos_table,rho,T,abar=1.0,zbar=1.0,gamma_ideal=5.0/3.0,eos_mode=['
 
     if('pig' in eos_mode):
         pig = True
+
+    if('pig_xvar' in eos_mode):
+        pig_xvar = True
 
     dim = np.ndim(rho)
 
@@ -76,14 +80,23 @@ def rhoT_given(eos_table,rho,T,abar=1.0,zbar=1.0,gamma_ideal=5.0/3.0,eos_mode=['
     else:
         zbar = np.atleast_3d(zbar)
 
-    full = eos_fort.eos_fort_mod.rhot_given_3d(
-	rho,T,abar,zbar,
-	ideal,ions,radiation,
-	elepos,coulomb,pig,
-    gamma_ideal,
-	eos_table[0],
-	eos_table[1],eos_table[2],
-	eos_table[3],eos_table[4])
+    if(pig_xvar):
+     full = eos_fort.eos_fort_mod.rhot_given_3d_pxvar(
+     rho,T,abar,
+	 radiation,
+	 eos_table[0],
+	 eos_table[1],eos_table[2],
+	 eos_table[3],eos_table[4], 
+	 eos_table[5],eos_table[6])
+    else:
+     full = eos_fort.eos_fort_mod.rhot_given_3d(
+     rho,T,abar,zbar,
+	 ideal,ions,radiation,
+	 elepos,coulomb,pig,
+     gamma_ideal,
+	 eos_table[0],
+	 eos_table[1],eos_table[2],
+	 eos_table[3],eos_table[4])
 
     if(dim==0):
       full = full[:,0,0,0]
@@ -101,6 +114,7 @@ def rhoP_given(eos_table,rho,P,abar=1.0,zbar=1.0,Tguess=-1.0,gamma_ideal=5.0/3.0
     elepos = False
     coulomb = False
     pig = False
+    pig_xvar = False
 
     if('ideal' in eos_mode):
         ideal = True
@@ -121,6 +135,9 @@ def rhoP_given(eos_table,rho,P,abar=1.0,zbar=1.0,Tguess=-1.0,gamma_ideal=5.0/3.0
 
     if('pig' in eos_mode):
         pig = True
+
+    if('pig_xvar' in eos_mode):
+        pig_xvar = True
 
     dim = np.ndim(rho)
 
@@ -147,15 +164,24 @@ def rhoP_given(eos_table,rho,P,abar=1.0,zbar=1.0,Tguess=-1.0,gamma_ideal=5.0/3.0
     except:
      if((dim==0) or (dim==1) or (dim==2)):  
       Tguess = np.atleast_3d(Tguess)
-     
-    full,T = eos_fort.eos_fort_mod.rhop_given_3d(
-	rho,P,Tguess,abar,zbar,
-	ideal,ions,radiation,
-	elepos,coulomb,pig,
-    gamma_ideal,
-	eos_table[0],
-	eos_table[1],eos_table[2],
-	eos_table[3],eos_table[4])
+
+    if(pig_xvar):
+     full,T = eos_fort.eos_fort_mod.rhop_given_3d_pxvar(
+     rho,P,Tguess,abar,
+     radiation,
+     eos_table[0],
+     eos_table[1],eos_table[2],
+     eos_table[3],eos_table[4],
+     eos_table[5],eos_table[6])
+    else:
+     full,T = eos_fort.eos_fort_mod.rhop_given_3d(
+   	 rho,P,Tguess,abar,zbar,
+ 	 ideal,ions,radiation,
+	 elepos,coulomb,pig,
+     gamma_ideal,
+	 eos_table[0],
+	 eos_table[1],eos_table[2],
+	 eos_table[3],eos_table[4])
 
     if(dim==0):
       full = full[:,0,0,0]
@@ -177,6 +203,7 @@ def PT_given(eos_table,P,T,abar=1.0,zbar=1.0,rhoguess=-1.0,gamma_ideal=5.0/3.0,e
     elepos = False
     coulomb = False
     pig = False
+    pig_xvar = False
 
     if('ideal' in eos_mode):
         ideal = True
@@ -197,6 +224,9 @@ def PT_given(eos_table,P,T,abar=1.0,zbar=1.0,rhoguess=-1.0,gamma_ideal=5.0/3.0,e
 
     if('pig' in eos_mode):
         pig = True
+
+    if('pig_xvar' in eos_mode):
+        pig_xvar = True
 
     dim = np.ndim(P)
 
@@ -223,15 +253,24 @@ def PT_given(eos_table,P,T,abar=1.0,zbar=1.0,rhoguess=-1.0,gamma_ideal=5.0/3.0,e
     except:
      if((dim==0) or (dim==1) or (dim==2)):  
       rhoguess = np.atleast_3d(rhoguess)
-         
-    full,rho = eos_fort.eos_fort_mod.pt_given_3d(
-	P,T,rhoguess,abar,zbar,
-	ideal,ions,radiation,
-	elepos,coulomb,pig,
-    gamma_ideal,
-	eos_table[0],
-	eos_table[1],eos_table[2],
-	eos_table[3],eos_table[4])
+
+    if(pig_xvar):
+     full,rho = eos_fort.eos_fort_mod.pt_given_3d_pxvar(
+     P,T,rhoguess,abar,
+     radiation,
+     eos_table[0],
+     eos_table[1],eos_table[2],
+     eos_table[3],eos_table[4],
+     eos_table[5],eos_table[6])
+    else:
+     full,rho = eos_fort.eos_fort_mod.pt_given_3d(
+	 P,T,rhoguess,abar,zbar,
+	 ideal,ions,radiation,
+	 elepos,coulomb,pig,
+     gamma_ideal,
+	 eos_table[0],
+	 eos_table[1],eos_table[2],
+	 eos_table[3],eos_table[4])
 
     if(dim==0):
       full = full[:,0,0,0]
@@ -253,6 +292,7 @@ def Ps_given(eos_table,P,s,rhoguess,Tguess,abar=1.0,zbar=1.0,gamma_ideal=5.0/3.0
     elepos = False
     coulomb = False
     pig = False
+    pig_xvar = False
 
     if('ideal' in eos_mode):
         ideal = True
@@ -274,6 +314,9 @@ def Ps_given(eos_table,P,s,rhoguess,Tguess,abar=1.0,zbar=1.0,gamma_ideal=5.0/3.0
     if('pig' in eos_mode):
         pig = True
 
+    if('pig_xvar' in eos_mode):
+        pig_xvar = True
+
     dim = np.ndim(P)
 
     if(dim<3):
@@ -292,14 +335,23 @@ def Ps_given(eos_table,P,s,rhoguess,Tguess,abar=1.0,zbar=1.0,gamma_ideal=5.0/3.0
     else:
         zbar = np.atleast_3d(zbar)
          
-    full,rho,T = eos_fort.eos_fort_mod.ps_given_3d(
-	P,s,rhoguess,Tguess,abar,zbar,
-	ideal,ions,radiation,
-	elepos,coulomb,pig,
-    gamma_ideal,
-	eos_table[0],
-	eos_table[1],eos_table[2],
-	eos_table[3],eos_table[4])
+    if(pig_xvar):
+     full,rho,T = eos_fort.eos_fort_mod.ps_given_3d_pxvar(
+     P,s,rhoguess,Tguess,abar,
+     radiation,
+     eos_table[0],
+     eos_table[1],eos_table[2],
+     eos_table[3],eos_table[4],
+     eos_table[5],eos_table[6])
+    else:
+     full,rho,T = eos_fort.eos_fort_mod.ps_given_3d(
+	 P,s,rhoguess,Tguess,abar,zbar,
+	 ideal,ions,radiation,
+	 elepos,coulomb,pig,
+     gamma_ideal,
+	 eos_table[0],
+	 eos_table[1],eos_table[2],
+	 eos_table[3],eos_table[4])
 
     if(dim==0):
       full = full[:,0,0,0]

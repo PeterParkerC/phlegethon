@@ -95,11 +95,25 @@ Derived logarithmic spacings are:
 - $\Delta\log_{10}(\rho Y_e) = (\texttt{LOGRHOMAX} - \texttt{LOGRHOMIN})/(\texttt{NRHO}-1)$
 - $\Delta\log_{10}(T) = (\texttt{LOGTMAX} - \texttt{LOGTMIN})/(\texttt{NT}-1)$
 
+When using the `PIG_XVAR_EOS` option, the eos table must be loaded as
+
+eos_table = eos_fort.eos_fort_mod.load_table_pxvar(
+ '%spig_xvar.dat'%(data),
+    NRHO, NT, NX,
+    LOGRHOMIN, LOGRHOMAX,
+    LOGTMIN, LOGTMAX, 
+    XMIN, XMAX
+)
+
+where 
+- `NX`: number of nodes on the hydrogen mass fraction table axis.
+- `XMIN`: minimum hydrogen mass fraction used to build the table axis.
+- `XMAX`: maximum hydrogen mass fraction used to build the table axis.
 
 Notes:
 
 - In Helmholtz mode, interpolation uses $\rho Y_e$.
-- In PIG mode, the implementation sets $Y_e=1$, so this axis reduces to $\rho$.
+- In PIG and PIG_XVAR modes, the implementation sets $Y_e=1$, so this axis reduces to $\rho$.
 - For consistency, these values must match the selected table file resolution/range (for example `helm_table_timmes_x2.dat` uses 201x541).
 
 You can use this `eos_table` object in all EOS wrapper calls (`rhoT_given`, `rhoP_given`, `PT_given`, `Ps_given`).
@@ -114,6 +128,7 @@ You can use this `eos_table` object in all EOS wrapper calls (`rhoT_given`, `rho
 - `elepos`: electron-positron contribution from the Helmholtz table.
 - `coulomb`: Coulomb correction term.
 - `pig`: partially-ionized-gas mode (uses PIG table, see documentation).
+- `pig_xvar`: partially-ionized-gas mode with varying hydrogen mass fraction (uses PIG_XVAR table, see documentation).
 
 ## EOS Functions (Python)
 
@@ -176,7 +191,7 @@ In all wrappers, `full` is the first return value and contains 23 EOS quantities
     - `eos_mode` (default `['ideal']`): active EOS contributions.
 - Returns: `full, rho, T`.
 
-
+Note: when `eos_mode` contains `pig_xvar`, the hydrogen mass fraction must be supplied via `abar`.
 
 ## Returned Quantities (`full` array)
 
@@ -222,9 +237,9 @@ s = full[id_s]
 
 Quick numerical overview (from `eos.f90`):
 
-- The Helmholtz/PIG EOS is evaluated from pre-tabulated data defined on uniform $\log_{10}(\rho Y_e)$ and $\log_{10}(T)$ grids.
+- The Helmholtz/PIG/PIG_XVAR EOS is evaluated from pre-tabulated data defined on uniform $\log_{10}(\rho Y_e)$ and $\log_{10}(T)$ grids.
 - At runtime, thermodynamic quantities are reconstructed with a high-order 2D interpolation that uses both tabulated values and tabulated derivatives.
-- Final EOS outputs are built by summing the active contributions selected in `eos_mode` (`ideal`, `ions`, `radiation`, `elepos`, `coulomb`, `pig`).
+- Final EOS outputs are built by summing the active contributions selected in `eos_mode` (`ideal`, `ions`, `radiation`, `elepos`, `coulomb`, `pig`, `pig_xvar`).
 - `rhoP_given_3d` solves for $T$ with a 1D Newton-Raphson iteration using $(\partial P/\partial T)_\rho$.
 - `PT_given_3d` solves for $\rho$ with a 1D Newton-Raphson iteration using $(\partial P/\partial \rho)_T$.
 - `Ps_given_3d` performs a coupled 2D Newton-Raphson solve in $(\rho, T)$ using a $2\times2$ Jacobian built from pressure/entropy derivatives.

@@ -23,7 +23,7 @@ module source
  !===========================
 
  integer, parameter :: &
- niso = 14, &
+ niso = 16, &
  nlev_max = 30, &
  i_h1 = 1, &
  i_he4 = 2, &
@@ -31,14 +31,16 @@ module source
  i_n14 = 4, &
  i_o16 = 5, &
  i_ne20 = 6, &
- i_na22 = 7, &
+ i_na23 = 7, &
  i_mg24 = 8, &
  i_al27 = 9, &
  i_si28 = 10, &
- i_s32 = 11, &
- i_k39 = 12, &
- i_ca40 = 13, &
- i_fe56 = 14
+ i_p31 = 11, &
+ i_s32 = 12, &
+ i_ar36 = 13, &
+ i_k39 = 14, &
+ i_ca40 = 15, &
+ i_fe56 = 16
 
  integer, parameter :: nvars = 25
  integer, parameter :: fp=23
@@ -81,13 +83,13 @@ module source
 
  real(kind=rp), parameter :: &
  pi = 3.1415926535897932384_rp, &
- Nav = 6.02214199e23, & 
+ Nav = 6.02214199e23_rp, & 
  me = 9.10938188e-28_rp, & 
  mh = 1.6605e-24_rp, &
  h = 6.62606896e-27_rp, & 
  clight = 2.99792458e10_rp, &
- kb = 1.3806504e-16, & 
- sboltz = 5.67040047374e-5, & 
+ kb = 1.3806504e-16_rp, & 
+ sboltz = 5.67040047374e-5_rp, & 
  arad = 4.0*sboltz/clight, &
  ev_to_erg = 1.60218e-12_rp, &
  chi_h1 = 13.59844_rp*ev_to_erg, & 
@@ -135,11 +137,13 @@ contains
    ns(i_n14) = 7
    ns(i_o16) = 8
    ns(i_ne20) = 10
-   ns(i_na22) = 11
+   ns(i_na23) = 11
    ns(i_mg24) = 12
    ns(i_al27) = 13
    ns(i_si28) = 14
+   ns(i_p31) = 15
    ns(i_s32) = 16
+   ns(i_ar36) = 18
    ns(i_k39) = 19
    ns(i_ca40) = 20
    ns(i_fe56) = 26
@@ -151,11 +155,13 @@ contains
    Al(i_n14) = 14.0_rp
    Al(i_o16) = 16.0_rp
    Al(i_ne20) = 20.0_rp
-   Al(i_na22) = 22.0_rp
+   Al(i_na23) = 23.0_rp
    Al(i_mg24) = 24.0_rp
    Al(i_al27) = 27.0_rp
    Al(i_si28) = 28.0_rp
+   Al(i_p31) = 31.0_rp
    Al(i_s32) = 32.0_rp
+   Al(i_ar36) = 36.0_rp
    Al(i_k39) = 39.0_rp
    Al(i_ca40) = 40.0_rp
    Al(i_fe56) = 56.0_rp
@@ -167,11 +173,13 @@ contains
    Zl(i_n14) = 7.0_rp
    Zl(i_o16) = 8.0_rp
    Zl(i_ne20) = 10.0_rp
-   Zl(i_na22) = 11.0_rp
+   Zl(i_na23) = 11.0_rp
    Zl(i_mg24) = 12.0_rp
    Zl(i_al27) = 13.0_rp
    Zl(i_si28) = 14.0_rp
+   Zl(i_p31) = 15.0_rp
    Zl(i_s32) = 16.0_rp
+   Zl(i_ar36) = 18.0_rp
    Zl(i_k39) = 19.0_rp
    Zl(i_ca40) = 20.0_rp
    Zl(i_fe56) = 26.0_rp
@@ -223,18 +231,18 @@ contains
    glj(i_ne20,10) = 2.0_rp
    glj(i_ne20,11) = 1.0_rp
 
-   glj(i_na22,1) = 2.0_rp
-   glj(i_na22,2) = 1.0_rp
-   glj(i_na22,3) = 6.0_rp
-   glj(i_na22,4) = 9.0_rp
-   glj(i_na22,5) = 4.0_rp
-   glj(i_na22,6) = 9.0_rp
-   glj(i_na22,7) = 6.0_rp
-   glj(i_na22,8) = 1.0_rp
-   glj(i_na22,9) = 2.0_rp
-   glj(i_na22,10) = 1.0_rp
-   glj(i_na22,11) = 2.0_rp
-   glj(i_na22,12) = 1.0_rp
+   glj(i_na23,1) = 2.0_rp
+   glj(i_na23,2) = 1.0_rp
+   glj(i_na23,3) = 6.0_rp
+   glj(i_na23,4) = 9.0_rp
+   glj(i_na23,5) = 4.0_rp
+   glj(i_na23,6) = 9.0_rp
+   glj(i_na23,7) = 6.0_rp
+   glj(i_na23,8) = 1.0_rp
+   glj(i_na23,9) = 2.0_rp
+   glj(i_na23,10) = 1.0_rp
+   glj(i_na23,11) = 2.0_rp
+   glj(i_na23,12) = 1.0_rp
 
    glj(i_mg24,1) = 1.0_rp
    glj(i_mg24,2) = 2.0_rp
@@ -281,6 +289,22 @@ contains
    glj(i_si28,14) = 2.0_rp
    glj(i_si28,15) = 1.0_rp
 
+   glj(i_p31,1) = 9.0_rp
+   glj(i_p31,2) = 6.0_rp
+   glj(i_p31,3) = 1.0_rp
+   glj(i_p31,4) = 2.0_rp
+   glj(i_p31,5) = 1.0_rp
+   glj(i_p31,6) = 6.0_rp
+   glj(i_p31,7) = 9.0_rp
+   glj(i_p31,8) = 4.0_rp
+   glj(i_p31,9) = 9.0_rp
+   glj(i_p31,10) = 6.0_rp
+   glj(i_p31,11) = 1.0_rp
+   glj(i_p31,12) = 2.0_rp
+   glj(i_p31,13) = 1.0_rp
+   glj(i_p31,14) = 2.0_rp
+   glj(i_p31,15) = 1.0_rp
+
    glj(i_s32,1) = 9.0_rp
    glj(i_s32,2) = 4.0_rp
    glj(i_s32,3) = 9.0_rp
@@ -298,6 +322,25 @@ contains
    glj(i_s32,15) = 1.0_rp
    glj(i_s32,16) = 2.0_rp
    glj(i_s32,17) = 1.0_rp
+
+   glj(i_ar36,1) = 6.0_rp
+   glj(i_ar36,2) = 9.0_rp
+   glj(i_ar36,3) = 4.0_rp
+   glj(i_ar36,4) = 9.0_rp
+   glj(i_ar36,5) = 6.0_rp
+   glj(i_ar36,6) = 1.0_rp
+   glj(i_ar36,7) = 2.0_rp
+   glj(i_ar36,8) = 1.0_rp
+   glj(i_ar36,9) = 6.0_rp
+   glj(i_ar36,10) = 9.0_rp
+   glj(i_ar36,11) = 4.0_rp
+   glj(i_ar36,12) = 9.0_rp
+   glj(i_ar36,13) = 6.0_rp
+   glj(i_ar36,14) = 1.0_rp
+   glj(i_ar36,15) = 2.0_rp
+   glj(i_ar36,16) = 1.0_rp
+   glj(i_ar36,17) = 2.0_rp
+   glj(i_ar36,18) = 1.0_rp
 
    glj(i_k39,1) = 2.0_rp
    glj(i_k39,2) = 1.0_rp
@@ -413,17 +456,17 @@ contains
    Iplj(i_ne20,9)  = 1195.8286_rp*ev_to_erg
    Iplj(i_ne20,10) = 1362.1995_rp*ev_to_erg
 
-   Iplj(i_na22,1)  = 5.13908_rp*ev_to_erg
-   Iplj(i_na22,2)  = 47.2864_rp*ev_to_erg
-   Iplj(i_na22,3)  = 71.62_rp*ev_to_erg
-   Iplj(i_na22,4)  = 98.91_rp*ev_to_erg
-   Iplj(i_na22,5)  = 138.40_rp*ev_to_erg
-   Iplj(i_na22,6)  = 172.18_rp*ev_to_erg
-   Iplj(i_na22,7)  = 208.50_rp*ev_to_erg
-   Iplj(i_na22,8)  = 264.25_rp*ev_to_erg
-   Iplj(i_na22,9)  = 299.864_rp*ev_to_erg
-   Iplj(i_na22,10) = 1465.121_rp*ev_to_erg
-   Iplj(i_na22,11) = 1648.702_rp*ev_to_erg
+   Iplj(i_na23,1)  = 5.13908_rp*ev_to_erg
+   Iplj(i_na23,2)  = 47.2864_rp*ev_to_erg
+   Iplj(i_na23,3)  = 71.62_rp*ev_to_erg
+   Iplj(i_na23,4)  = 98.91_rp*ev_to_erg
+   Iplj(i_na23,5)  = 138.40_rp*ev_to_erg
+   Iplj(i_na23,6)  = 172.18_rp*ev_to_erg
+   Iplj(i_na23,7)  = 208.50_rp*ev_to_erg
+   Iplj(i_na23,8)  = 264.25_rp*ev_to_erg
+   Iplj(i_na23,9)  = 299.864_rp*ev_to_erg
+   Iplj(i_na23,10) = 1465.121_rp*ev_to_erg
+   Iplj(i_na23,11) = 1648.702_rp*ev_to_erg
 
    Iplj(i_mg24,1)  = 7.64624_rp*ev_to_erg
    Iplj(i_mg24,2)  = 15.03528_rp*ev_to_erg
@@ -467,6 +510,22 @@ contains
    Iplj(i_si28,13) = 2437.63_rp*ev_to_erg
    Iplj(i_si28,14) = 2673.182_rp*ev_to_erg
 
+   Iplj(i_p31,1)   = 10.48669_rp*ev_to_erg
+   Iplj(i_p31,2)   = 19.7694_rp*ev_to_erg
+   Iplj(i_p31,3)   = 30.2027_rp*ev_to_erg
+   Iplj(i_p31,4)   = 51.4439_rp*ev_to_erg
+   Iplj(i_p31,5)   = 65.0251_rp*ev_to_erg
+   Iplj(i_p31,6)   = 220.421_rp*ev_to_erg
+   Iplj(i_p31,7)   = 263.57_rp*ev_to_erg
+   Iplj(i_p31,8)   = 309.60_rp*ev_to_erg
+   Iplj(i_p31,9)   = 372.13_rp*ev_to_erg
+   Iplj(i_p31,10)  = 424.4_rp*ev_to_erg
+   Iplj(i_p31,11)  = 479.46_rp*ev_to_erg
+   Iplj(i_p31,12)  = 560.8_rp*ev_to_erg
+   Iplj(i_p31,13)  = 611.74_rp*ev_to_erg
+   Iplj(i_p31,14)  = 2816.91_rp*ev_to_erg
+   Iplj(i_p31,15)  = 3069.842_rp*ev_to_erg
+   
    Iplj(i_s32,1)   = 10.36001_rp*ev_to_erg
    Iplj(i_s32,2)   = 23.3379_rp*ev_to_erg
    Iplj(i_s32,3)   = 34.79_rp*ev_to_erg
@@ -484,6 +543,25 @@ contains
    Iplj(i_s32,15)  = 3223.78_rp*ev_to_erg
    Iplj(i_s32,16)  = 3494.1892_rp*ev_to_erg
 
+   Iplj(i_ar36,1)   = 15.75962_rp*ev_to_erg
+   Iplj(i_ar36,2)   = 27.62967_rp*ev_to_erg
+   Iplj(i_ar36,3)   = 40.74_rp*ev_to_erg
+   Iplj(i_ar36,4)   = 59.81_rp*ev_to_erg
+   Iplj(i_ar36,5)   = 75.02_rp*ev_to_erg
+   Iplj(i_ar36,6)   = 91.009_rp*ev_to_erg
+   Iplj(i_ar36,7)   = 124.323_rp*ev_to_erg
+   Iplj(i_ar36,8)   = 143.460_rp*ev_to_erg
+   Iplj(i_ar36,9)   = 422.45_rp*ev_to_erg
+   Iplj(i_ar36,10)  = 478.69_rp*ev_to_erg
+   Iplj(i_ar36,11)  = 538.96_rp*ev_to_erg
+   Iplj(i_ar36,12)  = 618.26_rp*ev_to_erg
+   Iplj(i_ar36,13)  = 686.10_rp*ev_to_erg
+   Iplj(i_ar36,14)  = 755.74_rp*ev_to_erg
+   Iplj(i_ar36,15)  = 854.77_rp*ev_to_erg
+   Iplj(i_ar36,16)  = 918.03_rp*ev_to_erg
+   Iplj(i_ar36,17)  = 4120.8857_rp*ev_to_erg
+   Iplj(i_ar36,18)  = 4426.2296_rp*ev_to_erg
+   
    Iplj(i_k39,1)   = 4.34066_rp*ev_to_erg
    Iplj(i_k39,2)   = 31.63_rp*ev_to_erg
    Iplj(i_k39,3)   = 45.806_rp*ev_to_erg
@@ -558,7 +636,7 @@ contains
     type(mpigrid), intent(inout) :: mgrid
 
     integer :: ierr
-    logical :: isinitialized,reorder
+    logical :: reorder
 
     mgrid%bricks(1) = ddx1
     mgrid%bricks(2) = ddx2
@@ -572,7 +650,6 @@ contains
     mgrid%periodic(2) = .true.
     mgrid%periodic(3) = .true. 
 
-    call mpi_initialized(isinitialized, ierr)
     call mpi_init(ierr)
 
     reorder = .true.

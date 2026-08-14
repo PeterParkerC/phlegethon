@@ -3538,7 +3538,7 @@ contains
 
     type(h5_file) :: h5
 
-    integer :: error,i,j,k,iv,ierr,ii,jj
+    integer :: error,i,j,k,iv,ierr,ii,jj,kk
     integer(HID_T) :: id,plist_id
 
     integer :: lx1,ux1,lx2,ux2,lx3,ux3,rays_i,rays_j,rays_k
@@ -3556,7 +3556,39 @@ contains
     kernel(3,3) = 0.0625_rp
 #endif
     
+#if sdims_make==3
+    real(kind=rp) :: kernel(1:3,1:3,1:3)
+    kernel(1,1,1) = 0.015625_rp
+    kernel(1,1,2) = 0.03125_rp
+    kernel(1,1,3) = 0.015625_rp
+    kernel(1,2,1) = 0.03125_rp
+    kernel(1,2,2) = 0.0625_rp
+    kernel(1,2,3) = 0.03125_rp
+    kernel(1,3,1) = 0.015625_rp
+    kernel(1,3,2) = 0.03125_rp
+    kernel(1,3,3) = 0.015625_rp
+    kernel(2,1,1) = 0.03125_rp
+    kernel(2,1,2) = 0.0625_rp
+    kernel(2,1,3) = 0.03125_rp
+    kernel(2,2,1) = 0.0625_rp
+    kernel(2,2,2) = 0.125_rp
+    kernel(2,2,3) = 0.0625_rp
+    kernel(2,3,1) = 0.03125_rp
+    kernel(2,3,2) = 0.0625_rp
+    kernel(2,3,3) = 0.03125_rp
+    kernel(3,1,1) = 0.015625_rp
+    kernel(3,1,2) = 0.03125_rp
+    kernel(3,1,3) = 0.015625_rp
+    kernel(3,2,1) = 0.03125_rp
+    kernel(3,2,2) = 0.0625_rp
+    kernel(3,2,3) = 0.03125_rp
+    kernel(3,3,1) = 0.015625_rp
+    kernel(3,3,2) = 0.03125_rp
+    kernel(3,3,3) = 0.015625_rp
+#endif
+    
     ierr = 0
+    kk = 0
 
     lx1 = mgrid%i1(1)
     ux1 = mgrid%i2(1)
@@ -3694,9 +3726,11 @@ contains
        end do
 #endif
 
+#if sdims_make==2
+
        do iv=1,nvars
 
-        lgrid%rays_conv(iv,i,j,k) = 0.0_rp
+        lgrid%rays_conv(iv,i,j,k) = rp0
 
         do jj =-1,1
          do ii =-1,1
@@ -3711,7 +3745,7 @@ contains
 
        end do
 
-       lgrid%rays_conv(nvars+1,i,j,k) = 0.0_rp
+       lgrid%rays_conv(nvars+1,i,j,k) = rp0
 
        do jj=-1,1
         do ii=-1,1
@@ -3727,7 +3761,7 @@ contains
 #ifdef USE_MHD
        do iv=1,sdims
 
-        lgrid%rays_conv(nvars+1+iv,i,j,k) = 0.0_rp
+        lgrid%rays_conv(nvars+1+iv,i,j,k) = rp0
 
         do jj = -1, 1
          do ii = -1, 1
@@ -3741,6 +3775,67 @@ contains
         end do
 
        end do
+#endif
+
+#endif
+
+#if sdims_make==3
+
+       do iv=1,nvars
+
+        lgrid%rays_conv(iv,i,j,k) = rp0
+
+        do kk = -1,1
+         do jj = -1,1
+          do ii = -1,1
+
+           lgrid%rays_conv(iv,i,j,k) = &
+           lgrid%rays_conv(iv,i,j,k) + &
+           kernel(ii+2,jj+2,kk+2) * &
+           lgrid%prim(iv,rays_i+ii,rays_j+jj,rays_k+kk)
+
+          end do
+         end do
+        end do
+
+       end do
+
+       lgrid%rays_conv(nvars+1,i,j,k) = rp0
+
+       do kk = -1,1
+        do jj = -1,1
+         do ii = -1,1
+
+          lgrid%rays_conv(nvars+1,i,j,k) = &
+          lgrid%rays_conv(nvars+1,i,j,k) + &
+          kernel(ii+2,jj+2,kk+2) * &
+          lgrid%temp(rays_i+ii,rays_j+jj,rays_k+kk)
+
+         end do
+        end do
+       end do
+
+#ifdef USE_MHD
+       do iv=1,sdims
+
+        lgrid%rays_conv(nvars+1+iv,i,j,k) = rp0
+
+        do kk = -1,1
+         do jj = -1,1
+          do ii = -1,1
+
+           lgrid%rays_conv(nvars+1+iv,i,j,k) = &
+           lgrid%rays_conv(nvars+1+iv,i,j,k) + &
+           kernel(ii+2,jj+2,kk+2) * &
+           lgrid%b_cc(iv,rays_i+ii,rays_j+jj,rays_k+kk)
+
+          end do
+         end do
+        end do
+
+       end do
+#endif
+
 #endif
 
       end do

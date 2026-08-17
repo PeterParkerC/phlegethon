@@ -1378,7 +1378,7 @@ contains
     real(kind=rp), intent(in) :: gamma_ad,mu
 
     integer :: ierr
-    logical :: isinitialized,reorder
+    logical :: reorder
     integer :: lx1,ux1,lx2,ux2,lx3,ux3 
 
     mgrid%bricks(1) = ddx1
@@ -1407,7 +1407,6 @@ contains
     mgrid%periodic(3) = .false.
 #endif
 
-    call mpi_initialized(isinitialized, ierr)
     call mpi_init(ierr)
 
     reorder = .true.

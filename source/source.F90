@@ -22585,9 +22585,9 @@ contains
 #endif
 #if USE_BURNING_LIMITER
 #if sdims_make==1
-     div_vel = (lgrid%prim(i_vx1,i+1,j,k)-lgrid%prim(i_vx1,i-1,j,k)) * &
+     div_vel = (lgrid%prim(i_vx1,i+1,j,k)-lgrid%prim(i_vx1,i-1,j,k)) / &
         (lgrid%coords(1,i+1,j,k)-lgrid%coords(1,i-1,j,k))
-     ratio = (lgrid%prim(i_p,i+1,j,k)-lgrid%prim(i_p,i-1,j,k)/lgrid%prim(i_p,i+1,j,k)
+     ratio = (lgrid%prim(i_p,i+1,j,k)-lgrid%prim(i_p,i-1,j,k)/lgrid%prim(i_p,i,j,k)/rp2
 #else
      div_vel = (lgrid%prim(i_vx1,i+1,j,k)-lgrid%prim(i_vx1,i-1,j,k)) / &
         (lgrid%coords(1,i+1,j,k)-lgrid%coords(1,i-1,j,k)) + &
@@ -22609,7 +22609,7 @@ contains
 #endif
      ratio = sqrt(grad_P2*rcell2)/lgrid%prim(i_p,i,j,k)
 #endif
-     if((div_vel < rp0) .and. (ratio < tthirds)) then
+     if((div_vel < rp0) .and. (ratio > tthirds)) then
       exit
      endif
 #endif

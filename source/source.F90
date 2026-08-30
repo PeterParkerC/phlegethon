@@ -12305,7 +12305,428 @@ contains
      a1rk = rk_coeff(irk,1)
      a2rk = rk_coeff(irk,2)
      a3rk = rk_coeff(irk,3)*lgrid%dt
+          
+     !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+     ! FICTICIOUS FORCES
+     !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+     
+#ifdef COROTATING_FRAME
+    
+     do k=lx3,ux3
+      do j=lx2,ux2
+       do i=lx1,ux1
 
+         rho = lgrid%state(i_rho,i,j,k)
+         rhovx1 = lgrid%state(i_rhovx1,i,j,k)
+         rhovx2 = lgrid%state(i_rhovx2,i,j,k)
+#if sdims_make==3
+         rhovx3 = lgrid%state(i_rhovx3,i,j,k)
+#else
+         rhovx3 = rp0
+#endif
+
+#if defined(GEOMETRY_CARTESIAN_UNIFORM) || defined(GEOMETRY_CARTESIAN_NONUNIFORM) || defined(GEOMETRY_CUBED_SPHERE)
+
+         x = lgrid%coords(1,i,j,k)
+         y = lgrid%coords(2,i,j,k)
+#if sdims_make==3
+         z = lgrid%coords(3,i,j,k)
+#else
+         z = rp0
+#endif
+
+         ov1 = rhovx3*om2-rhovx2*om3
+
+         ov2 = -rhovx3*om1+rhovx1*om3
+
+         ov3 = rhovx2*om1-rhovx1*om2
+
+         or1 = z*om2-y*om3
+
+         or2 = -z*om1+x*om3
+
+         or3 = y*om1-x*om2
+
+         oor1 = or3*om2-or2*om3
+
+         oor2 = -or3*om1+or1*om3
+
+         oor3 = or2*om1-or1*om2
+
+         lgrid%res(i_rhovx1,i,j,k) = lgrid%res(i_rhovx1,i,j,k) + &
+         rp2*ov1+rho*oor1
+
+         lgrid%res(i_rhovx2,i,j,k) = lgrid%res(i_rhovx2,i,j,k) + &
+         rp2*ov2+rho*oor2
+
+#if sdims_make==3
+         lgrid%res(i_rhovx3,i,j,k) = lgrid%res(i_rhovx3,i,j,k) + &
+         rp2*ov3+rho*oor3
+#endif
+
+         lgrid%res(i_rhoe,i,j,k) = lgrid%res(i_rhoe,i,j,k) + &
+#if sdims_make==3
+         rhovx3*oor3 + &
+#endif
+         rhovx2*oor2 + &
+         rhovx1*oor1
+
+#endif
+
+#ifdef GEOMETRY_2D_POLAR
+
+         r = lgrid%r(i,j,k)
+         tmp = r*om3*om3
+         
+         lgrid%res(i_rhovx1,i,j,k) = lgrid%res(i_rhovx1,i,j,k) & 
+         -rho*tmp-rp2*rhovx2*om3
+
+         lgrid%res(i_rhovx2,i,j,k) = lgrid%res(i_rhovx2,i,j,k) & 
+         +rp2*rhovx1*om3
+
+         lgrid%res(i_rhoe,i,j,k) = lgrid%res(i_rhoe,i,j,k) - &
+         rhovx1*tmp
+
+#endif
+
+#ifdef GEOMETRY_2D_CYLINDRICAL
+
+         r = lgrid%r(i,j,k)
+         tmp = r*om3*om3
+         
+         lgrid%res(i_rhovx1,i,j,k) = lgrid%res(i_rhovx1,i,j,k) & 
+         -rho*tmp
+
+         lgrid%res(i_rhoe,i,j,k) = lgrid%res(i_rhoe,i,j,k) - &
+         rhovx1*tmp
+
+#endif
+
+#ifdef GEOMETRY_3D_SPHERICAL
+         
+         r = lgrid%r(i,j,k)
+         sin_theta = lgrid%sin_theta(i,j,k)
+         cos_theta = lgrid%cos_theta(i,j,k)
+
+         tmp = rhovx3*om3
+         ov1 = -sin_theta*tmp
+         ov2 = -cos_theta*tmp
+         ov3 = (cos_theta*rhovx2+sin_theta*rhovx1)*om3
+         or3 = r*sin_theta*om3
+         tmp = or3*om3
+         oor1 = -sin_theta*tmp
+         oor2 = -cos_theta*tmp
+
+         lgrid%res(i_rhovx1,i,j,k) = lgrid%res(i_rhovx1,i,j,k) + &
+         rp2*ov1+rho*oor1
+
+         lgrid%res(i_rhovx2,i,j,k) = lgrid%res(i_rhovx2,i,j,k) + &
+         rp2*ov2+rho*oor2
+
+         lgrid%res(i_rhovx3,i,j,k) = lgrid%res(i_rhovx3,i,j,k) + &
+         rp2*ov3
+
+         lgrid%res(i_rhoe,i,j,k) = lgrid%res(i_rhoe,i,j,k) + &
+         rhovx1*oor1 + &
+         rhovx2*oor2
+
+#endif
+
+       end do
+      end do
+     end do
+
+#endif
+
+#ifdef USE_CONSTANT_ACCELERATION
+
+     do k=lx3,ux3
+      do j=lx2,ux2
+       do i=lx1,ux1
+
+        rho = lgrid%state(i_rho,i,j,k)
+
+        lgrid%res(i_rhovx1,i,j,k) = lgrid%res(i_rhovx1,i,j,k) - &
+        rho*lgrid%acc(1)
+
+        lgrid%res(i_rhovx2,i,j,k) = lgrid%res(i_rhovx2,i,j,k) - &
+        rho*lgrid%acc(2)
+
+#if sdims_make==3
+        lgrid%res(i_rhovx3,i,j,k) = lgrid%res(i_rhovx3,i,j,k) - &
+        rho*lgrid%acc(3)
+#endif
+
+        lgrid%res(i_rhoe,i,j,k) = lgrid%res(i_rhoe,i,j,k) - &
+#if sdims_make==3
+        lgrid%state(i_rhovx3,i,j,k)*lgrid%acc(3) - &
+#endif
+        lgrid%state(i_rhovx1,i,j,k)*lgrid%acc(1) - &
+        lgrid%state(i_rhovx2,i,j,k)*lgrid%acc(2)
+
+       end do
+      end do
+     end do
+
+#endif
+
+     !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+     ! VELOCITY DAMPING
+     !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+#ifdef USE_VDAMPING
+
+#ifdef USE_VARIABLE_VDAMPING
+     if (lgrid%time<tmax_damp) then
+      nu_damp_tmp = nu_damp
+     else if (lgrid%time<tend_damp) then
+      nu_damp_tmp = nu_damp*cos((rph*CONST_PI)*(lgrid%time-tmax_damp)/(tend_damp-tmax_damp))
+     else
+      nu_damp_tmp = rp0
+     endif
+#endif
+
+     do k=lx3,ux3
+      do j=lx2,ux2
+       do i=lx1,ux1
+
+#if defined(USE_INTERNAL_BOUNDARIES) || defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_CUBED_SPHERE) || defined(GEOMETRY_2D_CYLINDRICAL)
+        r = lgrid%r(i,j,k)
+#else
+        r = lgrid%coords(2,i,j,k)
+#endif
+
+        if(r<rmin_damp) then
+         tmp = rp0
+        else if(r<rmax_damp) then        
+         tmp = nu_damp_tmp*rph*(rp1-cos(const_damp*(r-rmin_damp)))
+        else
+         tmp = nu_damp_tmp
+        endif
+
+        lgrid%res(i_rhovx1,i,j,k) = lgrid%res(i_rhovx1,i,j,k) + tmp*lgrid%state(i_rhovx1,i,j,k)
+        lgrid%res(i_rhovx2,i,j,k) = lgrid%res(i_rhovx2,i,j,k) + tmp*lgrid%state(i_rhovx2,i,j,k)
+#if sdims_make==3
+        lgrid%res(i_rhovx3,i,j,k) = lgrid%res(i_rhovx3,i,j,k) + tmp*lgrid%state(i_rhovx3,i,j,k)
+#endif
+
+       end do
+      end do
+     end do
+
+#endif
+
+     !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+     ! NEUTRINO LOSSES
+     !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+#ifdef USE_NEULOSS
+#ifndef USE_NUCLEAR_NETWORK
+
+     do k=lx3,ux3
+      do j=lx2,ux2
+       do i=lx1,ux1
+
+#ifdef ADVECT_YE_IABAR
+         abar = rp1/lgrid%prim(i_iabar,i,j,k)
+         ye = lgrid%prim(i_ye,i,j,k)
+#endif
+#ifdef ADVECT_SPECIES
+         inv_abar = rp0
+         ye = rp0
+         do iv=1,nspecies
+           tmp = lgrid%prim(i_as1+iv-1,i,j,k)/lgrid%A(iv)
+           inv_abar = inv_abar + tmp
+           ye = ye + tmp*lgrid%Z(iv)
+         end do
+         abar = rp1/inv_abar
+#endif
+         zbar = ye*abar
+
+         snu = rp0
+         T = lgrid%temp(i,j,k)
+         rho = lgrid%state(i_rho,i,j,k)
+         call sneut5(T,rho,abar,zbar,snu)
+         lgrid%res(i_rhoe,i,j,k) = lgrid%res(i_rhoe,i,j,k) + rho*snu
+
+       end do
+      end do
+     end do
+
+#endif
+#endif
+
+     !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+     ! GEOMETRIC SOURCES
+     !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL)
+
+     do k=lx3,ux3
+      do j=lx2,ux2
+       do i=lx1,ux1
+
+        rho = lgrid%state(i_rho,i,j,k)
+        vx1 = lgrid%prim(i_vx1,i,j,k)
+        vx2 = lgrid%prim(i_vx2,i,j,k)
+
+#ifdef USE_MHD
+        bx1 = lgrid%b_cc(1,i,j,k) 
+        bx2 = lgrid%b_cc(2,i,j,k)
+#endif
+        r = lgrid%r(i,j,k)
+        inv_r = rp1/r
+        
+        lgrid%res(i_rhovx1,i,j,k) = lgrid%res(i_rhovx1,i,j,k) &
+#ifdef USE_MHD
+        + bx2*bx2*inv_r  &
+#endif
+        - rho*vx2*vx2*inv_r
+
+        lgrid%res(i_rhovx2,i,j,k) = lgrid%res(i_rhovx2,i,j,k) &
+#ifdef USE_MHD
+        - bx1*bx2*inv_r  &
+#endif
+        + rho*vx1*vx2*inv_r
+
+       end do
+      end do
+     end do
+
+#endif
+
+#ifdef GEOMETRY_3D_SPHERICAL
+
+     do k=lx3,ux3
+      do j=lx2,ux2
+       do i=lx1,ux1
+
+        r = lgrid%r(i,j,k)
+        tmp = lgrid%cot_theta(i,j,k)
+
+        rho = lgrid%state(i_rho,i,j,k)
+        vx1 = lgrid%prim(i_vx1,i,j,k)
+        vx2 = lgrid%prim(i_vx2,i,j,k)
+        vx3 = lgrid%prim(i_vx3,i,j,k)
+
+#ifdef USE_MHD
+        bx1 = lgrid%b_cc(1,i,j,k) 
+        bx2 = lgrid%b_cc(2,i,j,k)
+        bx3 = lgrid%b_cc(3,i,j,k)
+#endif
+        inv_r = rp1/r
+        lgrid%res(i_rhovx1,i,j,k) = lgrid%res(i_rhovx1,i,j,k) &
+#ifdef USE_MHD
+        + (bx2*bx2+bx3*bx3)*inv_r &
+#endif
+        - rho*(vx2*vx2+vx3*vx3)*inv_r 
+
+        lgrid%res(i_rhovx2,i,j,k) = lgrid%res(i_rhovx2,i,j,k) &
+#ifdef USE_MHD
+        - (bx1*bx2-tmp*bx3*bx3)*inv_r  &
+#endif
+        + rho*(vx1*vx2 - tmp*vx3*vx3)*inv_r
+
+        lgrid%res(i_rhovx3,i,j,k) = lgrid%res(i_rhovx3,i,j,k) &
+#ifdef USE_MHD
+        - (bx1*bx3-tmp*bx3*bx2)*inv_r  &
+#endif
+        + rho*(vx1*vx3 + tmp*vx3*vx2)*inv_r
+
+       end do
+      end do
+     end do
+
+#endif
+
+     !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+     ! GRAVITY SOURCES
+     !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+#ifdef USE_GRAVITY
+
+     do k=lx3,ux3
+      do j=lx2,ux2
+       do i=lx1,ux1
+
+        rho = lgrid%prim(i_rho,i,j,k)
+
+        gx1 = lgrid%grav(1,i,j,k)
+        gx2 = lgrid%grav(2,i,j,k)
+#if sdims_make==3
+        gx3 = lgrid%grav(3,i,j,k)
+#endif
+
+        lgrid%res(i_rhovx1,i,j,k) = lgrid%res(i_rhovx1,i,j,k) - &
+        rho*gx1
+
+        lgrid%res(i_rhovx2,i,j,k) = lgrid%res(i_rhovx2,i,j,k) - &
+        rho*gx2
+
+#if sdims_make==3
+        lgrid%res(i_rhovx3,i,j,k) = lgrid%res(i_rhovx3,i,j,k) - &
+        rho*gx3
+#endif
+
+#ifndef EVOLVE_ETOT
+        lgrid%res(i_rhoe,i,j,k) = lgrid%res(i_rhoe,i,j,k) - &
+#if sdims_make==3
+        lgrid%state(i_rhovx3,i,j,k)*gx3 - &
+#endif
+        lgrid%state(i_rhovx1,i,j,k)*gx1 - &
+        lgrid%state(i_rhovx2,i,j,k)*gx2 
+#endif
+
+       end do
+      end do
+     end do
+
+#endif
+
+     !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+     ! ENERGY SOURCE
+     !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+#ifdef USE_EDOT
+#ifndef VARIABLE_EDOT
+
+     do k=lx3,ux3
+      do j=lx2,ux2
+       do i=lx1,ux1
+
+        lgrid%res(i_rhoe,i,j,k) = lgrid%res(i_rhoe,i,j,k) - &
+        lgrid%edot(i,j,k)
+
+       end do
+      end do
+     end do
+
+#endif
+#ifdef VARIABLE_EDOT
+     if (lgrid%time>=t_start_edot) then
+      do k=lx3,ux3
+       do j=lx2,ux2
+        do i=lx1,ux1
+
+         lgrid%res(i_rhoe,i,j,k) = lgrid%res(i_rhoe,i,j,k) - &
+         lgrid%edot(i,j,k)
+
+        end do
+       end do
+      end do
+     end if
+
+#endif
+#endif
+     
+     a1rk = rk_coeff(irk,1)
+     a2rk = rk_coeff(irk,2)
+     a3rk = rk_coeff(irk,3)*lgrid%dt
+
+     !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+     ! CONSTRAINED TRANSPORT
+     !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+     
 #ifdef USE_MHD
 #ifdef ENFORCE_BARRIERS
      call mpi_barrier(mgrid%comm_cart,ierr)
@@ -12430,7 +12851,6 @@ contains
 
 #endif
 
-       
 #if defined(X2L_REFLECTIVE) || defined(X2L_OUTFLOW) || defined(X2L_DIODE)
      
      if(mgrid%coords_dd(2)==0) then
@@ -12715,7 +13135,6 @@ contains
 
 #endif
 
-       
 #if defined(X2L_DIODE)
      
      if(mgrid%coords_dd(2)==0) then
@@ -12901,10 +13320,6 @@ contains
 #endif
 
 #endif
-
-     !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-     ! CONSTRAINED TRANSPORT
-     !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
      do k=lx3,ux3
       do j=lx2,ux2+1
@@ -13426,395 +13841,10 @@ contains
 #endif
 
 #endif
-
-#ifdef USE_NEULOSS
-#ifndef USE_NUCLEAR_NETWORK
-
-     do k=lx3,ux3
-      do j=lx2,ux2
-       do i=lx1,ux1
-
-#ifdef ADVECT_YE_IABAR
-         abar = rp1/lgrid%prim(i_iabar,i,j,k)
-         ye = lgrid%prim(i_ye,i,j,k)
-#endif
-#ifdef ADVECT_SPECIES
-         inv_abar = rp0
-         ye = rp0
-         do iv=1,nspecies
-           tmp = lgrid%prim(i_as1+iv-1,i,j,k)/lgrid%A(iv)
-           inv_abar = inv_abar + tmp
-           ye = ye + tmp*lgrid%Z(iv)
-         end do
-         abar = rp1/inv_abar
-#endif
-         zbar = ye*abar
-
-         snu = rp0
-         T = lgrid%temp(i,j,k)
-         rho = lgrid%state(i_rho,i,j,k)
-         call sneut5(T,rho,abar,zbar,snu)
-         lgrid%res(i_rhoe,i,j,k) = lgrid%res(i_rhoe,i,j,k) + rho*snu
-
-       end do
-      end do
-     end do
-
-#endif
-#endif
-
-#if defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL)
-
-     do k=lx3,ux3
-      do j=lx2,ux2
-       do i=lx1,ux1
-
-        rho = lgrid%state(i_rho,i,j,k)
-        vx1 = lgrid%prim(i_vx1,i,j,k)
-        vx2 = lgrid%prim(i_vx2,i,j,k)
-
-#ifdef USE_MHD
-        bx1 = lgrid%b_cc(1,i,j,k) 
-        bx2 = lgrid%b_cc(2,i,j,k)
-#endif
-        r = lgrid%r(i,j,k)
-        inv_r = rp1/r
-        
-        lgrid%res(i_rhovx1,i,j,k) = lgrid%res(i_rhovx1,i,j,k) &
-#ifdef USE_MHD
-        + bx2*bx2*inv_r  &
-#endif
-        - rho*vx2*vx2*inv_r
-
-        lgrid%res(i_rhovx2,i,j,k) = lgrid%res(i_rhovx2,i,j,k) &
-#ifdef USE_MHD
-        - bx1*bx2*inv_r  &
-#endif
-        + rho*vx1*vx2*inv_r
-
-       end do
-      end do
-     end do
-
-#endif
-
-#ifdef GEOMETRY_3D_SPHERICAL
-
-     do k=lx3,ux3
-      do j=lx2,ux2
-       do i=lx1,ux1
-
-        r = lgrid%r(i,j,k)
-        tmp = lgrid%cot_theta(i,j,k)
-
-        rho = lgrid%state(i_rho,i,j,k)
-        vx1 = lgrid%prim(i_vx1,i,j,k)
-        vx2 = lgrid%prim(i_vx2,i,j,k)
-        vx3 = lgrid%prim(i_vx3,i,j,k)
-
-#ifdef USE_MHD
-        bx1 = lgrid%b_cc(1,i,j,k) 
-        bx2 = lgrid%b_cc(2,i,j,k)
-        bx3 = lgrid%b_cc(3,i,j,k)
-#endif
-        inv_r = rp1/r
-        lgrid%res(i_rhovx1,i,j,k) = lgrid%res(i_rhovx1,i,j,k) &
-#ifdef USE_MHD
-        + (bx2*bx2+bx3*bx3)*inv_r &
-#endif
-        - rho*(vx2*vx2+vx3*vx3)*inv_r 
-
-        lgrid%res(i_rhovx2,i,j,k) = lgrid%res(i_rhovx2,i,j,k) &
-#ifdef USE_MHD
-        - (bx1*bx2-tmp*bx3*bx3)*inv_r  &
-#endif
-        + rho*(vx1*vx2 - tmp*vx3*vx3)*inv_r
-
-        lgrid%res(i_rhovx3,i,j,k) = lgrid%res(i_rhovx3,i,j,k) &
-#ifdef USE_MHD
-        - (bx1*bx3-tmp*bx3*bx2)*inv_r  &
-#endif
-        + rho*(vx1*vx3 + tmp*vx3*vx2)*inv_r
-
-       end do
-      end do
-     end do
-
-#endif
-
-#ifdef USE_GRAVITY
-
-     do k=lx3,ux3
-      do j=lx2,ux2
-       do i=lx1,ux1
-
-        rho = lgrid%prim(i_rho,i,j,k)
-
-        gx1 = lgrid%grav(1,i,j,k)
-        gx2 = lgrid%grav(2,i,j,k)
-#if sdims_make==3
-        gx3 = lgrid%grav(3,i,j,k)
-#endif
-
-        lgrid%res(i_rhovx1,i,j,k) = lgrid%res(i_rhovx1,i,j,k) - &
-        rho*gx1
-
-        lgrid%res(i_rhovx2,i,j,k) = lgrid%res(i_rhovx2,i,j,k) - &
-        rho*gx2
-
-#if sdims_make==3
-        lgrid%res(i_rhovx3,i,j,k) = lgrid%res(i_rhovx3,i,j,k) - &
-        rho*gx3
-#endif
-
-#ifndef EVOLVE_ETOT
-        lgrid%res(i_rhoe,i,j,k) = lgrid%res(i_rhoe,i,j,k) - &
-#if sdims_make==3
-        lgrid%state(i_rhovx3,i,j,k)*gx3 - &
-#endif
-        lgrid%state(i_rhovx1,i,j,k)*gx1 - &
-        lgrid%state(i_rhovx2,i,j,k)*gx2 
-#endif
-
-       end do
-      end do
-     end do
-
-#endif
-
-#ifdef USE_EDOT
-#ifndef VARIABLE_EDOT
-
-     do k=lx3,ux3
-      do j=lx2,ux2
-       do i=lx1,ux1
-
-        lgrid%res(i_rhoe,i,j,k) = lgrid%res(i_rhoe,i,j,k) - &
-        lgrid%edot(i,j,k)
-
-       end do
-      end do
-     end do
-
-#endif
-#ifdef VARIABLE_EDOT
-     if (lgrid%time>=t_start_edot) then
-      do k=lx3,ux3
-       do j=lx2,ux2
-        do i=lx1,ux1
-
-         lgrid%res(i_rhoe,i,j,k) = lgrid%res(i_rhoe,i,j,k) - &
-         lgrid%edot(i,j,k)
-
-        end do
-       end do
-      end do
-     end if
-
-#endif
-#endif
-
-#ifdef COROTATING_FRAME
-    
-     do k=lx3,ux3
-      do j=lx2,ux2
-       do i=lx1,ux1
-
-         rho = lgrid%state(i_rho,i,j,k)
-         rhovx1 = lgrid%state(i_rhovx1,i,j,k)
-         rhovx2 = lgrid%state(i_rhovx2,i,j,k)
-#if sdims_make==3
-         rhovx3 = lgrid%state(i_rhovx3,i,j,k)
-#else
-         rhovx3 = rp0
-#endif
-
-#if defined(GEOMETRY_CARTESIAN_UNIFORM) || defined(GEOMETRY_CARTESIAN_NONUNIFORM) || defined(GEOMETRY_CUBED_SPHERE)
-
-         x = lgrid%coords(1,i,j,k)
-         y = lgrid%coords(2,i,j,k)
-#if sdims_make==3
-         z = lgrid%coords(3,i,j,k)
-#else
-         z = rp0
-#endif
-
-         ov1 = rhovx3*om2-rhovx2*om3
-
-         ov2 = -rhovx3*om1+rhovx1*om3
-
-         ov3 = rhovx2*om1-rhovx1*om2
-
-         or1 = z*om2-y*om3
-
-         or2 = -z*om1+x*om3
-
-         or3 = y*om1-x*om2
-
-         oor1 = or3*om2-or2*om3
-
-         oor2 = -or3*om1+or1*om3
-
-         oor3 = or2*om1-or1*om2
-
-         lgrid%res(i_rhovx1,i,j,k) = lgrid%res(i_rhovx1,i,j,k) + &
-         rp2*ov1+rho*oor1
-
-         lgrid%res(i_rhovx2,i,j,k) = lgrid%res(i_rhovx2,i,j,k) + &
-         rp2*ov2+rho*oor2
-
-#if sdims_make==3
-         lgrid%res(i_rhovx3,i,j,k) = lgrid%res(i_rhovx3,i,j,k) + &
-         rp2*ov3+rho*oor3
-#endif
-
-         lgrid%res(i_rhoe,i,j,k) = lgrid%res(i_rhoe,i,j,k) + &
-#if sdims_make==3
-         rhovx3*oor3 + &
-#endif
-         rhovx2*oor2 + &
-         rhovx1*oor1
-
-#endif
-
-#ifdef GEOMETRY_2D_POLAR
-
-         r = lgrid%r(i,j,k)
-         tmp = r*om3*om3
-         
-         lgrid%res(i_rhovx1,i,j,k) = lgrid%res(i_rhovx1,i,j,k) & 
-         -rho*tmp-rp2*rhovx2*om3
-
-         lgrid%res(i_rhovx2,i,j,k) = lgrid%res(i_rhovx2,i,j,k) & 
-         +rp2*rhovx1*om3
-
-         lgrid%res(i_rhoe,i,j,k) = lgrid%res(i_rhoe,i,j,k) - &
-         rhovx1*tmp
-
-#endif
-
-#ifdef GEOMETRY_2D_CYLINDRICAL
-
-         r = lgrid%r(i,j,k)
-         tmp = r*om3*om3
-         
-         lgrid%res(i_rhovx1,i,j,k) = lgrid%res(i_rhovx1,i,j,k) & 
-         -rho*tmp
-
-         lgrid%res(i_rhoe,i,j,k) = lgrid%res(i_rhoe,i,j,k) - &
-         rhovx1*tmp
-
-#endif
-
-#ifdef GEOMETRY_3D_SPHERICAL
-         
-         r = lgrid%r(i,j,k)
-         sin_theta = lgrid%sin_theta(i,j,k)
-         cos_theta = lgrid%cos_theta(i,j,k)
-
-         tmp = rhovx3*om3
-         ov1 = -sin_theta*tmp
-         ov2 = -cos_theta*tmp
-         ov3 = (cos_theta*rhovx2+sin_theta*rhovx1)*om3
-         or3 = r*sin_theta*om3
-         tmp = or3*om3
-         oor1 = -sin_theta*tmp
-         oor2 = -cos_theta*tmp
-
-         lgrid%res(i_rhovx1,i,j,k) = lgrid%res(i_rhovx1,i,j,k) + &
-         rp2*ov1+rho*oor1
-
-         lgrid%res(i_rhovx2,i,j,k) = lgrid%res(i_rhovx2,i,j,k) + &
-         rp2*ov2+rho*oor2
-
-         lgrid%res(i_rhovx3,i,j,k) = lgrid%res(i_rhovx3,i,j,k) + &
-         rp2*ov3
-
-         lgrid%res(i_rhoe,i,j,k) = lgrid%res(i_rhoe,i,j,k) + &
-         rhovx1*oor1 + &
-         rhovx2*oor2
-
-#endif
-
-       end do
-      end do
-     end do
-
-#endif
-
-#ifdef USE_CONSTANT_ACCELERATION
-
-     do k=lx3,ux3
-      do j=lx2,ux2
-       do i=lx1,ux1
-
-        rho = lgrid%state(i_rho,i,j,k)
-
-        lgrid%res(i_rhovx1,i,j,k) = lgrid%res(i_rhovx1,i,j,k) - &
-        rho*lgrid%acc(1)
-
-        lgrid%res(i_rhovx2,i,j,k) = lgrid%res(i_rhovx2,i,j,k) - &
-        rho*lgrid%acc(2)
-
-#if sdims_make==3
-        lgrid%res(i_rhovx3,i,j,k) = lgrid%res(i_rhovx3,i,j,k) - &
-        rho*lgrid%acc(3)
-#endif
-
-        lgrid%res(i_rhoe,i,j,k) = lgrid%res(i_rhoe,i,j,k) - &
-#if sdims_make==3
-        lgrid%state(i_rhovx3,i,j,k)*lgrid%acc(3) - &
-#endif
-        lgrid%state(i_rhovx1,i,j,k)*lgrid%acc(1) - &
-        lgrid%state(i_rhovx2,i,j,k)*lgrid%acc(2)
-
-       end do
-      end do
-     end do
-
-#endif
-
-#ifdef USE_VDAMPING
-
-#ifdef USE_VARIABLE_VDAMPING
-     if (lgrid%time<tmax_damp) then
-      nu_damp_tmp = nu_damp
-     else if (lgrid%time<tend_damp) then
-      nu_damp_tmp = nu_damp*cos((rph*CONST_PI)*(lgrid%time-tmax_damp)/(tend_damp-tmax_damp))
-     else
-      nu_damp_tmp = rp0
-     endif
-#endif
-
-     do k=lx3,ux3
-      do j=lx2,ux2
-       do i=lx1,ux1
-
-#if defined(USE_INTERNAL_BOUNDARIES) || defined(GEOMETRY_2D_POLAR) || defined(GEOMETRY_2D_SPHERICAL) || defined(GEOMETRY_3D_SPHERICAL) || defined(GEOMETRY_CUBED_SPHERE) || defined(GEOMETRY_2D_CYLINDRICAL)
-        r = lgrid%r(i,j,k)
-#else
-        r = lgrid%coords(2,i,j,k)
-#endif
-
-        if(r<rmin_damp) then
-         tmp = rp0
-        else if(r<rmax_damp) then        
-         tmp = nu_damp_tmp*rph*(rp1-cos(const_damp*(r-rmin_damp)))
-        else
-         tmp = nu_damp_tmp
-        endif
-
-        lgrid%res(i_rhovx1,i,j,k) = lgrid%res(i_rhovx1,i,j,k) + tmp*lgrid%state(i_rhovx1,i,j,k)
-        lgrid%res(i_rhovx2,i,j,k) = lgrid%res(i_rhovx2,i,j,k) + tmp*lgrid%state(i_rhovx2,i,j,k)
-#if sdims_make==3
-        lgrid%res(i_rhovx3,i,j,k) = lgrid%res(i_rhovx3,i,j,k) + tmp*lgrid%state(i_rhovx3,i,j,k)
-#endif
-
-       end do
-      end do
-     end do
-
-#endif
+          
+     !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+     ! EXPLICIT THERMAL DIFFUSION
+     !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 #ifdef THERMAL_DIFFUSION_EXPLICIT
 
@@ -14435,7 +14465,11 @@ contains
 #endif
 
 #endif
-
+     
+     !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+     ! RK UPDATE
+     !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+     
 #ifdef USE_INTERNAL_BOUNDARIES
 
      do k=lx3,ux3
@@ -14635,6 +14669,10 @@ contains
        end do
       end do
      end do
+          
+     !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+     ! TIME-UNSPLIT GRAVITY SOLVER
+     !>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 #ifdef USE_GRAVITY
 #ifdef GRAVITY_SOLVER_RK
@@ -21693,7 +21731,7 @@ subroutine gmg_bcs(mgrid,lgrid,level)
       lgrid%gammaf(i_gammae,i,j,k) = p/eint+rp1
       lgrid%gammaf(i_gammac,i,j,k) = sound*sound*rho/p
 #endif
-#elif defined(PIG_EOS)
+#elif defined(PIG_XVAR_EOS)
       tmp1 = lgrid%prim(i_as1,i,j,k)
       call  pig_xvar_rhoT_given_full(rho,T,tmp,p,eint,sound,cv)
       eint = rho*eint

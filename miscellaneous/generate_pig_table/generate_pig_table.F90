@@ -23,6 +23,8 @@ program generate_pig_table
 
   call create_global_table(mgrid,table_glob)
 
+  call create_global_ionization_table(mgrid)
+
   call mpi_barrier(mgrid%comm_cart,ierr)
 
   call mpi_finalize(ierr)

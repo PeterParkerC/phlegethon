@@ -76,6 +76,7 @@ module source
  integer, save :: ns(niso) 
 
  integer, parameter :: fw=ndigits+7
+ integer, parameter :: fw_ion=ndigits_ion+7
 
  !===========================
  ! CONSTANTS
@@ -105,6 +106,8 @@ module source
   
    real(kind=rp), dimension(nvars) :: var
    real(kind=rp) :: X(niso)
+   real(kind=rp) :: xion(niso,nlev_max)
+   real(kind=rp) :: xh2
 
  end type teos
 
@@ -795,7 +798,8 @@ contains
     end do
    
     call dump_table(table,mgrid)
-   
+    call dump_ionization_table(table,mgrid)
+
   end subroutine create_table_briquette
 
   subroutine Dpx(eos_loc,jl,id_in,id_out,hx)
@@ -988,6 +992,103 @@ contains
 
   end subroutine create_global_table
 
+  function compact_str(x,fmt1) result(str)
+   real(kind=rp), intent(in) :: x
+   character(len=*), intent(in) :: fmt1
+   character(len=:), allocatable :: str
+   character(len=32) :: buf
+
+   if(abs(x)<1.0e-90_rp) then
+    str = '0'
+   else
+    write(buf,fmt1) x
+    str = trim(adjustl(buf))
+   end if
+
+  end function compact_str
+
+  subroutine create_global_ionization_table(mgrid)
+   type(mpigrid), intent(in) :: mgrid
+
+   integer :: ierr,i,j,it,jt,iit,jjt,u=14,iv,ir,ncols,icol
+   real(kind=rp), dimension(1:int(Nrho+1),1:int(NT+1)) :: xh2_glob
+   real(kind=rp), dimension(niso,nlev_max,1:int(Nrho+1),1:int(NT+1)) :: xion_glob
+   real(kind=rp), dimension(niso*nlev_max+1) :: buf
+
+   character(len=256) :: filename
+   character(len=32) :: fmt_single
+   character(len=:), allocatable :: line
+
+   call mpi_barrier(mgrid%comm_cart,ierr)
+
+   write(fmt_single,'("(ES",I0,".",I0,"E3)")') &
+     fw_ion+1, ndigits_ion
+
+   ncols = 1
+   do iv=1,niso
+    if(mgrid%X(iv)>0.0_rp) ncols = ncols + ns(iv)+1
+   end do
+
+   if(mgrid%rankl==0) then
+
+    do j=0,ddx2-1
+     do i=0,ddx1-1
+
+       write(filename, "('ionization_',I0.3,'x',I0.3,'.dat')") i,j
+
+       open(unit=fp, file=filename)
+
+       do jjt=1,int(NT/ddx2+1)
+        do iit=1,int(Nrho/ddx1+1)
+
+          it = iit + int(Nrho/ddx1)*i
+          jt = jjt + int(NT/ddx2)*j
+
+          read(fp,*) buf(1:ncols)
+          xh2_glob(it,jt) = buf(1)
+          icol = 1
+          do iv=1,niso
+           if(mgrid%X(iv)>0.0_rp) then
+            do ir=1,ns(iv)+1
+             icol = icol+1
+             xion_glob(iv,ir,it,jt) = buf(icol)
+            end do
+           end if
+          end do
+
+        end do
+       end do
+
+       close(fp)
+
+     end do
+    end do
+
+    write(filename, "('ionization_table.dat')")
+
+    open(newunit=u, file=filename, &
+    status='replace',action = 'write')
+
+    do j=1,NT+1
+     do i=1,Nrho+1
+      line = compact_str(xh2_glob(i,j),fmt_single)
+      do iv=1,niso
+       if(mgrid%X(iv)>0.0_rp) then
+        do ir=1,ns(iv)+1
+         line = line//' '//compact_str(xion_glob(iv,ir,i,j),fmt_single)
+        end do
+       end if
+      end do
+      write(u,'(A)') line
+     end do
+    end do
+
+    close(u)
+
+   end if
+
+  end subroutine create_global_ionization_table
+
   subroutine dump_table(table,mgrid)
    type(teos), dimension(1:int(Nrho/ddx1+1),1:int(NT/ddx2+1)), intent(inout) :: table
    type(mpigrid), intent(in) :: mgrid
@@ -1035,6 +1136,41 @@ contains
    close(u)
 
   end subroutine dump_table
+
+  subroutine dump_ionization_table(table,mgrid)
+   type(teos), dimension(1:int(Nrho/ddx1+1),1:int(NT/ddx2+1)), intent(inout) :: table
+   type(mpigrid), intent(in) :: mgrid
+
+   integer :: u=13,i,j,iv,ir
+   character(len=256) :: filename
+   character(len=32) :: fmt_single
+   character(len=:), allocatable :: line
+
+   write(filename, "('ionization_',I0.3,'x',I0.3,'.dat')") mgrid%coords_dd(1),mgrid%coords_dd(2)
+
+   write(fmt_single,'("(ES",I0,".",I0,"E3)")') &
+     fw_ion+1, ndigits_ion
+
+   open(newunit=u,file=filename, &
+   status='replace',action = 'write')
+
+   do j=1,int(NT/ddx2+1)
+    do i=1,int(Nrho/ddx1+1)
+      line = compact_str(table(i,j)%xh2,fmt_single)
+      do iv=1,niso
+       if(table(i,j)%X(iv)>0.0_rp) then
+        do ir=1,ns(iv)+1
+         line = line//' '//compact_str(table(i,j)%xion(iv,ir),fmt_single)
+        end do
+       end if
+      end do
+      write(u,'(A)') line
+    end do
+   end do
+
+   close(u)
+
+  end subroutine dump_ionization_table
 
   subroutine solve(eos)
 
@@ -1239,6 +1375,21 @@ contains
    eos%var(id_E) = eos%var(id_E)/rho+E0*Nav
    eos%var(id_f) = (-eos%var(id_P)+nkT_logZ)/rho+E0*Nav
    eos%var(id_s) = (eos%var(id_E)-eos%var(id_f))/T
+
+   eos%xion(:,:) = 0.0_rp
+   do iv=1,niso
+    if(nl(iv)>0.0_rp) then
+     nstages = ns(iv)+1
+     do ir=1,nstages
+      eos%xion(iv,ir) = nlj(iv,ir)/nl(iv)
+     end do
+    end if
+   end do
+
+   eos%xh2 = 0.0_rp
+   if(nl(i_h1)>0.0_rp) then
+    eos%xh2 = 2.0_rp*nh2/nl(i_h1)
+   end if
 
   end subroutine solve
 

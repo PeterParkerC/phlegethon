@@ -1000,6 +1000,8 @@ contains
 
    if(abs(x)<1.0e-90_rp) then
     str = '0'
+   else if(x==1.0_rp) then
+    str = '1'
    else
     write(buf,fmt1) x
     str = trim(adjustl(buf))
@@ -1011,9 +1013,9 @@ contains
    type(mpigrid), intent(in) :: mgrid
 
    integer :: ierr,i,j,it,jt,iit,jjt,u=14,iv,ir,ncols,icol
-   real(kind=rp), dimension(1:int(Nrho+1),1:int(NT+1)) :: xh2_glob
+   real(kind=rp), dimension(1:int(Nrho+1),1:int(NT+1)) :: ne_glob,xh2_glob
    real(kind=rp), dimension(niso,nlev_max,1:int(Nrho+1),1:int(NT+1)) :: xion_glob
-   real(kind=rp), dimension(niso*nlev_max+1) :: buf
+   real(kind=rp), dimension(niso*nlev_max+2) :: buf
 
    character(len=256) :: filename
    character(len=32) :: fmt_single
@@ -1024,7 +1026,7 @@ contains
    write(fmt_single,'("(ES",I0,".",I0,"E3)")') &
      fw_ion+1, ndigits_ion
 
-   ncols = 1
+   ncols = 2
    do iv=1,niso
     if(mgrid%X(iv)>0.0_rp) ncols = ncols + ns(iv)+1
    end do
@@ -1045,8 +1047,9 @@ contains
           jt = jjt + int(NT/ddx2)*j
 
           read(fp,*) buf(1:ncols)
-          xh2_glob(it,jt) = buf(1)
-          icol = 1
+          ne_glob(it,jt) = buf(1)
+          xh2_glob(it,jt) = buf(2)
+          icol = 2
           do iv=1,niso
            if(mgrid%X(iv)>0.0_rp) then
             do ir=1,ns(iv)+1
@@ -1071,7 +1074,8 @@ contains
 
     do j=1,NT+1
      do i=1,Nrho+1
-      line = compact_str(xh2_glob(i,j),fmt_single)
+      line = compact_str(ne_glob(i,j),fmt_single)
+      line = line//' '//compact_str(xh2_glob(i,j),fmt_single)
       do iv=1,niso
        if(mgrid%X(iv)>0.0_rp) then
         do ir=1,ns(iv)+1
@@ -1156,7 +1160,8 @@ contains
 
    do j=1,int(NT/ddx2+1)
     do i=1,int(Nrho/ddx1+1)
-      line = compact_str(table(i,j)%xh2,fmt_single)
+      line = compact_str(table(i,j)%var(id_ne),fmt_single)
+      line = line//' '//compact_str(table(i,j)%xh2,fmt_single)
       do iv=1,niso
        if(table(i,j)%X(iv)>0.0_rp) then
         do ir=1,ns(iv)+1
